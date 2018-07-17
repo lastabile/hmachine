@@ -88,29 +88,6 @@
 
 ;; fe-rule-test
 
-;; Use the usual g var
-
-(let ()
-  (clear-counters)
-  (clear-perf-stats)
-  (setq g  (make-the-graph))
-  (! (g add) 4 'rule (! (g query) '((?x name back-fe-rule-gen)) '?x))
-  (timer 'main
-	(lambda ()
-	  (! (g execute-queue) :rule-mode :local-only))))
-
-;; Defines new var f
-
-(let ()
-  (clear-counters)
-  (clear-perf-stats)
-  (setq f (make-the-graph))
-  (! (f execute-obj) 'global-node :cont (lambda (m s e p) nil))
-  (! (f add) 4 'rule (! (f query) '((?x name back-fe-rule-gen)) '?x))
-  (timer 'main
-	(lambda ()
-	  (! (f execute-queue) :rule-mode :local-only))))
-
 ;; Using the no-copy form of the fe rules on g
 
 (let ()
