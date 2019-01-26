@@ -1,0 +1,1331 @@
+
+Informal doc and notes for hmachine work
+
+To retain c file in compiling:
+(let ((COMPILER::*DEFAULT-C-FILE* "h.c")) (compile-file "h.lisp"))
+
+- objects need attached rules
+- rules are also objects
+
+- Nodes have special names nddd...d
+- Attribute names are atoms
+- Vars are nodes ?<x>, where <x> is any char sequence and ?<x> forms a symbol -- technically not needed; a syntactic convenience
+- Values can be numbers, strings, or symbols. Values are a shorthand for more graph structure
+
+Most primitive syntax is edges:
+
+(n42 type rule)
+(n42 pred n43)
+(n43 type rule-and)
+(n43 left n44)
+(n43 right n45)
+
+Next sugar might be:
+
+(n42 type rule pred n43)
+
+Syntax for a rule:
+
+Vars are bound by the "rule" keyword, and we lexically close any
+embedded rules.
+
+The keyword "rule" is similar to the keyword "lambda", but the syntax
+and operational semantics of h are sufficiently different from
+lambda-calc that we don't want to reuse the term.
+
+
+One meta-leval syntax:
+
+(rule (x y z)
+  (pred (x color red)
+		(x size 42))
+  (add (x length short)
+	   (rule (a b)
+		 (pred (a height y))
+		 (add (a b x)))))
+
+Another meta-level syntax, which is representable as a higher-order
+hypergraph. Need idea of "new node"; however in this and the previous
+syntax we might say that any free vars are really new nodes, within
+that lexcial scope.
+
+However, can't tell difference between those and existing nodes on
+which we match. We could say any non-matching nodes in the the add
+clause are new -- matches such as pred, vars, etc. are not
+
+(x var)
+(y var)
+(z var)
+(x color red pred)
+(x size 42 pred)
+(x length short add)
+(x rule n1 add)
+(n1 vars n2 add)
+(n1 pred n3 add)
+(n1 add n4 add)
+(n2 elem u add)
+(n2 elem v add)
+
+
+Base-level (in H-graph) rule syntax is labelled graph:
+
+Vars are in scope, with the first rule node considered the outer
+scope. This way rules can be generated and use the results of
+previously matched rules.
+
+  r -- rule
+  r.vars.elem.*
+  r.pred.edge.elem.*
+  r.add.edge.elem.*
+  r.del.edge.elem.*
+
+Eg this graph:
+
+(r vars v1)
+(r pred p1)
+(r add a1)
+(r del d1)
+(v1 elem x)
+(v1 elem y)
+(v1 elem z)
+(p1 edge pe1)
+(p1 edge pe2)
+(pe1 elem x)
+(pe1 elem a)
+(pe1 elem 42)
+(a1 edge ae1)
+(a1 edge ae2)
+(ae1 elem x)
+(ae1 elem length)
+(ae1 elem short)
+(r new-nodes nn)
+(nn elem n1)
+(nn elem n2)
+(x rule n1)
+(n1 (vars u v w) (pred ... v ...))
+
+"Relation Set" notation -- 
+
+(r (var (x y z))) == 
+
+					(r vars v1)
+					(v1 elem x)
+					(v1 elem y)
+					(v1 elem z)
+
+(r (pred (x color red)(x size 42))) ==
+
+(r pred p1)
+(r pred p2)
+(p1 elem x)
+(p1 elem color)
+(p1 elem red)
+(p2 elem x)
+(p2 elem size)
+(p2 elem 42)
+
+
+(rule (vars (x y z))
+	  (pred (x color red)
+			(x size 42)
+			(x next-door y))
+	  (add (x length short)
+		   (x rule (rule (vars (a b))
+						 (pred (y height a)
+							   (y size 57))
+						 (add (y length long)
+							  (b width short))))))
+
+(rule (vars (x y z))
+	  (pred (x color red)
+			(x size 42)
+			(x next-door y))
+	  (add (x length short)
+		   (y height 57)))
+
+Another possible syntax for a rule (currently not implemented):
+
+(rule (?x color red)
+	  (?x size large)
+	  (?x color red del)
+	  (?x color blue add))
+
+Pred edges are unmarked, and add and del have those prefixes (or suffixes).
+
+del's and add's are not ordered relative to the pred edges, but but
+convention the del's and add's are at the end.
+
+----------------------------------------------------------
+Formal syntax and semantics write-up
+Started 3/9/17
+
+<node>               ::= <var> | <const>
+<var>                ::= <var-symbol>
+<const>              ::= <const-symbol> | <number> | <string>
+<var-symbol>         ::= <symbol-beginning-with-?>
+<const-symbol>       ::= <symbol-not-beginning-with-?>
+<edge>               ::= (<node> ...)
+<rule>               ::= (rule
+                          [(name <name>)]
+                          [(root-var <var>)]
+                          [(attach-to <node>)]
+                          [(local)]
+                          (pred
+                           <pred-edge> ...)
+                          (not
+                           <not-edge> ...)
+                          (add
+                           <add-edge> ...)
+                          (del
+                           <del-edge> ...))
+<pred-edge>          ::= (<node> ...) | (<var> new-node <new-node-indicator>)
+<not-edge>           ::= (<node> ...)
+<add-edge>           ::= (<node> ...) | (print <node> ...) | (<node> rule <rule>)
+<del-edge>           ::= (<node> ...)
+<new-node-indicator> ::= nn<number>
+
+Note liberties taken with the BNF above: Each disjunction does not
+necesarily represent a disjoint partitioning -- read it as
+more-general-to-more-specific, left-to-right. So e.g. an <add-edge>
+is generally a list of nodes but has a special "print" form and "rule"
+form.
+
+[(name <name>)]
+
+Optional name assigned to a rule. Generally essential when matching
+against rules for propragation purposes. Although in many cases a rule
+can be identified by matching on some of its components, it's normally
+better to give it a name so it's easily specified and found.
+
+[(local])
+
+If this is present, then the rule is local, and is thus not in the
+global rule pool, and will not be matched in the course of executing a
+node. If absent, then, the rule is global.
+
+See below for info on node execution and rule resolution.
+
+[(attach-to <node>)]
+
+If present, the rule is automatically made local and attched to the
+given node. Typically thuis si used with the global-node for data
+inits and so forth.
+
+[(root-var <node>)]
+
+<node> here is a node within the rule. It's typically a var, but may
+be a const as well.  Normally, without this present, the system will
+match a node against a rule by trying all orientations of the rule
+nodes against the given object node. This method is general and helps
+assure a match even when you're not sure you're attaching the rule to
+the "right" node. Good performance depends on being able to detect the
+non-matches quickly, and having rules that don't over-match. While
+this generally works, if the root var is specified, then it is the
+only orientation matched against, which can help performance.
+
+Rule representation and semantics
+
+Rules are represented within a graph g by expanding the edge lists in
+pred, add, etc., into nodes that explicitly define the edge content as
+relations in g. For example
+
+(r pred 
+   (?x next ?y)) =>
+
+(r pred p1)
+(p1 elem0 ?x)
+(p1 elem1 next)
+(p1 elem2 ?y)
+
+Note that the elem<n> symbols become special indicators for rule
+processing. One can therefore match directly against rule content, and
+rules are parts of the graph. However, as with the rest of the H
+language, there are no reserved symbols and these may be used in rules
+and data as any other symbol can.
+
+Generating rules
+
+Rules can be generated by other rules using the "elem" edge
+representation.  However this is rather tedious and hence some
+syntactic sugar is called for. The nested rule construct shown in the
+BNF above defines a new rule, and expands it into elem edges. It does
+so when its rule matches; hence any bound variables will be
+substituted into the generated rule. This is a very useful mechanism,
+and it's possible for one rule to match data such that a whole family
+of rules is generated. [see rule-30 stuff]
+
+Execution
+
+A program in H is essentially a sequence of rule definitions. Rules
+are used both to define literal data, and derive new data from old.
+
+In [C&C] the fundamental computational mechanism is described as an
+exhaustive search through all subgraphs of a hypergraph, comparing
+each subgraph against another, and deriving new edges when a match
+occurs. For a finite graph this is at least computable, but hardly
+efficient. 
+
+To make this practical, some reasonable means of control must be
+introduced. This is accomplished as follows.
+
+A node is *executed* by running all rules accessible by the node.
+By "running" a rule we mean matching the rule against a set of
+subgraphs found in a neighborhood around the node, and deriving any
+new edges from any set of matches.  The nature of this neighborhood
+is an important part of the performance of the H machine and is
+described in detail in section [xxx]. Note that more than one matching
+subgraph may be found in a neighborhood; each of them can produce new
+edges via the add clause of the rule.
+
+Rules are accessible by a given node iff the following conditions are
+met:
+
+1. They are attached to the node using the "rule" relation,
+i.e., (<node> rule <rule-node>). A given node may have an arbitrary
+number of rule relations; all of them are run.
+
+2. They are part of the global rule pool, and the node contains a link
+to the pool, using the relation global-rule-pool. 
+
+Edges, objects, local rules, global rules
+
+In [C&C] the H machine is summarized using the standard definition of a
+hypergraph, as a set of subsets of some universe U. 
+
+Unordered sets are a good way to reason about hypergraph properties,
+as familiar operations such as union and intersection, and their
+mathematical properties, are applicable and useful. However, this form
+introduces fairly severe performance limits.
+
+To alleviate this situation, an edge in H is defined as an *ordered
+multiset*. For example, the edge (book color green) is not the same as (book
+green color), and (x next x) is a legal edge, although x is repeated.
+In section [xxx] we describe some of the formal aspects of this set of
+definitions and how they help with optimization.
+
+While a edge is simply a list of nodes, other conventions are employed
+to help with comprehension and performance. Generally, we attempt to
+build as little as possible special handling of these conventions into
+the kernel; however some is inevitable in order to get a reasonably
+practical system.
+
+The most common convention is the use of a three-node edge as an
+object-attribute-value triplet. System conventions, such as the
+denotation of attached rules, utilize this basic model. In graph
+diagrams, this case is presented in node-labeled-edge-node style,
+which is traditional.
+
+A variant on this is the two-node object-property edge. This is usetul
+when there is little utility to adding a value, such as for some
+boolean properties. For instance we can say
+
+(1 odd)
+(2 even)
+
+to denote membership in a set of odd or even numbers, respectively.
+
+Another variant is a four-node edge which represents dataflow block. So one might say
+
+(input1 input2 and-gate output) 
+
+to represent a logic circuit fragment. Recall this is a convention,
+not defined system semantics. The only interpretation in this case is
+in diagram generation. When the following edge is defined:
+
+(and-gate two-input-op)
+
+The diagram generator knows to emit a gate icon and connect it
+appropriately.
+
+Most nodes, when created, are presumed to be "objects", in that they
+will be expected to appear in the first position of an edge, and will
+be executed. [What "most" means here is a bit complicated and needs
+refinement. [explain]]
+
+A basic principle of the H machine is that actions only occur due to
+connections found in the evolving graph. No rule is found, for
+example, in some hidden kernel "oracle" which magically knows of their
+existence. Every object node, then, has certain system-conventional
+links, in particular to sets of rules.
+
+Global rules are attached to an object via a pool. The pool is
+global-rule-pool-node, and rules are found under the grp-rule
+attribute. So the global rule pool looks like this:
+
+(global-rule-pool-node grp-rule rule1)
+(global-rule-pool-node grp-rule rule2)
+...
+
+Each object then has a link to the pool:
+
+(<obj-node> global-rule-pool global-rule-pool-node)
+
+When a rule is defined, it is placed in the global rule pool (attached
+to the global-rule-pool-node), unless the (local) flag is present in
+the rule definition.
+
+Local rules are attached to an object using the "rule" attribute:
+
+(<obj-node> rule rule1)
+(<obj-node> rule rule2)
+...
+
+Nodes may be populated with local rules by propagating them from one
+object to another. This leaves the question of their
+initialization. For this we define a local rule pool. It is
+distingusihed from the global rule pool in that no default link is
+created from nodes to the local rule pool, and there is no execuition
+semantics associated with the local rule pool. Instead, the local rule
+pool exists purely as a way to match against the set of rules,
+typically by name. We might see, for example,
+
+(rule
+ (name next-rule)
+ (local)
+ (pred
+  (?x next ?y)
+  (?x local-rule-pool ?p)
+  (?p lrp-rule ?next-rule)
+  (?next-rule name next-rule))
+ (add
+  ...other edges for ?x and ?y...
+  (?y rule ?next-rule)))
+
+In this case the rule propagates itself down a chain of next
+relations.
+
+This technique of propagation is essential to controlling rules, both
+from the parallel and sequential viewpoints. While it may seem clumsy
+to add rule propagator matching to all rules of interest, rule
+mutation allows us to modularize this: A new rule is defined, which
+matches on the original rule, and adds pred/add edges to the original
+rule as illustrated above. So the original rule remains syntactically
+clean. We'll see in following sections application of this technique.
+
+To summarize, then, each rule is added to the global-rule-pool-node
+unless it has the (local) flag present. Rules are always added to the
+local-rule-pool-node and are available then for matching and
+propagation. One can say attach-to a node in a rule, in which case the
+rule is local, in the local rule pool, and attached as a rule to the
+given node. Any number of attach-to's may be supplied.
+
+The global-node is often used as an attachment point, since it is
+specially treated when using the primary execution function in the H
+machine interpreter. Specifically, the global-node is executed
+first (and later as well -- the execution loop is described in seciton
+[xxx]).  This allows rules which are for initialization, i.e., rules
+which create data or rules, to run and get things started.
+
+Execution Loop
+
+When a rule is run, and matches are found, new nodes and edges are
+produced. All nodes affected by the created edges (whether old or new)
+are placed on a queue for execution. In this way we propagate
+execution in a local neighborhood.
+
+[Since we're using hypergraphs, this is not as "local" as it might
+seem. For example, by default all "attribute" nodes are expanded, so
+some explosion is to be expected. See section [xxx] for discussion of
+performance issues.]
+
+Ideally, the queue should account for all execution needs. However,
+especially when deletion is used, this cannot always be
+guaranteed. The basic loop normally used, then, is one which tries to
+compensate for shortcomings in the methods as currently developed.
+
+The loop is as follows:
+
+execute-global-all-objs-loop:
+	exec-until-no-new-edges:
+		exec-until-no-new-edges:
+			execute global-node
+		execute queue
+		execute all-objs
+
+This executes from the queue, global node, or across all nodes, until
+no new edges are produced.
+
+Rule matching and edge production
+
+Rules have one purpose, and that is to produce edges. The predicate
+pred specifies the subgraph which needs to match. Variables are
+denoted with a leading question mark.  Note that, to the extent
+possible, we have tried to stick to the rule that variables are only
+an opitmization. That is, that main driving algorithm of the H-machine
+is subgraph isomorphism, and although we have made "the usual"
+modifications regarding ordering and duplication, variables are not
+inherently necessary, except to make matching tractable. A consequence
+of this is that variables can be used in rules and meta-rules with
+well-defined meaning.
+
+Rule semantics then are as follows:
+
+The pred subgraph of a rule r is matched against a set of edges E, and
+subgraph of G, normally supplied as some neighborhood found by
+expanding the surrounding edges of the executed node. How the expansion
+is done is described in section [xxx].
+
+- All possible matches of r to a subset of E are found. The effect of
+this is to bind variables found in the pred to some nodes in E. Each
+such binding is then used, in turn, to add (or delete) edges as
+determined by the add and del clauses.
+
+- Variables in the add clause are substituted with the bindings found
+by the pred match. These new edges are then added to G. Similarly, the
+del clause substitutions result in edges which are deleted from G.
+
+An example:
+
+(rule
+ (pred
+  (?x owns ?y))
+ (add
+  (?x paid-for ?y)))
+
+applied to
+
+(john owns ford)
+(john owns stove)
+
+produces
+
+(john paid-for ford)
+(john paid-for stove)
+
+Some handy built-in variables are bound during the execution of the
+add and del clauses:
+
+?this-obj
+
+Bound to the node on which the rule was executed. 
+
+?this-rule
+?this-rule-name
+
+Bound to the rule and rule name which matched and generated the edges.
+
+?root-var
+
+Bound to the root var found in the rule. 
+
+These are handy for diag printing, or for passing/deleting rules
+without a lot of extra fuss. For example one idiom used reasonably
+often is
+
+(del
+ (?this-obj rule ?this-rule))
+
+which deletes the rule that just ran from the object -- when you know
+it's done, it can be disposed of and thus not run redundantly.
+
+As mentioned above, rules have one purpose, and that is to produce
+edges. Edges produced can include new nodes.  In some idealized
+models (as mused about in [C&C]) one might require that new nodes are
+never produced, and one simply uses a countable pool of pre-existing
+nodes. It seems possible to formalize such a model, but it does not
+seem practical. So in the H machine we adopt a notation to create
+nodes.
+
+However in the spirit of this Platonic view that nodes all really
+exist already, we denote new nodes in the *predicate* (pred) part of
+the rule. The relation is new-node, and is specially detected by the
+kernel.
+
+A quick example will set the stage:
+
+(rule
+ (name add-link)
+ (pred
+  (?x next ?y)
+  (?n new-node sn1))
+ (add
+  (?y next ?n)))
+
+In this case we're saying in essence that if you match against this
+new-node edge, you get a new node. Plato springs to life! The
+sn<number> syntax is special, and causes creation of an actual new
+node (n<number>), which can then be used in the add clause.
+
+[In fact, a node of the form nn<number> is created by the rule
+definer, and it in turn causes a new node to be created at run time.]
+
+A rule can specify any number of new-node relations, the nn<number>
+designations are considered scoped within their defined rule. The
+variable to which the new node is bound is arbitrary (?n in the above
+example).
+
+Printing
+
+The print edge has built-in semantics. It iss useful for tracking and
+debugging. Simply, any edge of the form:
+
+(print <node> ...)
+
+will be printed when added.
+
+Diagrams
+
+Graphs have a natural graphical interpretation; hypergraphs are a bit
+harder to display.  For the H-machine we have a set of drawing
+interpretations and heuristics. These are imperfect but illustrate the
+system. Simple heuristics are used for edges of 2, 3, and 4 nodes,
+coupled with meta-information from G.
+
+Three-node edges are by default drawn as node-attribute-value, where
+the attribute is a labeled arc.
+
+In rules, edges in the pred clause are black, and edges in the add
+clause are red. Note that in this document we use dotted edges in some
+diagrams rather than red.  Edges in rules which are in the pred and in
+the del clause are marked in blue, with an "X".
+
+Color is used primarily to make the diagrams nicer, but also to help
+illustrate the information-passing properties of the propagation
+rules. More on this in section [xxx]; here we will explain the color
+objects and what they do.
+
+A fixed set of colors is added to the system via the color-circle-data
+rule. This is literal data and forms a color circle (like a "color
+wheel", although I don't believe it strictly follows the traditional
+volor order), each node of which is named for a color and is related to the
+next color by the next-color relation.
+
+The names of the color nodes are chosen to be the same as the color
+names supported by graphviz (gv) (see [gv]). Therefore in a gv dump,
+using the node name gets the correct color with no extra effort.
+
+By default, a given node will be colored according to its color
+relation. So due to
+
+(x color red)
+
+the node x will appear in the gv image colored red.
+
+As an example of the flexibility as well as cuteness of the H
+language, to get the color circle itself to be displayed with the
+correct color, it needed an attribute to a node with its color name,
+i.e., itself. So this rule does the trick:
+
+(rule
+ (name color-color)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node next-color)
+  (?x next-color ?y))
+ (add
+  (print color-color ?x)
+  (?x color ?x))
+ (del
+  (?this-obj rule ?this-rule)))
+
+This says, first, that it's a global-node rule, which means it will be
+executed up-front. Also, when done, we know we will have filled in all
+the color nodes, so it deletes itself from the global node. For the
+rest, it knows ?x is a color node because it has a next-color
+relative. It then simply adds the color link to itself.
+
+Note that by simply stating the next-color relation, we take care of
+all the color-circle nodes. There is no need for an
+explicit "iteration" indicator. This aspect of the H-machine is very
+powerful, but also delicate, since combinatorial explosion must be
+contained.
+
+fe-rule-test uses the rule-copying rules, thus illustrating purely
+parallel propagation. Copying is defined completely within the rule
+system itself.
+
+
+----------------------------------------------------------
+11/21/14
+
+We attempt to remain as true to pure hypergraph iso as possible. For
+performance purposes we constrain the graphs as follows:
+		
+	- Edges are ordered, i.e., (a b c) is not equal to (c b a)
+		However, each edge is still a set, so we cannot have repeated
+		nodes; hence e.g. (a b a) is not permitted. Thus each edge is
+		a strict total order.
+
+The fact that we are using sets, though ordered, means that for iso
+there must be a 1-1 correspondence between rule nodes and object
+nodes. Thus two rule nodes (vars) cannot map to the same object node,
+just as perforce a single rule node (var) cannot map to more than one
+object node.
+
+Being as true as possible to pure hypergraph iso is important, but
+it's worth pointing out that pure iso seems to introduce an
+interesting variation on propositional logic, e.g.:
+
+p(x,x) is not expressible, as say in next(x,x) (or x --next--> x) to
+denote a self-loop. Instead in the hypergraph ordered-set (list)
+syntax:
+
+(x p) 
+
+is equiv to the standard tuple form
+
+(x,p,x)
+
+[4/20/16: Note relaxed this condition later and allowed explicit self-loops.]
+
+----------------------------------------------------------
+12/9/14
+
+Compilation and having "primitive rules" or "primitive objects"
+or "primitive subgraphs" of some kind are distinctly
+different. Compilation is analogy/isomorphism based, in the sense that
+we can transform domains and execute in a "better" (e.g., faster)
+domain, then transform back.
+
+Basic graph xform alg is to compare every subgraph with every other
+subgraph. So *subgraphs* interact, and one must be a rule.
+
+----------------------------------------------------------
+3/20/16 -- Efficiency measures
+
+Fundamental to the performance of the system is the rate of edge
+production. This in turn is governed by the production of edges
+resulting from each execution (match-end-execute) of a rule against
+some object.
+
+Rule cumulative Effectiveness defined as produced-edges/tested. Unity is best.
+
+Call this E(t)
+
+Overall we have rule.(tested,matched,produced-edges), where each set
+is inclusive of the one to its right in this lexical order.
+
+Cumulative Redundancy is produced-edges/matched. Again unity is best.		[Note changed this def in note below 3/12/17]
+
+Call this R(t)
+
+If E(t) is flat, i.e., dE(t)/dt = 0, for some period, then suspend rule.
+
+3/12/17: Finally added something on this to the perf
+stats. me-efficiency ("me" stands for "match-and-execute-rule") is
+new-edges/tested, i.e. the fraction of rules which produced new edges
+for each rule tested. Note new-edges means number of rules not number
+of edges. Higher values are better, with unity meaning perfect
+efficiency, i.e., every rule tested produces new edges.
+
+me-redundancy is an indicator the number of rule tests "wasted", i.e.,
+which matched but did not produce new edges. The common case of this
+that earlier matches produced edges, and we thus have a duplicate test
+and match. (An empty add clause can also cause this, but that will
+rarely or never occur.) me-redundancy is not-new-edges/matched, where
+not-new-edges is the number of rules which matched and did not produce
+new edges, and matched is the number of rules which matched. So for
+me-redundancy unity is the worst -- every matched edge failed to
+produce edges, and lower numbers are better.
+
+A piece of perf-stats output from a typical fft run is:
+
+ME-EFFICIENCY                      0.0072660567         1              0.0072660567
+ME-REDUNDANCY                      0.8164639            1              0.8164639
+
+This shows we have a long way to go in optimizing the system.
+
+----------------------------------------------------------
+4/5/16
+
+Good to split the delta and opt stuff out, and provide optimizers
+external to the standard global rules. But items like randgen and
+colorgen that rely on deletion only work under the optmimized
+model. In a global model they re-execute and loop.
+
+Illustration of the notion of "applicative" programs in the context of
+the H language. With color, we moved to a tree-color-wheel model, no
+del.
+
+This was in hnew.lisp (moved here 4/5/16):
+
+		  ;; Global color generator, based on moving val through a
+		  ;; color wheel. Due to the of use del this is not preferred, and
+		  ;; use of the color tree is encouraged instead.  In use one
+		  ;; just makes (<obj> colorgen) and this rule will create
+		  ;; (<obj> color <some-color>)
+		  ;;
+		  ;; If reactivate, remember that this rule needs to be
+		  ;; propagated, can't be global. The latter is one of th
+		  ;; issues.
+
+		  (rule
+		   (name colorgen)
+		   (local)
+		   (root-var ?x)
+		   (pred
+			(?x colorgen)
+			(colorgen val ?c)
+			(?c next-color ?d))
+		   (add
+			(print ?x ?c)
+			(?x color ?c)
+			(colorgen val ?d))
+		   (del
+			(colorgen val ?c)
+			(print ?x ?c)
+			(?this-obj rule ?this-rule)))
+
+----------------------------------------------------------
+11/23/16 -- Qets: Ordered mulitsets, i.e. tuples:
+
+Edges in H are really tuples (lists). Most set operations work, but
+it's not very formal. Matching works well without an explicit set
+formulation, but subsetting is not really correct, and we need a good
+method for the optimizer.
+
+Although we can use the term "tuple", the properties we need are
+sufficiently unconventional that we define a new term "qet" (rather
+than "set"). We can then talk about a subqet and so forth.
+
+I went through a number of names before landing on qet. Qet is
+"sequential set". All other ordered-set terms I could think of, like
+list, sequence, or tuple, imply that a "sub" unit is a contiguous
+piece. A subset of a true ordered set (i.e., no dups) is the closest I
+can get, but then we need to extend that to multiset, and the
+terminology breaks down.
+
+In the end I'm not trying to define new mathematics but looking for
+good class and var names for the code, to avoid confusion.
+
+We define the following properties:
+
+- Unique intersection is not defined. Looking at intersection as the
+  common subset between two sets, we can say that qet intersection is
+  like set intersection where the set of possible common subsets is
+  not unique.
+
+- First define a subqet of a qet q, analogously to subsets, as all
+  subsets of q when considered as a multiset, while retaining
+  order. So for instance:
+
+	subqets((1 1 2 3)) = {(1)(2)(3)(1 1)(1 2)(1 3)(2 3)(1 1 2)(1 2 3)(1 1 2 3)}
+
+  A simple derivation shows that if the elements of the qet of size n
+  are unique, then the number of subqets is 2^n, i.e., the same as the
+  number of subsets.
+
+- Given an edge (a qet), we can construct the lattice of subqets
+  fairly easily.
+
+----------------------------------------------------------
+12/28/16  -- Failure Processing
+
+At this time I removed failure status edges from the H kernel, because
+while the use of failure was successful, it was costly just
+accumulating edges. If we bring it back, it will have to be with some
+type of optimization, say that assures any rules triggered are so
+done very soon after the failure, so the entries may be gc'ed quickly.
+
+The primary use of failure was as an efficient way to determine that
+the end of an exec-rule path had been reached: if one propagates rules
+and their execution exactly, then they should all succeed until the
+end of the graph pathway in the computation. In particular, one could
+avoid transmitting and allowing it to fail on many nodes. Other
+solutions are possible, just with more edge propagation.
+
+I'm still using success successfuly and will continue since it looks
+solid and allows good sequential optimization.
+
+
+----------------------------------------------------------
+1/28/17 -- Original Hoss notes from the top of the file
+
+#|
+
+g -- closure
+
+(funcall g <method> <args>) == calls <method> by looking up name in g
+
+(defm f) defines a local fcn f and adds to lookup table in g. 
+
+Basic scheme-like model omits the global def of a method and allows std functional eval:
+
+					local:					(f x)
+					external:				((g f) x)
+
+Even in scheme one needs to vary from std eval in that the method
+names want to be unquoted. One could bind global vars to their own
+names or eqv but then this pollutes the global name space. So macros
+are chosen for this.
+
+In CL, define a macro ! to represent the above:
+
+					local:					(f x)
+					external:				(! (g f) x)
+
+Compare to C++  x.f().g(42)    ((((x f)) g) 42)
+
+Superclass handling:
+
+1/26/17: Implemented the following:
+
+Each defm produces two methods, one for local access and one for
+class-level access. So for example:
+
+(defc c nil nil
+  (let ()
+	(defm f (x) ...)))
+
+=>
+... (labels ((f (x) ...)
+			 (c-f (x) ...))
+			...)
+	...export both f and c-f...
+
+So now one can override in a subclass and call the super easily. This
+is the main use case.  Although the class method is exported as usual,
+it's not expected much use of that will be made.
+
+Considered other forms. The C++ expression x.c::f(y) in Scheme syntax
+could be:
+
+	((x f c) y)
+	((x f super) y)
+	((x c f) y)
+	((x super f) y)
+
+These don't offer much over the naming method.
+
+
+See top-obj.lisp -- all defc's inherit from it
+	Defines self, get-self(), set-self), and init()
+
+	top-obj is the top class, automatically inserted when a superclass
+	is nil. It is the only class known by the hoss kernel and is used
+	for setting self and for the init calls.
+
+
+;; I considered omitting the defm below, however defm is a handy
+;; visual marker and also helps scan the class def.
+
+;; Note to support trace can't return-from a method (block or local fcn ok)
+
+(defc class-name superclass-name (cl-arg-spec)
+  (let ((a 1)
+		(b 2))
+	(let ((c a))
+	  (defm m1 (x) (+ a x))
+	  (defm m2 (x y) (* x y b)))))
+
+(defun make-obj (cl-arg-spec)
+  (let ((method-lookup (make-hash-table :test #'eq)))
+	(let ((a 10)
+		  (b 20))
+	  (labels ((m1 (x &key (y 100)) (+ x y a))
+			   (m2 (x) (* x b))
+			   (m3 (x y) (f x) (+ x y))
+			   (m3t (x y)
+				   (print (list 'enter 'mt x y))
+				   (let ((r (let () (f x) (+ x y))))
+					 (print (list 'exit 'mt r))
+					 r)))
+			  (setf (gethash 'm1 method-lookup) (function m1))
+			  (setf (gethash 'm2 method-lookup) (function m2))
+			  (lambda (mname)
+				(let ((m (gethash mname method-lookup)))
+				  (lambda (x)
+					(apply m x))))))))
+
+;; Inherited
+
+(defun make-obj ()
+  (let ((method-lookup (make-hash-table :test #'eq)))
+	(let ((a 10)
+		  (b 20))
+	  (labels ((m1 (x &key (y 100)) (+ x y a))
+			   (m2 (x) (* x b)))
+			  (setf (gethash 'm1 method-lookup) (function m1))
+			  (setf (gethash 'm2 method-lookup) (function m2))
+			  (let ((c 30)
+					(d 40))
+				(labels ((m3 )
+						 (m4 ))
+						(setf (gethash .... method-lookup))
+						;; ...
+						(lambda (mname)
+						  (let ((m (gethash mname method-lookup)))
+							(lambda (x)
+							  (apply m x))))))))))
+
+;; Convenient formatting def
+;;   defr -- "def recursive"
+;;   defl -- "def local"
+
+(defr
+  (defl f (x) ...)
+  (defl g (y) ...)
+  ...code...)  =>
+
+(labels ((f (x) ...)
+		 (g (y) ...))
+   ...code...)
+
+|#
+
+----------------------------------------------------------
+2/15/17 -- Got rid of partial-match code based on envs and cross-aux2
+
+It's not practical since a partial match can be a very large number of
+edges. So the h.2.15.17.lisp file has the old code in it.
+
+As with the order of scanning envs in cross-aux2, partial match is
+useful only if one gauges the selectivity properly, or edge explosion
+results.
+
+I'll keep the e- functions around for now since they're
+expository. There is much room for hope here.
+
+----------------------------------------------------------
+2/20/17 -- Some as of now concluded experiments with tracking new
+		   nodes, last-matched edges, etc.
+
+h.lisp.2.20.17 contains code for tracking the addition of edges in
+order, including tracking deletions. Given an edge one can find the
+next or prev edge in the creation order. Of course can't hold on to a
+deleted one, and I ran into that issue.
+
+One experiment was to try new-edges-only if the previous match of a
+rule was successful. This doesn't work because we might have several
+"new" edges which match against a background of "fixed" info, and
+happen to take the newer edge first, stranding the old one.
+
+Another experiment is to disable a rule if >N edges have been produced
+since its last edge-producing match. This requires the ordering to be
+working well, and really need to be redesigned as a btree to do it
+right. This is not the first time I exprimented with throwing out
+rules heuristcially, and none has worked out. The method here may have
+promise, and I might return to something like it.
+
+----------------------------------------------------------
+2/26/17 -- Abandoned the exec model of rule control
+
+Lots of trouble just finding the source of problems with sequence and
+control, e.g., the battle to reduce the number of tests to
+od-next. This causes me to rethink the goals of the exec model,
+including record rule success/failure (failure was pulled out a little
+while back), which was to provide a framework for automated sequential
+optimization.
+
+I was able to remove the use of rule success fairly easily, just by
+replacing the predicate which detected sucess with appropriate
+conditions and context. And exec has issues in that it's very hard to
+get it to work by hand.
+
+Also, there has been success in optimizing rules by rule modifcation
+or generation, so furhter automation will look at that as well as
+other ideas, e.g., building dependency graphs and using inductive
+learning to get the right set of rule mods and propagations.
+
+
+h.2.26.17 contains the last version which supported the associated
+operations, like exec and success recording.
+
+----------------------------------------------------------
+3/10/17 -- Notes on the kernel for the doc
+
+Need to represent data and rules in the graph, so the system is
+closed. Thus elem0, etc.  The kernel needs to know about this and has
+special knowledge to read the rule form in G and convert it into an
+internal representation for processing. This representation of course
+is just another hypergraph, but outside of G.
+
+One goal of the H-machine is to devise a means to execute rule-driven,
+spreading-activation models like this with reasonable computational
+complexity. For the general interpreter, this would be heuristic,
+since it's clear that quadratic behavior or more is required for full
+generality. This goal has not yet been achieved. 
+
+Another approach is through compilation. Again, that needs to be
+defined precisely; however we have shown that one can use rules to go
+easily from a top-down form to a bottom-up form, and this likely forms
+the basis of compilation. 
+
+At least one aspect of compilation may be usefully thought of as
+a "reduction of dimensionality", i.e., as in the type evaluation and
+inference found in modern functional languages. In the case of the
+H-machine, this could manifest itself as the partial matching of
+rules, which then generate other rules that are more
+closely "attached" to required objects, since they have been bound
+already. In theory, with enough objects bound, the rule could be
+replaced by a compiled "procedure", which acts immediately up seeing a
+new edge of the appropriate type added to the system.
+
+-- Special Edges --
+
+[Here for
+  - The "philosophy" of it. 
+  - new-node
+  - rule interpretation]
+   
+
+[I had experimented with more special edges, including ones for
+recording rule executions and affecting execution. These did not prove
+palatable, and I removed them. Instead, rule mutation and related
+optimizations look more like what's needed. I suspect we'll be led to
+a model where some sort of induction algorithm runs on rule traces
+using global rules, and moves the rules to be local based on stats
+feedback. But there are many other methods to consider.]
+
+[There is also the temptation to install some kind of "primitive"
+behavior under the covers, as a shortcut for building it up somehow
+with a pure H-machine model. In similar systems, arithmetic operations
+are typically the first to be moved down in this way. We resist this
+temptation, in favor a more pure approach.]
+
+
+I used Hoss throughout and that has proven valuable.
+
+A primary goal of the kernel design is to keep as much specialized
+knowledge as possible out. I avoided the temptation to add bells and
+whistles that would satisfy the urge to have something run faster, or
+short-circuit something for the sake of displays and such. Most such
+knowledge is in the graphics dumper, which is written more or less
+conventionally, taking parameters from the edge system. However I
+don’t think too much leaks through.
+
+Performance is a major issue, and I have not solve the primary
+complexity problem, combinatorial exp
+
+
+----------------------------------------------------------
+3/17/17 -- Modularity
+
+Using the H-machine for awhile as a programming language, there are
+some interesting notions of modularity which have emerged. 
+
+First is the observation that the use of isomorphism/matching allows
+computation in what are effectively scoped contexts, without
+explicitly defining a scoping model. For instance I can use the
+attribute names "elem" or "next" in many objects and they do not
+conflict, as long as I narrow down the use as appropriate, i.e., by
+using other attributes to isolate the unique set of subgraphs intended
+to match. Sometimes one can assign a unique "type name" or similar
+explicit tag to refine these attributes, but it's not required
+(although good "engineering practice" may call for a universal set of
+such tags in a given project).
+
+A side benefit is that if one can match on these attributes as well,
+and find if desired for example, all edges which use a given
+attribute. However, one area where this has become an issue is in the
+graph display dump, which is partly driven by attribute name. One may
+expose a "next" attribute, for instance, and get more nodes and edges
+dumped than desired. The solution I have so far for this is simply to
+added more edges which denote attributes for display purposes
+only. Doing this is mitigated some some degree by the following.
+
+The second notion of modularity that has emerged is similar to that
+found in Aspect Oriented Programming [Kicksales]. In the H-machine,
+rules are distinct entities and do not need to be included in some
+lexical scope. [Nested rules offer lexical scoping; however this is
+really just syntactic sugar for more complex manipulation of edges
+which one must do instead.] In addition, rules can match on and modify
+other rules. This supplies the capability to alter system behavior
+across a wide range using rules and meta-rules expressed outdide the
+modules affected.
+
+A good exmaple of this is in the rule file fft-delta.lisp. Here rules
+match on the fact that an fft relation exists.  From there colors are
+defined; random values are assigned by matching against the rule-30
+nodes; based on the randomness mutations to the data flow graph are
+produced; and a few edges added solely for display purposes.
+
+Another rule matches on the fft rule itself, changes it from global to
+local, and adds rule-propagation clauses. This rule thus optimizes the
+fft-rule, which is written in a "clean" style.
+
+These rules act on the result of the fft and related rules, while
+those rules remain fixed, at least in the source code, and don't refer
+to any of the attributes, such as colors or random values, added by
+the rule in fft-delta.lisp.
+
+----------------------------------------------------------
+4/5/17 -- Conclusion to the main paper
+
+Summary
+TBD.
+
+-- Open-loop systems
+
+One of the traditional attactions of rule-based systems has been their
+declarative nature, offering at least some degree of freedom from
+control-structure concerns and a good way to abstract over data in a
+modular way. The H language is no different, and experience with it
+has shown that interesting things can be produced using this model.
+
+And as with other rule-based systems, performance is a challenge. Many
+approaches are possible, and many have been tried [ref Rete, ...]. 
+
+Both the H-Machine and the H language are meant to have an "open-loop
+with feedback" flavor about them, in that the default behavior is to
+try a large number of cases, e.g., an n^2 pass. This is very powerful
+from an expressive point of view, but needs to be controlled. 
+
+
+
+Kernel
+
+[Should have more than zero, but it's already too long. I may have
+a paragraph, then refer to another paper.]
+
+Compilation 
+
+I have a few thoughts on compilation, but have not gelled them well
+enough to try anything.
+
+Generating dataflow graphs is one good way to look at compilation. We
+can contemplate a compile-to-hardware sort of model, where on a
+sequential machine the dataflow graph is evaluated sequentially,
+bottom-up – a standard compilation model.
+
+But there is also the question of just what gets compiled. The rule
+system has a very basic semantics, but is very hard to optimize. We
+don’t first have questions about how to generate code, but how to
+control rules. I have tried several basic heuristics, but have not
+landed on anything definitive. However the ideas herein, especially
+rule generation and modification, look like they are an important part
+of an optimization strategy.
+
+The other major optimization problem emerges in the matching
+algorithm. Hypergraph subgraph isomorphism is non-trivial. However
+there is much literature and I have only explored some of it. Again, I
+use basic heuristics to limit explosion but it has issues with large
+runs.
+
+One general idea concerns rule specialization and how this maps to
+types. A rule is a graph which imposes constraints on the set of
+subgraphs which may be selected from a larger graph. The more
+constraints (edges) the rule has, the more cons…blah blah,,,
+
+[Compilation can be viewed as an isomorphism problem, where we
+transform from one domain to another, evaluate, and transform back.]
+
+Bootstrapping
+
+----------------------------------------------------------
+5/25/17 -- Notes on submission to IEEE ICRC 2017
+
+	5/15/17: Submitted abstract from version xhmachine-ieee.5.25.17.doc
+	
+	6/7/17: Submitted xhmachine-ieee.pdf, saved as xhmachine-ieee.6.7.17.pdf
+				Also saved xhmachine-ieee.doc to xhmachine-ieee.6.7.17.doc
+
+	8/11/17: Freeze xhmachine-ieee doc, since rejected.
+
+	8/13/17: Submitted poster entry, hmachine-poster-ieee.pdf
+	8/30/17+: No response wrt poster submission
+
+Abstract used for poster submission:
+
+The H-Machine: Experiments in the Organic Growth of Interacting Data Structures
+
+The H-Machine is a hypergraph-based language and interpreter, based on rule matching by hypergraph isomorphism. Rules are part of the hypergraph being constructed, and can be matched and modified as can other data, thus forming a complete meta-system. The H-Machine language is extremely simple, yet can express a wide range of data structures and computations, with inherent parallelism. The matching system allows a full range of expression of recursive relations, implicit iteration, and, via meta-rules, a modular way to describe computation at a high level.
+
+The language and an implementation are described, and the capabilities of the H-Machine by extended example: Building a bottom-up FFT butterfly dataflow network organically, starting from the top-down recursive equations; using meta-rules to generate rules for compactness of expression and to modify, copy, and propagate other rules for optimization; and modifying behavior using simple modular expressions which specify the interaction among data structures.
+
+Data and rules have a simple graphical interpretation which offers good visibility into the resulting structures. The examples illustrated show both data and rule structures, derived data flow graphs, cellular automaton matrices, ancillary relations, and rules – predicate subgraph, edges to be added, edges to be deleted -- within a single graphical model, The Graphviz toolkit is used for rendering, and all graphics are generated by the system. Links to a full paper, code, and a graphics gallery of generated H-Machine runs are included.
+
+10/10/17, a reviewer's response:
+
+This is an interesting paper. It presents the H-Machine which is a
+system for computing via graph rewriting rules based on matching
+isomorphic subgraphs, and providing transformations on that graph. In
+some way there is an analogy to advanced language macro systems, but
+the focus is on naturally expanding and possibly recursive
+matches. This provides some notion of iteration, without iteration,
+and seems to provide the foundation for some form of computation (in
+the same sense that game of life denotes computation). It dives into
+examples from the computational structure of an FFT program. In this
+example, it traces out the dataflow through the program. Higher order
+forms of transformation rules (meta-rules) are introduced that make
+complicated transformations more terse and expressive. Though this is
+an interesting paper, I could not convince myself that this approach
+represents a promising future form of computation. It feels more like
+a significant intellectual exercise in understanding a form of
+abstraction and self-emergent properties. Computation based on
+efficient graph isomorphism (despite the two references to work in the
+area) is not motivated as a viable. Some additional comments: - An
+interesting aspect of this paper is exactly how close it is to macro
+expansion in programming languages. The main difference is that macros
+are named, thus avoiding the isomorphism issue. They also support
+higher-order macro expansion which is analogous to meta-rules. This
+raises the question, why is computation based on isomorphism more
+interesting than one with explicitly-anotated expansion points more
+interesting? Perhaps a question to address in a future version of this
+paper. - I'd appreciate a somewhat less jargon-dense version of the
+paper. Using terms like "forming a complete meta-system" in the
+abstract is not likely to elicit much concrete understanding in your
+audience. It isn't clear to me what a "subset of h" (a hypergraph) is,
+as graphs don't often have a subset relation implicitly defined on
+them. Background before jargon is, in my experiences, a better way to
+capture an audience. - I prefer to avoid using color-based
+descriptions since many people still print out papers in back and
+white. Red is not a great color due to color blindness.
+
+
+----------------------------------------------------------
+9/9/17 -- Removal of print-gc and true print edges
+
+
+----------------------------------------------------------
+10/8/17 -- Using a type property
+
+- Types, like vars, are "just an optimization", i.e., they have no intrinsic meaning
+
+	;; Types are considered conjunctive, thus obj-edges must have all
+	;; the types mentioned in the type-preds, but can have more as
+	;; well.
+
+- 4/27/18 Consider in light of new rule evaulation and the dimension
+  idea, i.e., how many times an edge is used by a rule. Something like
+  a type propertyraises the dimension.
+
+
+----------------------------------------------------------
+2/8/18 -- Crap
+
+A rooted tree is clearly separable into levels
+A (rooted) DAG is a tree with identical sub-branches collapsed into one
+Therefore a DAG can be separated into levels
+Any cycle in a tree or DAG must go back one or more levels
+
+
+----------------------------------------------------------
+2/15/18 -- Macro probably not needed, since mapcar and friends take multiple args
+
+(defmacro dolists (params lists &rest body)
+  (let ((temp-var-list (mapcar (lambda (x) (gentemp)) params)))
+  `(do
+	,(mapcar (lambda (x) `(t1 ,x (rest ,x)))
+			 lists)
+	((null t1) nil)
+	(let ,(mapcar (lambda (x) `(,x (first t1)))
+				  params)
+	  ,@body))))
+
+----------------------------------------------------------
+2/26/18 -- Dumped attempt to be able to retract edges in env-triggered.
+
+This never worked well, and resulted in loops. Much of the uese of it
+is commented-out anyway, so this is cleanup. See h.2.26.18.lisp.
+
+It leaves the question of how we deal with already-triggered
+rules. The presence of a new-node facility in the predicate means we
+can't just rely on existing-edge detection.
+
+----------------------------------------------------------
+4/11/18 -- Notes on the different Common Lisps used here
+
+clisp
+Performance is good but not great.
+Biggest problem is memory -- does not seem to allow sizes more than 2G.
+Debugging faciitiles better than other CLs.
+
+abcl -- Armed Bear Common Lisp
+java -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
+Does not handle ^C interrupt -- exits. Thus it's only good for benchmarks.
+Very fast CL.
+
+sbcl -- Steel Bank Common Lisp
+
