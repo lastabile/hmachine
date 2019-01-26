@@ -143,7 +143,7 @@
 			'(
 			  ;; execute-obj
 			  ;; match-and-execute-rule
-			  ;; match-and-execute-rule-on-edges
+			  ;;  match-and-execute-rule-on-edges
 			  ;; all-matches  all-matches-aux  infer-root-rule-var check-rule-edges check-obj-containment
 			  ;; get-root-vars
 			  ;; infer-root-var
@@ -168,6 +168,7 @@
 			  ;; add-consequent-edges
 			  ;; del-consequent-edges
 			  ;; rule-has-been-triggered
+			  ;; env-remove-bindings
 			  ;; insert
 			  ;; lookup
 			  ;; insert-triggered
@@ -194,6 +195,7 @@
 			  ;; add-subqets
 			  ;; add-subset
 			  ;; subqets-length-n
+			  ;; qet-exists
 			  ;; do-eval
 			  ;; depth
 			  ;; list-to-edge-elem-node

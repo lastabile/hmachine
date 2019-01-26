@@ -100,21 +100,29 @@
 
 (rule
  (name tree-rule)
- (root-var ?x)
+ ;; (root-var ?x)			;; !!!!!!!!!!!!!!!!!!
+ ;; (local)					;; !!!!!!!!!!!!!! Need to flip this to local for the tree-copy method of tree-top-rule
  (pred
   (?x l ?l)
   (?l1 sigma ?l)
   (?nn1 new-node sn1)
-  (?nn2 new-node sn2))
+  (?nn2 new-node sn2)
+  (?x local-rule-pool ?p)
+  (?p lrp-rule ?tr)
+  (?tr name tree-rule))
  (add
-  (print tree-rule ?this-obj ?x ?nn1 ?nn2 ?l)
+  (print tree-rule ?this-rule ?this-rule-name ?this-obj ?x ?nn1 ?nn2 ?l)
   (?nn1 aup ?x)
   (?x adn ?nn1)
   (?nn1 l ?l1)
   (?nn2 aup ?x)
   (?x adn ?nn2)
   (?nn2 l ?l1)
-  (?nn1 tree-next ?nn2)))
+  (?nn1 tree-next ?nn2)
+  (?nn1 rule ?tr)
+  (?nn2 rule ?tr)))
+
+;; (comment
 
 (rule
  (name tree-top-rule)
@@ -139,90 +147,159 @@
   (?x zero)
   (?y max)))
 
-;; If this is activated, be sure to comment-out tree-top-order-rule and tree-top-rule
+;; )
+
+;; If this is activated, be sure to comment-out tree-top-order-rule and tree-top-rule, and set tree-rule to local
 
 (comment
 
 (rule
  (name tree-top-rule)
  (pred
-  (?x is treetopobj levels ?l)
-  (?x local-rule-pool ?p)
+  (?xx is treetopobj levels ?ll)
+  (?xx local-rule-pool ?p)
   (?p lrp-rule ?tr)
   (?tr name tree-rule)
   (?p lrp-rule ?cr)
   (?cr name copy-rule-rule)
   (?nntrc new-node sn1))
  (add
-  (print tree-top-rule ?this-obj ?this-rule ?this-rule-name ?x ?l ?p ?tr ?cr ?nntrc)
-  (?x top)
-  (?x l ?l)
+  (print tree-top-rule ?this-obj ?this-rule ?this-rule-name ?xx ?ll ?p ?tr ?cr ?nntrc)
   (?tr copy-rule ?nntrc)
   (?nntrc rule ?cr)
-  (?x rule ?nntrc)
-  ;; (?x tree-rule-copy-node ?tnn1)  ;; !!!!!!!
+  (?nntrc name tree-rule-copy)
+  (?nntrc pred (?x abc))			;; Need to add something to the
+									;; pred or the rule will not
+									;; trigger, since its env is the
+									;; same as that of tree-rule,
+									;; which most likely already ran
+									;; on the top obj.  ALso need to
+									;; add the edge predicatd upon,
+									;; which is next.
+  (?xx abc)
+  (?nntrc add (?x rule ?nntrc))
+  (?nntrc add (?x top))
+  (?nntrc add (?x l ?ll))
   (?nntrc add (?nn1 zero))
   (?nntrc add (?nn2 max))
   (?nntrc add (?nn1 top ?x))
   (?nntrc add (?nn2 top ?x))
   (?nntrc add (print tree-rule-copy ?x ?l ?nn1 ?nn2))
-  (?nntrc del (?x rule ?nntrc))))
+  (clausify ?nntrc)
+  (spec-rule ?nntrc ?x ?xx)
+  (?nntrc rule (rule						;; Doing the name delete as a rule assures we do it at the right time, i.e., after it's been created
+				(pred
+				 (?nntrc name ?nntrc))
+				(add
+				 (?nntrc abc)				;; Dummy addition to trigger printing
+				 (print del name ?nntrc ?this-rule))
+				(del
+				 (?nntrc name ?nntrc)
+				 (?nntrc rule ?this-rule))))))
 
 )
 
-(comment
- (rule
-  (name tree-top-rule1)
-  (pred
-   (?x is treetopobj levels ?l)
-   (?x local-rule-pool ?p)
-   (?p lrp-rule ?r)
-   (?r name tree-rule)
-   (?tnn1 new-node sn1))
-  (add
-   (print tree-top-rule1 ?this-obj ?x ?l ?p ?r ?tnn1)
-   (?x top)
-   (?x l ?l)
-   (?r copy-rule ?tnn1)
-   (?x tree-rule-copy-node ?tnn1)
-   (?x rule (rule
-			 (name tree-top-rule2)
-			 (pred
-			  (?x tree-rule-copy-node ?c)
-			  (?c rule ?cr)
-			  ;; (?an1 new-node sn1)
-			  ;; (?an2 new-node sn2)
-			  ;; (?an3 new-node sn3)
-			  ;; (?an4 new-node sn4)
-			  )
-			 (add
-			  (print tree-top-rule2 ?this-obj ?x ?c ?cr ?nn1 ?nn2)
-			  (plain edge ?cr)
-			  ;; (?cr add ?an1)
-			  ;; (?an1 elem0 ?nn1)
-			  ;; (?an1 elem1 zero)
-			  ;; (?cr add ?an2)
-			  ;; (?an2 elem0 ?nn2)
-			  ;; (?an2 elem1 max)
-			  ;; (?cr add ?an3)
-			  ;; (?an3 elem0 ?nn1)
-			  ;; (?an3 elem1 top)
-			  ;; (?an3 elem2 ?x)
-			  ;; (?cr add ?an4)
-			  ;; (?an4 elem0 ?nn2)
-			  ;; (?an4 elem1 top)
-			  ;; (?an4 elem2 ?x)
-			  (?cr add (?nn1 zero))
-			  (?cr add (?nn2 max))
-			  (?cr add (?nn1 top ?x))
-			  (?cr add (?nn2 top ?x))
-			  (?x rule ?cr)
-			  ))))))
+(rule
+ (name clausify-pred)
+ (pred
+  (clausify ?r)
+  (?r type rule)
+  (?r pred ?p))
+ (add
+  (print clausify-pred ?r ?p)
+  (?r clause ?p)))
+
+(rule
+ (name clausify-add)
+ (pred
+  (clausify ?r)
+  (?r type rule)
+  (?r add ?p))
+ (add
+  (print clausify-add ?r ?p)
+  (?r clause ?p)))
+
+(rule
+ (name clausify-del)
+ (pred
+  (clausify ?r)
+  (?r type rule)
+  (?r del ?p))
+ (add
+  (print clausify-del ?r ?p)
+  (?r clause ?p)))
+
+(rule
+ (name spec-rule1)
+ (pred
+  (spec-rule ?r ?var ?obj)
+  (?r type rule)
+  (?r name ?rule-name))
+ (add
+  (print spec-rule1 ?r ?var ?obj)
+  (?r var ?var)
+  (?r local)
+  (spec-rule2 ?r ?rule-name ?var ?obj)))
+
+(rule
+ (name spec-rule2)
+ (pred
+  (spec-rule2 ?r ?rule-name ?var ?obj)
+  (?r type rule)
+  (?r clause ?c)
+  (?c _elem ?n ?var)
+  (?r var ?var))
+ (add
+  (print spec-rule2 ?r ?rule-name ?c ?n ?var ?obj)
+  (?obj rule ?r)
+  (?c _elem ?n ?obj)
+  ;; (?obj abc)
+  )
+ (del
+  (?c _elem ?n ?var)))
+
 
 
 #|
-(x is treetopobj 5)
 
-(x is treetopobj levels 5)
+(rule
+ (name xxx)
+ (pred 
+  (x l ?l)
+  (?l1 sigma ?l)
+  (?nn1 new-node sn1)
+  (?nn2 new-node sn2)
+  (x abc))
+ (add
+  (?nn2 aup x)
+  (?nn1 aup x)
+  (?nn1 tree-next ?nn2)
+  (x adn ?nn2)
+  (x adn ?nn1)
+  (?nn1 l ?l1)
+  (print tree-rule ?this-obj x ?nn1 ?nn2 ?l)
+  (?nn2 l ?l1)
+  (x rule n1921)
+  (x top)
+  (x l 3)
+  (?nn1 zero)
+  (?nn2 max)
+  (?nn1 top x)
+  (?nn2 top x)
+  (print tree-rule-copy x ?l ?nn1 ?nn2))
+ (del
+  (x rule n1921)))
+
+
+;; Something to try. Can activate this to do local stuff without editing
+
+(rule
+ (name add-local)
+ (attach-to global-node)
+ (pred
+  (?r type rule)
+  (?r name {set of names}))
+ (add
+  (?r local)))
 
 |#

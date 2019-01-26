@@ -894,11 +894,11 @@ init
 ;; od-next
 ;; ev-next
 ;; ev-od-obj-rule
-;; copy-rule-rule
-;; copy-rule-rule-pred
-;; copy-rule-rule-pred-2
-;; copy-rule-rule-add
-;; copy-rule-rule-add-2
+ copy-rule-rule
+ copy-rule-rule-pred
+ copy-rule-rule-pred-2
+ copy-rule-rule-add
+ copy-rule-rule-add-2
 ;; add-rule
 ;; add-aux-rule
 ;; addx-rule
@@ -940,7 +940,7 @@ init
 ;; tree-next-zero-rule
 ;; tree-next-rule
 ;; tree-loop-rule
-tree-top-order-rule
+;; tree-top-order-rule
 tree-top-propagate-rule
 ;; tree-elem-rule
 ;; tree-elem-zero-rule
@@ -970,6 +970,12 @@ tree-top-rule
 ;; fft-rule-opt-rule-names
 ;; fft-rule-opt
 ;; fft-rule-opt-display
+
+clausify-pred
+clausify-add
+clausify-del
+spec-rule1
+spec-rule2
 
 ))
 
@@ -1089,7 +1095,6 @@ fwd-fe-rule-gen
 display-back-fe-rule-gen
 is
 ))))
-
 
 
 (timer 'main (lambda () (! (g execute-rule-dep) 'init :rule-dep-rules '(init tree-top-order-rule tree-top-propagate-rule tree-rule tree-top-rule))))
@@ -1374,6 +1379,47 @@ is
 		))))
 
 
+
+
+(let ()
+  (setq dims nil)
+  (dotimes (i 6)
+	(let ((i (+ i 1)))
+	  (print (list 'n i))
+	  (let ((n i))
+		(clear-counters)
+		(clear-perf-stats)
+		(setq g (make-the-graph))
+		;; (! (g add-natural-number-edges) 50)
+		(! (g define-rule) `(rule
+							 (name init)
+							 (attach-to global-node)
+							 (pred
+							  (global-node rule ?r)
+							  (?r name init))
+							 (add
+							  (print init)
+							  (r level ,(* 1 n))
+							  (r rule-30-top)
+							  (x is treetopobj levels ,n)
+							  (x fft-top)
+							  (x fft xfft)
+							  (x level ,n)
+							  (x color navajowhite)
+							  (x rand r)
+							  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
+
+							  (x local-rule-pool local-rule-pool-node)
+							  (x global-rule-pool global-rule-pool-node)
+							  (r local-rule-pool local-rule-pool-node)
+							  (r global-rule-pool global-rule-pool-node))
+							 (del
+							  (global-node rule ?this-rule))))
+		;; (! (g trace-rule) 'fft-comb-rule-next-sing-delta)
+		(timer 'main
+		  (lambda ()
+			(! (g execute-global-all-objs-loop))))
+		(setq dims (cons (! (g dimensions)) dims))))))
 
 (defun f (dims-list)
   (let ((h (make-hash-table)))
