@@ -167,8 +167,8 @@
 			  ;; m1 m2
 			  ;; add-consequent-edges
 			  ;; del-consequent-edges
-			  ;; rule-has-been-triggered
-			  ;; env-remove-bindings
+			  ;; ;; rule-has-been-triggered
+			  ;; ;; env-remove-bindings
 			  ;; insert
 			  ;; lookup
 			  ;; insert-triggered

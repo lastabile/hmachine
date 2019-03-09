@@ -1326,6 +1326,8 @@ abcl -- Armed Bear Common Lisp
 java -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
 Does not handle ^C interrupt -- exits. Thus it's only good for benchmarks.
 Very fast CL.
+4G max heap:
+java -Xmx4000m -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
 
 sbcl -- Steel Bank Common Lisp
 

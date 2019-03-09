@@ -1840,3 +1840,61 @@ Gerry S
 	(add
 	 (print test2 ?z)
 	 (stuff ?z))))
+
+
+(let ((x (! ((! (g  get-superqet-map)) as-list))))
+  (let ((s (mapcad (lambda (x)
+					 (when (= (length (first x)) 2) 
+					   (list (first x) (length (! (g get-edges-from-subqet) (first x))))))
+				   x)))
+	(let ((h (make-hash-table)))
+	  (dolist (e s)
+		(let ((n (second e)))
+		  (setf (gethash n h) (+ (or (gethash n h) 0) 1))))
+	  (let ((l (hash-table-to-list h)))
+		(let ((m (sort l (lambda (x y) (> (second x) (second y))))))
+		  (dolist (x m)
+			(print x))))))
+  nil)
+
+
+
+
+(dotimes (i 5)
+  (let ((n 3))
+	(clear-counters)
+	(clear-perf-stats)
+	(setq g (make-the-graph)) 
+	;; (! (g add-natural-number-edges) 50)
+	(! (g define-rule) `(rule
+						 (name init)
+						 (attach-to global-node)
+						 (pred
+						  (global-node rule ?r)
+						  (?r name init))
+						 (add
+						  (print init)
+						  (r level ,(* 1 n))
+						  (r rule-30-top)
+						  (x is treetopobj levels ,n)
+						  (x fft-top)
+						  (x fft xfft)
+						  (x level ,n)
+						  (x color navajowhite)
+						  (x rand r)
+						  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
+
+						  (x local-rule-pool local-rule-pool-node)
+						  (x global-rule-pool global-rule-pool-node)
+						  (r local-rule-pool local-rule-pool-node)
+						  (r global-rule-pool global-rule-pool-node))
+						 (del
+						  (global-node rule ?this-rule))))
+	;; (! (g trace-rule) 'fft-comb-rule-next-sing-delta)
+	(timer 'main
+	  (lambda ()
+		(! (g execute-global-all-objs-loop))
+		))) 
+  (perf-stats)
+  (print (list 'gc (gc)))
+  (print (list 'gc (gc))))
