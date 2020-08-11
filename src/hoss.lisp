@@ -143,7 +143,7 @@
 			'(
 			  ;; execute-obj
 			  ;; match-and-execute-rule
-			  ;;  match-and-execute-rule-on-edges
+			  ;; match-and-execute-rule-on-edges
 			  ;; all-matches  all-matches-aux  infer-root-rule-var check-rule-edges check-obj-containment
 			  ;; get-root-vars
 			  ;; infer-root-var

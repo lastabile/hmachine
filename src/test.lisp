@@ -1,5 +1,10 @@
 
 
+;; Prototype for the "canonica;" fft test loop. Note should clean up
+;; the others in this file.  As of the veriosn checked in 8/11/20,
+;; this supports tree.lisp (local rules); commented-out (x is
+;; treetopobj levels ,n) is needed for globaltree.lisp
+
 (let ((n 3))
   (clear-counters)
   (clear-perf-stats)
@@ -15,7 +20,12 @@
 						(print init)
 						(r level ,(* 1 n))
 						(r rule-30-top)
-						(x is treetopobj levels ,n)
+
+						;; (x is treetopobj levels ,n)		;; Supports global-tree.lisp
+
+						(x is treetopobj)					;; Supports tree.lisp
+						(x l ,n)
+
 						(x fft-top)
 						(x fft xfft)
 						(x level ,n)
@@ -34,6 +44,39 @@
 		 (lambda ()
 		   (! (g execute-global-all-objs-loop))
 		   )))
+
+(let ((n 3))
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-the-graph))
+  ;; (! (g add-natural-number-edges) 50)
+  (! (g define-rule) `(rule
+					   (name init)
+					   (attach-to global-node)
+					   (pred
+						(global-node rule ?r)
+						(?r name init))
+					   (add
+						(print init)
+						(r level ,(* 1 n))
+						(x is treetopobj levels ,n)
+						(x fft-top)
+						(x fft xfft)
+						(x level ,n)
+						(x rule ,(! (g query) '((?x name fft-rule)) '?x))
+
+						(x local-rule-pool local-rule-pool-node)
+						(x global-rule-pool global-rule-pool-node)
+						(r local-rule-pool local-rule-pool-node)
+						(r global-rule-pool global-rule-pool-node))
+					   (del
+						(global-node rule ?this-rule))))
+  ;; (! (g trace-rule) 'fft-comb-rule-next-sing-delta)
+  (timer 'main
+		 (lambda ()
+		   (! (g execute-global-all-objs-loop))
+		   )))
+
 
 
 
@@ -1294,6 +1337,11 @@ is
 							   copy-rule-rule-add
 							   copy-rule-rule-add-elem
 							   x-copy-rule-rule
+							   clausify-pred
+							   clausify-add
+							   clausify-del
+							   spec-rule1
+							   spec-rule2
 							   add-rule
 							   add-aux-rule
 							   addx-rule

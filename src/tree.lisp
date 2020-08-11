@@ -67,9 +67,9 @@
   (?p local-rule-pool ?rp)
   (?rp lrp-rule ?tree-top-propagate-rule)
   (?tree-top-propagate-rule name tree-top-propagate-rule)
-  (?p lrp-rule ?tree-loop-rule)
+  (?rp lrp-rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
-  (?p lrp-rule ?tree-elem-zero-rule)
+  (?rp lrp-rule ?tree-elem-zero-rule)
   (?tree-elem-zero-rule name tree-elem-zero-rule))
  (add
   (print tree-top-order-rule ?this-obj ?x ?y ?p)
@@ -312,8 +312,6 @@
  (local)
  (pred
   (?x local-rule-pool ?p)
-  (?p lrp-rule ?tree-top-rule)
-  (?tree-top-rule name tree-top-rule)
   (?p lrp-rule ?tree-top-order-rule)
   (?tree-top-order-rule name tree-top-order-rule)
   (?p lrp-rule ?tree-loop-rule)

@@ -789,6 +789,25 @@ terminology breaks down.
 In the end I'm not trying to define new mathematics but looking for
 good class and var names for the code, to avoid confusion.
 
+Intersection on sets can be defined as the largest common subset
+between two sets. It can be shown that the subset relation on the
+powerset forms a lattice, and that thus there exists a unique such
+set. However this definition does not hold for qets, and iterseciton is not necessarily unique. E.g,
+(1 2 a b 3 4) qet-intersect (5 6 b a 7 8) could be (a) or (b). 
+
+
+qet-intersect (qi) definition:
+
+x qi y == - Let x1, y1 be the removal of  all elements not common to x and y from x and y
+  	   	  - Retain the order of the remaining elements
+		  - The largest common subsequence is then the qi. There may be more than one of the largest size
+
+Thus, we abandon intesection as a model and just talk of common
+subsets, and the intersection/union (meet/join) lattice becomes a
+partial order where meet is not unique, i.e., there is no unqiue
+common lower bound.
+
+
 We define the following properties:
 
 - Unique intersection is not defined. Looking at intersection as the
@@ -981,10 +1000,10 @@ expository. There is much room for hope here.
 2/20/17 -- Some as of now concluded experiments with tracking new
 		   nodes, last-matched edges, etc.
 
-h.lisp.2.20.17 contains code for tracking the addition of edges in
-order, including tracking deletions. Given an edge one can find the
-next or prev edge in the creation order. Of course can't hold on to a
-deleted one, and I ran into that issue.
+./h.archive/h.2.26.17/h.2.20.17.lisp contains code for tracking the
+addition of edges in order, including tracking deletions. Given an
+edge one can find the next or prev edge in the creation order. Of
+course can't hold on to a deleted one, and I ran into that issue.
 
 One experiment was to try new-edges-only if the previous match of a
 rule was successful. This doesn't work because we might have several
@@ -1042,6 +1061,7 @@ defined precisely; however we have shown that one can use rules to go
 easily from a top-down form to a bottom-up form, and this likely forms
 the basis of compilation. 
 
+[See ref to here from 8/5/2020]
 At least one aspect of compilation may be usefully thought of as
 a "reduction of dimensionality", i.e., as in the type evaluation and
 inference found in modern functional languages. In the case of the
@@ -1279,7 +1299,7 @@ white. Red is not a great color due to color blindness.
 
 - 4/27/18 Consider in light of new rule evaulation and the dimension
   idea, i.e., how many times an edge is used by a rule. Something like
-  a type propertyraises the dimension.
+  a type property raises the dimension.
 
 
 ----------------------------------------------------------
@@ -1332,3 +1352,19 @@ java -Xmx4000m -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
 sbcl -- Steel Bank Common Lisp
 
   
+----------------------------------------------------------
+3/26/19 -- Rule copying
+
+
+
+----------------------------------------------------------
+8/5/2020 -- Dimension
+
+Finally back to rule opt, and so forth! Really need to record
+thoughts, code, and experiments regarding dimension, since it seems
+fundamental to h-machine attributes.
+
+Note some glimmer of ideas in this vein began in 2017; see "[See ref to here from 8/5/2020]", above.
+
+
+
