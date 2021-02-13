@@ -6,7 +6,7 @@
  ((find-package 'sb-int)				;; SBCL (Steel Bank Common Lisp)
   (let ()
 	(load "ht-sbcl.lisp")))
- (t										;; Assume abcl until others come along
+ (t										;; Assume abcl (Armed Bear Common Lisp) until others come along
   (let ()
 	(load "ht-abcl.lisp"))))
 

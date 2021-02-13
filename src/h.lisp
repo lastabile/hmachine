@@ -1,9 +1,4 @@
 
-(defstruct edge-entry
-  (edge)
-  (next)
-  (prev))
-
 (defc graph nil nil
   (let ((size 63))   ;; 1021 !!!!!!!!!!!!!!!!!!!!!!!
 	(let (
@@ -17,28 +12,20 @@
 		  (chains (make-sur-map :res-size 17))
 
 		  (qu (make-qet-utils))
-
-		  (cur-edge-entry nil)
 		  )
 
 	  (defm add-edge (edge)
-		(let ((entry (gethash edge edgelist)))
-		  (when (null entry)
-			(let ((entry (make-edge-entry)))
-			  (setf (edge-entry-edge entry) edge)
-			  (if (null cur-edge-entry)
-				  (setq cur-edge-entry entry)
-				  (let ()
-					(setf (edge-entry-next cur-edge-entry) entry)
-					(setf (edge-entry-prev entry) cur-edge-entry)
-					(setq cur-edge-entry entry)))
-			  (setf (gethash edge edgelist) entry))
-			(dotimes (i (length edge))
-			  (add-node (nth i edge) i edge))
-			(add-subqets edge)
-			;; (! (self add-chain) edge)
-			))
-		edge)
+		(let ((e (gethash edge edgelist)))
+		  (when (null e)
+			(setq e edge)
+			(setf (gethash edge edgelist) edge)
+			(let ((i 0))
+			  (dolist (n e)
+				(add-node n i e)
+				(setq i (+ i 1))))
+			(add-subqets e))
+			;; (! (self add-chain) e)		;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		  e))
 
 	  (defm edge-exists (edge)
 		(and (gethash edge edgelist) t))
@@ -73,42 +60,18 @@
 									   (setq r (cons v r)))
 									 edgehash)
 							r))))))
-			  #|
-			  (let ((r (! (nodelist lookup) node))
-					(s (! (x-nodelist lookup) node)))
-				(when (not (set-equal r s))
-				  (print (list 'ne r s)))
-				r)
-			  |#
 			  (let ((r1 (! (nodelist lookup) node)))
 				;; (let ((r2 (sort r1 #'g<)))
 				;; r2))
 				r1)
 			  )))
 
-	  (defm get-cur-edge-entry ()
-		cur-edge-entry)
-
-	  ;; Given the edge-entry entry, gets all edges from there to current
-	  
-	  (defm get-edges-from-edge-entry (entry)
-		(let ((r nil))
-		  (let ((cur-entry cur-edge-entry))
-			(block b
-			  (loop
-			   (when (null cur-entry)
-				 (return-from b nil))
-			   (setq r (cons (edge-entry-edge cur-entry) r))
-			   (when (eq cur-entry entry)
-				 (return-from b nil))
-			   (setq cur-entry (edge-entry-prev cur-entry)))))
-		  r))
-
-	  (defm get-edge-entry-from-edge (edge)		;; For debug
-		(gethash edge edgelist))
 
 	  ;; This is used with the cross-intersect evaluation model, which
 	  ;; is slow but has nice theory. 
+	  ;;
+	  ;; Scans up the tree of superqets of subqet and returns all such
+	  ;; superqets which are also edges
 
 	  (defm get-edges-from-subqet (subqet)
 		(timer 'get-edges-from-subqet
@@ -127,6 +90,9 @@
 
 	  ;; Does same scan as get-edges-from-subqet but just returns size
 	  ;; of resulting hash table
+	  ;;
+	  ;; Note this can be optimized by keeping a running count when
+	  ;; inserting qets. Used in scan-and-subst
 	  
 	  (defm count-edges-from-subqet (subqet)
 		(timer 'count-edges-from-subqet
@@ -171,13 +137,6 @@
 	  (defm rem-edge (edge)
 		(when (edge-exists edge)
 		  (rem-subqets edge)
-		  (let ((entry (gethash edge edgelist)))
-			(let ((prev-entry (edge-entry-prev entry)))
-			  (let ((next-entry (edge-entry-next entry)))
-				(when prev-entry
-				  (setf (edge-entry-next prev-entry) next-entry))
-				(when next-entry
-				  (setf (edge-entry-prev next-entry) prev-entry)))))
 		  (remhash edge edgelist)
 		  (let ((pos 0))
 			(dolist (node edge)
@@ -277,6 +236,77 @@
 	(defm qet-exists (qet)
 	  (or (edge-exists qet)
 		  (and (superqets qet) t)))
+
+	;; Get all qets (including edges)
+
+	(defm all-qets ()
+	  (hunion (all-subqets) (get-all-edges)))
+
+	;; predicate-fcn == (lambda (edge) ...) => Boolean. 
+	;; Returns a new graph with the object graph filter via thei predicate fcn
+
+	(defm graph-filter (predicate-fcn)
+	  (let ((r (make-objgraph)))
+		(dolist (e (get-all-edges))
+		  (when (funcall predicate-fcn e)
+			(! (r add-edge) e)))
+		r))
+
+	(defm make-qet-graph ()		;; All qets as edges
+	  (let ((g (make-objgraph)))
+		(dolist (qet (all-qets))
+		  (! (g add-edge) qet))
+		g))
+
+	;; For graphical purposes only at this point. Build a "Hasse
+	;; Diagram" of the ASC formed by the edges of the graph and all
+	;; its subqets.
+
+	;; String nodes to dump, with an "up" relation
+
+	(defm make-hasse-graph (&key (levels-to-omit '(0)))	;; list of levels to omit, with zero as the bottom "T" level (omit by default)
+	  (let ((gd (make-objgraph)))
+		(defr
+		  (defl get-singleton-qets ()
+			(let ((qets (all-qets)))
+			  (let ((r nil))
+				(dolist (qet qets)
+				  (when (= (length qet) 1)
+					(setq r (cons qet r))))
+				r)))
+		  (defl get-qet-string (qet)
+			(format nil "~a" qet))
+		  (defl walk (qet level)
+			(if (null qet)
+				nil
+				(let ((superqets (if (eq qet t) (get-singleton-qets) (superqets qet))))
+				  (dolist (superqet superqets)
+					(when (not (member level levels-to-omit))
+					  (! (gd add-edge) `(,(get-qet-string qet) up ,(get-qet-string superqet)))))
+				  (dolist (superqet superqets)
+					(walk superqet (+ level 1))))))
+		  (let ()
+			(walk t 0)
+			gd))))
+
+	(defm make-simplicial-complex-graph (&key (nodes-to-subst-fcn (lambda (n) (not (or (is-new-obj-node n)
+																					   (is-var-name n))))))
+	  (let ((r (make-objgraph)))
+		(let ((i 0))
+		  (dolist (e (get-all-edges))
+			(let ((e (mapcar 
+					  (lambda (n)
+						(if (funcall nodes-to-subst-fcn n)
+							(let ()
+							  (setq i (+ i 1))
+							  (symcat n i))
+							n))
+					  e)))
+			  (when (= (length e) 3)
+				(! (r add-edge) `(,(first e) r ,(second e)))
+				(! (r add-edge) `(,(second e) r ,(third e)))
+				(! (r add-edge) `(,(third e) r ,(first e)))))))
+		r))
 
 	;; Private:
 
@@ -424,6 +454,36 @@
 
 	(defm get-chains ()
 	  chains)
+
+	;; The edges in the graph already, along with all their subqets,
+	;; form an abstract simplicial complex (ASC). From these qets,
+	;; form a pseudo-topo space by taking the pairwise union of all
+	;; these edges and qets, continuing until no new qets are added.
+	;;
+	;; It's pseudo-topo in that we only form a union if the
+	;; intersection of the qets in question is non-empty, and we
+	;; remove vars from the resulting qet to be inserted.
+	;;
+	;; Note that we continue the convention that edges are qets, but not all qets are edges
+
+	(defm build-pseudo-topo-qets ()
+	  (defr
+		(defl name (q)
+		  (format nil "~a" q))
+		(defl qunion (q1 q2)
+		  (let ((q1 (sort q1 (lambda (x y) (string< (name x) (name y))))))
+			(let ((q2 (sort q2 (lambda (x y) (string< (name x) (name y))))))
+			  (hunion q1 q2))))
+		(let ((qets (hunion (all-subqets) (get-all-edges))))
+		  (dolist (q1 qets)
+			(dolist (q2 qets)
+			  (when (not (eq q1 q2))
+				(when (not (null (intersect q1 q2)))
+				  (let ((q (filter-vars (hunion q1 q2))))
+					(add-subqets q)))))))))
+
+
+
 
 	(defm dump-edges (&key (sort t) (dump-fcn #'print))
 	  (if (not sort)
@@ -803,8 +863,6 @@
 		(disable-root-vars nil)
 		(pred-node-to-new-edges (make-sur-map))
 		(rule-node-to-new-edges (make-sur-map))
-		(rule-node-to-edge-entry (make-sur-map))		;; This maps the rule to the last edge entry (index) matched
-														;; by the rule, so we can get edges created from there to current.
 		(edge-to-pred (make-sur-map))					;; Nop by using  make-dummy-sur-map; Active using make-sur-map
 		(edge-to-trace (make-sur-map))					;; Nop by using  make-dummy-sur-map; Active using make-sur-map
 		(dims-list nil)
@@ -838,9 +896,6 @@
 
 	  (defm get-rule-node-to-new-edges ()
 		rule-node-to-new-edges)
-
-	  (defm get-rule-node-to-edge-entry ()
-		rule-node-to-edge-entry)
 
 	  (defm get-dims-list ()
 		dims-list)
@@ -890,19 +945,6 @@
 				node)
 			  (let ((node (new-pool-node new-pool)))
 				node))))
-
-	  ;; Utility for testing and analysis, checks for node of the form n<integer>, i.e., was generated by new-obj-node
-
-	  (defm is-new-obj-node (node)
-		(block b
-		  (when (symbolp node)
-			(let ((s (symbol-name node)))
-			  (let ((l (length s)))
-				(when (equal (aref s 0) #\N)
-				  (dotimes (i (- l 1))
-					(when (not (digit-char-p (aref s (+ i 1))))
-					  (return-from b nil)))
-				  t))))))
 
 	  (defm get-obj-edges (node)
 		(let ((edges (get-edges node)))
@@ -1264,11 +1306,37 @@
 	  ;; vardesc is atomic, i.e., a single var, and that a null
 	  ;; vardesc means return all the envs.
 	  ;;
-	  ;; If vardesc is a list, then it is a list of vars and query
-	  ;; returns a list of those bindings, in the given order.
+	  ;; :not (clause ...) => Adds negated clauses to query (which
+	  ;;						means first search with the main clauses, and match those
+	  ;;						results with the not clauses, throwing out those edges which
+	  ;;						match any of them).
+	  ;;
+	  ;; vardesc is single var => value
+	  ;; vardesc is list of vars => list of bound value lists, each bound value list in the order of the given vars
+	  ;; vardesc is null => list of all envs
+	  ;; vardesc is :edges => list of all matched edges, i.e., envs resolved
 
-	  (defm query (clauses &optional vardesc &key not)
-		(let ((envslist (query1 clauses not)))
+	  (defm query (clauses &optional vardesc &key not rule-trace)
+		(let ((envslist (query1 clauses not rule-trace)))
+		  (if (is-var-name vardesc)
+			  (env-lookup vardesc (first (first envslist)) :idempotent nil)
+			  (let ((envs (dedup-list (mapcan (lambda (envs)
+												(mapcar (lambda (env)
+														  (env-prune env (! (std-vars base-vars))))
+														envs))
+											  envslist))))
+				(if (eq vardesc :edges)
+					(matched-edges-union clauses envs)
+					(if vardesc
+						(dedup-list (mapcar (lambda (env)
+											  (mapcar (lambda (var)
+														(env-lookup var env :idempotent nil))
+													  vardesc))
+											envs))
+						envs))))))
+
+	  (defm old-query (clauses &optional vardesc &key not rule-trace)
+		(let ((envslist (query1 clauses not rule-trace)))
 		  (if (and vardesc (symbolp vardesc))
 			  (env-lookup vardesc (first (first envslist)))
 			  (let ((envs (dedup-list (mapcan (lambda (envs)
@@ -1284,7 +1352,7 @@
 										envs))
 					envs)))))
 
-	  (defm query1 (clauses not-clauses)
+	  (defm query1 (clauses not-clauses rule-trace)
 		(let ((all-clauses (hunion clauses not-clauses)))
 		  (let ((rule (first (define-rule `(rule (pred ,@all-clauses)) :local t :add-to-local-rule-pool nil))))
 			(let ((pred-edges (! ((get-rule-components rule) preds))))
@@ -1304,11 +1372,13 @@
 					  (dolist (obj-edge obj-edges)
 						(! (og add-edge) obj-edge)))))
 				(setq gog og)
-				(! (og query2) clauses not-clauses))))))
+				(! (og query2) clauses not-clauses rule-trace))))))
 
-	  (defm query2 (clauses not-clauses)
-		(let ((rule-info (define-rule `(rule (pred ,@clauses) (not ,@not-clauses)) :local t :add-to-local-rule-pool nil)))
+	  (defm query2 (clauses not-clauses rule-trace)
+		(let ((rule-info (define-rule `(rule (name query) (pred ,@clauses) (not ,@not-clauses)) :local t :add-to-local-rule-pool nil)))
 		  (let ((rule (first rule-info)))
+			(when rule-trace
+			  (trace-rule 'query))
 			(dedup-list (mapcar (lambda (node)
 								  (let ((r (all-matches-with-not rule node)))
 									r))
@@ -1324,7 +1394,7 @@
 	  (defm hget-all (node attr)
 		(hget-aux node attr nil nil t))
 
-	  ;; General-purpose accessor which foloows a chain of attributes/invers attributes.
+	  ;; General-purpose accessor which follows a chain of attributes/inverse attributes.
 	  ;;
 	  ;; Give the node-list, will get all nodes which are values of
 	  ;; the first attr, then next, and so on, to produce a final list
@@ -1572,7 +1642,7 @@
 							  (if (! (env-triggered-table rule-has-been-triggered) rule-node env)
 								  (let ()
 									(when (edge-exists `(rule-trace ,rule-name))
-									  (print `(add-consequent-edges already-triggered rule ,rule-node ,rule-name obj ,obj-node)))
+									  (print `(rule-trace add-consequent-edges already-triggered rule ,rule-node ,rule-name obj ,obj-node)))
 									(gstat 'already-env-triggered-rules (lambda (x y) (+ x y)) (lambda () 1))
 									;; (when (= (length envlist) 1)
 									;;   (rem-edge `(,obj-node rule ,rule-node)))
@@ -1775,6 +1845,12 @@
 	  (defm update-not-new-edges (rule-node)
 		(! (rule-stats update-not-new-edges) rule-node))
 
+	  (defm update-last-expand-len (rule-node len)
+		(! (rule-stats update-last-expand-len) rule-node len))
+
+	  (defm update-new-edges-max-expand-len (rule-node)
+		(! (rule-stats update-new-edges-max-expand-len) rule-node))
+
 	  (defm get-matched (rule-node)
 		(! (rule-stats get-matched) rule-node))
 
@@ -1796,7 +1872,7 @@
 				(let ((rule-name (hget rule-node 'name)))
 				  (when (or am-traced
 							(edge-exists `(rule-trace ,rule-name)))
-					(print `(match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node)))
+					(print `(rule-trace match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node)))
 				  (let ((envlist (all-matches rule-node obj-node)))
 					(update-tested rule-node)
 					(if envlist
@@ -1809,7 +1885,7 @@
 								(not-list (! (rule-comps nots))))
 							(update-matched rule-node)
 							(when (edge-exists `(rule-trace ,rule-name))
-							  (print `(match-and-execute-rule matched ,envlist)))
+							  (print `(rule-trace match-and-execute-rule matched rule ,rule-node ,rule-name envlist ,envlist)))
 							(del-consequent-edges del-list not-list envlist)
 							(add-consequent-edges obj-node pred-list pred-node-list add-list add-node-list not-list rule-node envlist :cont
 							  (lambda (m x-new-edges x-matched-edges matched-and-new-edges-env)
@@ -1822,6 +1898,7 @@
 									(let ()
 									  (setq match-status :new-edges)
 									  (update-new-edges rule-node)
+									  (update-new-edges-max-expand-len rule-node)
 									  (setq r t))
 									(let ()
 									  (setq match-status :no-new-edges)
@@ -1966,7 +2043,7 @@
 			(gstat 'expand-rule-obj-edges-len (lambda (v y) (+ (length v) y))
 			  (lambda ()
 				(defr
-				  (defl xvar-match-filter-edges (x y) y)
+				  (defl xvar-match-filter-edges (x y z) y)
 				  (let ((rule-node (! (rule-graph rule-node))))
 					(let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
 					  (let ((obj-edges-result nil))
@@ -1974,43 +2051,57 @@
 							  (bipartite-breadth-rule-walk-seq rule-graph root-var) ;;;;;;;;;      !!!!!!!!!!!!!!! ;
 							  (rest rule-edge-list))
 							 (obj-edges
-							  (expand-edges `((,obj-node)) rule-nodepos rule-node)
-							  (expand-edges (var-match-filter-edges (first rule-edge-list) obj-edges) rule-nodepos rule-node)))
+							  (expand-edges `((,obj-node)) rule-nodepos root-var rule-node)
+							  (expand-edges (var-match-filter-edges (first rule-edge-list) obj-edges rule-node) rule-nodepos root-var rule-node)))
 							((null rule-edge-list) nil)
-							(setq obj-edges-result (hunion obj-edges-result (var-match-filter-edges (first rule-edge-list) obj-edges)))
+							(setq obj-edges-result (hunion obj-edges-result (var-match-filter-edges (first rule-edge-list) obj-edges rule-node)))
 							(when traced
-							  (let ((*print-length* 3))
-								(print (list 'expand-rule-obj-edges (first rule-edge-list) obj-edges-result)))))
+							  (let ((*print-length* nil))		;; 3
+								(print `(rule-trace expand-rule-obj-edges rule ,rule-node ,(hget rule-node 'name)
+													rule-edges ,(log-value (first rule-edge-list)) obj-edges ,(log-value obj-edges-result))))))
+						(update-last-expand-len rule-node (length obj-edges-result))
 						obj-edges-result)))))))))
 
 	  ;; Given a set of edges, gets all their nodes, and returns the edges of those nodes
 	  ;; rule-node passed for tracing purposes only
 
-	  (defm expand-edges (edges rule-nodepos rule-node)
+	  (defm expand-edges (edges rule-nodepos root-var rule-node)
 		(timer 'expand-edges
 		  (lambda ()
 			(let ((visit-hash (make-hash-table :test #'equal)))
 			  (let ((nodes (nodes edges)))
 				(dolist (node nodes)
-				  (let ((child-edges (get-children node 5 rule-nodepos)))
+				  (let ((child-edges (get-children node 5 rule-nodepos root-var)))
 					(dolist (child-edge child-edges)
 					  (setf (gethash child-edge visit-hash) child-edge)))))
 			  (let ((r nil))
 				(maphash (lambda (k v)
 						   (setq r (cons v r)))
 						 visit-hash)
-				#|
 				(when (edge-exists `(rule-trace ,(hget rule-node 'name)))
-				  (let ((*print-length* 3))
-					(print (list 'expand-edges r))))
-				|#
+					(print `(rule-trace expand-edges ,(log-value r))))
 				r)))))
 
-	  (defm get-children (bnode sigma-span rule-nodepos)
+	  (defm is-const (bnode)
+		(memq bnode '(elem is-elem-of next tree-next aup adn fft copy-array-struct ref odd even weave-next level sigma
+						   od ev zero max rule30val interior up top center center-up
+						   )))
+
+	  (defm old-is-const (bnode)
+		(and (is-node bnode)
+			 (not (is-var-name bnode))
+			 (not (is-new-obj-node bnode))
+			 (not (numberp bnode))
+			 (not (memq bnode '(x xfft r)))))
+
+	  (defm get-children (bnode sigma-span rule-nodepos root-var)
 		(cond
 		 ((is-sigma-node bnode)
 		  (append (get-obj-edges bnode)
 				  (sigma-edges (hget-edge-inverse bnode 'sigma) sigma-span)))
+		 ((and (is-const bnode)
+			   (not (eq bnode root-var)))
+		  nil)
 		 ((is-node bnode)
 		  (let ((poslist (when rule-nodepos (gethash bnode rule-nodepos))))
 			(if (null poslist) ;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2032,8 +2123,10 @@
 	  ;; calling dedup-list is most efficient. Also added length check
 	  ;; and changed match-one-edge to iterative. Overall a good
 	  ;; speedup.
+	  ;;
+	  ;; rule-node passed for tracing only
 
-	  (defm var-match-filter-edges (rule-edges obj-edges)
+	  (defm var-match-filter-edges (rule-edges obj-edges rule-node)
 		(timer 'var-match-filter-edges
 		  (lambda ()
 			(defr
@@ -2047,12 +2140,17 @@
 							(return-from b nil)
 							(setq obj-edge (rest obj-edge)))))
 					t)))
-			  (let ((r nil))
-				(dolist (rule-edge rule-edges)
-				  (dolist (obj-edge obj-edges)
-					(when (match-one-edge rule-edge obj-edge)
-					  (setq r (cons obj-edge r)))))
-				(dedup-list r))))))
+			  (let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
+				(let ((r nil))
+				  (dolist (rule-edge rule-edges)
+					(dolist (obj-edge obj-edges)
+					  (when (match-one-edge rule-edge obj-edge)
+						(setq r (cons obj-edge r)))))
+				  (let ((r (dedup-list r)))
+					(when traced
+					  (print `(rule-trace var-match-filter-edges rule ,rule-node ,(hget rule-node 'name) 
+										  obj-edges-in ,(log-value obj-edges) obj-edges-out ,(log-value r))))
+					r)))))))
 
 	  ;; If any rule edge contains no common nodes, error, since would
 	  ;; likely be missing many nodes which should match. This is really
@@ -2062,20 +2160,22 @@
 	  ;; otherwise there is too much searching. So a rule must have at least
 	  ;; one node in commmon with a matching object
 
-	  (defm check-rule-edges (rule-edges common-nodes)
-		(if common-nodes
-			(let ((r t))
-			  (dolist (rule-edge rule-edges)
-				(block b
-				  (dolist (rule-node rule-edge)
-					(when (or (member rule-node common-nodes)
-							  (member rule-node '(new-node)))
-					  (return-from b t)))
-				  ;;			 (print (list 'check-rule-error rule-edge common-nodes))
-				  (setq r nil)
-				  nil))
-			  r)
-			nil))
+	  (defm check-rule-edges (rule-edges common-nodes)		;; all-var-mod
+		(let ()					;; !!!!!!!!!!!!!!!!!
+		  (if common-nodes
+			  (let ((r t))
+				(dolist (rule-edge rule-edges)
+				  (block b
+					(dolist (rule-node rule-edge)
+					  (when (or (member rule-node common-nodes)
+								(member rule-node '(new-node)))
+						(return-from b t)))
+					;;			 (print (list 'check-rule-error rule-edge common-nodes))
+					(setq r nil)
+					nil))
+				r)
+			  nil)
+		  t))
 
 	  ;; obj-node must be a member of at least one edge of
 	  ;; obj-edges. Otherwise we have strayed too far from the root node for
@@ -2095,17 +2195,19 @@
 	;; edge list which is a subset of edges which contain one or more
 	;; elements of nodes
 
-	(defm edges-with-nodes (nodes edges)
-	  (let ((edge-hash (make-hash-table :test #'equal)))
-		(dolist (edge edges)
-		  (dolist (node nodes)
-			(when (member node edge :test #'equal)
-			  (setf (gethash edge edge-hash) edge))))
-		(let ((r nil))
-		  (maphash (lambda (k v)
-					 (setq r (cons v r)))
-				   edge-hash)
-		  r)))
+	(defm edges-with-nodes (nodes edges)		;; all-var-mod
+	  (block b
+		(return-from b edges)					;; !!!!!!!!!!!!!!!!!!!!!!!!!
+		(let ((edge-hash (make-hash-table :test #'equal)))
+		  (dolist (edge edges)
+			(dolist (node nodes)
+			  (when (member node edge :test #'equal)
+				(setf (gethash edge edge-hash) edge))))
+		  (let ((r nil))
+			(maphash (lambda (k v)
+					   (setq r (cons v r)))
+					 edge-hash)
+			r))))
 
 	(defm sigma-edges (edge xspan)
 	  (let ((span xspan))
@@ -2168,7 +2270,7 @@
 	(defm all-edge-matches (rule-edge)
 	  (get-edges-from-subqet (filter-vars rule-edge)))
 
-	(defm all-matches (rule-node obj-node)
+	(defm all-matches (rule-node obj-node)		;; all-var-mod -- not right now
 	  (timer 'all-matches
 		(lambda ()
 		  (let ((rule-graph nil))
@@ -2201,13 +2303,18 @@
 											   (all-matches-aux rule-graph obj-node root-var)
 											   (e-all-matches-aux rule-node obj-node root-var)))) ;;; Experimental version
 									  (when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
-										;; (print (list 'f (hget rule-node 'name) root-var obj-node))
+ 										;; (print (list 'f (hget rule-node 'name) root-var obj-node scan-subst-status))
 										;; (let ((seqno (hget 'all-rules 'new-edges)))
 										;; (add-edge `(,rule-node fposs ,seqno ,root-var ,obj-node)))
 										)
 									  ;; (print (list 'g1 (hget rule-node 'name) root-var obj-node poss-match scan-subst-status))
 									  (when (and envlist poss-match (not (eq scan-subst-status t))) ;; Catch case when subst fails 
 										;; (print (list 'g (hget rule-node 'name) root-var obj-node scan-subst-status))
+
+										)
+									  ;; Case when all-matches-aux fails, yet we got a valid env back from scan-and-subst
+									  (when (and (null envlist) poss-match scan-subst-status (not (eq scan-subst-status :unknown)))
+										;; (print (list 'h (hget rule-node 'name) root-var obj-node (log-value scan-subst-status)))
 										)
 									  (when envlist
 										(dolist (env envlist)
@@ -2251,7 +2358,7 @@
 						  (if (not (check-rule-edges rule-edges common-nodes))
 							  (return-from ama nil)
 							  (let ((xobj-edges (edges-with-nodes common-nodes obj-edges)))
-								(let ((obj-edges (var-match-filter-edges rule-edges xobj-edges)))
+								(let ((obj-edges (var-match-filter-edges rule-edges xobj-edges rule-node)))
 								  (if (not (check-obj-containment obj-node obj-edges))
 									  (return-from ama nil)
 									  (let ((envlist (match-pat-obj-edge-lists rule-edges obj-edges root-var obj-node rule-node)))
@@ -2397,7 +2504,7 @@
 		(lambda ()
 		  (let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
 			(when traced
-			  (print (list rule-node obj-node root-var patlist objlist)))
+			  (print `(rule-trace match-pat-obj-edge-lists input rule ,rule-node ,(hget rule-node 'name) root-var ,root-var patlist ,(log-value patlist) objlist ,(log-value objlist))))
 			(let ((patlist-info (filter-new-node-pred-edges patlist)))
 			  (let ((new-node-pred-edges (first patlist-info))
 					(patlist (second patlist-info)))
@@ -2415,9 +2522,9 @@
 							 (if new-node-env
 								 (cons (list new-node-env) matches)
 								 matches)))
-						(let ((envs (cross-aux2 matches)))
+						(let ((envs (cross-aux2 matches :rule-trace-info (when traced (list rule-node (hget rule-node 'name))))))
 						  (when traced
-							(print envs))
+							(print `(rule-trace match-pat-obj-edge-lists result rule ,rule-node ,(hget rule-node 'name) envs ,envs)))
 						  envs)))))))))))
 
 	(defm patlist-equal (patlist1 patlist2)
@@ -2855,6 +2962,7 @@
 					  (addraw local-rule-pool 'lrp-rule rule))))
 			  (list rule edge-list))))))
 
+
 	(defm bipartite-breadth-rule-walk-seq (rule-graph root-var)
 	  (timer 'bipartite-breadth-rule-walk-seq
 		(lambda ()
@@ -2865,33 +2973,39 @@
 											 (lambda (x)
 											   (when (is-edge (first x))
 												 (when traced
-												   (print (list 'bipseq-result-fcn x)))
+												   #|
+												   (print (list 'bipseq-result-fcn x))
+												   |#
+												   )
 												 (setq rule-edges-list (append rule-edges-list (list x))))))
 				(let ((prev nil)
 					  (r nil))
 				  (dolist (rule-edges rule-edges-list)
 					(setq r (cons (set-subtract rule-edges prev) r))
 					(setq prev rule-edges))
-				  (reverse r))))))))
+				  (let ((r (reverse r)))
+					(when traced
+					  (print `(rule-trace bipseq ,r)))
+					r))))))))
 
 	(defm bipartite-breadth-rule-walk (rule-graph root-node &key result-fcn rule-traced)
 	  (let ((visit-hash (make-hash-table :test #'equal)))
 		(defr
 		  (defl bwb (bnodes)
 			(when (or am-traced rule-traced)
-			  (print (list 'bipwalk bnodes)))
+			  (print (list 'bipwalk root-node bnodes)))
 			(when (and bnodes result-fcn)
 			  (funcall result-fcn bnodes))
 			(let ((c (mapunion (lambda (bnode)
 								 (and (not (gethash bnode visit-hash))
 									  (let ()
 										(setf (gethash bnode visit-hash) bnode)
-										(! (rule-graph get-rule-children) bnode))))
+										(! (rule-graph get-rule-children) bnode root-node))))
 							   bnodes)))
 			  (when c
 				(bwb c))))
 		  (setf (gethash root-node visit-hash) root-node)
-		  (bwb (! (rule-graph get-rule-children) root-node))
+		  (bwb (! (rule-graph get-rule-children) root-node root-node))
 		  (let ((r nil))
 			(maphash (lambda (k v)
 					   (when (is-edge v)
@@ -2899,8 +3013,11 @@
 					 visit-hash)
 			r))))
 	
-	(defm get-rule-children (bnode)
+	(defm get-rule-children (bnode root-var)
 	  (cond
+	   ((and (is-const bnode)					;; !!! Note we don't now go through constants!
+			 (not (eq bnode root-var)))
+		nil)
 	   ((is-node bnode)
 		(get-edges bnode))
 	   ((is-edge bnode)
@@ -2923,7 +3040,7 @@
 				  )
 				 (t
 				  (setf (gethash bnode visit-hash) bnode)
-				  (let ((children (! (rule-graph get-rule-children) bnode)))
+				  (let ((children (! (rule-graph get-rule-children) bnode root-node)))
 					(when (is-edge (first children))
 					  (print (list 'children children)))
 					(dolist (child children)
@@ -3023,8 +3140,7 @@
 	;;
 	;; This could be pointing out that we should be careful in  straying too much from the isomrophism theme.
 
-
-	(defm possible-match-fcn (rule-node obj-node)
+	(defm possible-match-fcn (rule-node obj-node)		;; all-var-mod
 	  (timer 'possible-match-fcn
 		(lambda ()
 		  (defr
@@ -3118,13 +3234,21 @@
 													 (not (edge-exists new-pred)))
 											 (return-from b nil)))
 										 t)))
-								(if r
-									(let ()
-									  ;; (hprint 'e4 envout preds root-var obj-node)
-									  (hunion envout '((t t))))
-									(if status
-										:unknown
-										nil)))))))))))))))
+								(let ((r (if r
+											 (let ()
+											   ;; (hprint 'e4 envout preds root-var obj-node)
+											   (hunion envout '((t t))))
+											 (if status
+												 :unknown
+												 nil))))
+								  (gstat 'scan-and-subst-success (lambda (x y) (+ x y)) (lambda () (if (and (not (null r)) (not (eq r :unknown))) 1 0)))
+								  (gstat 'scan-and-subst-failure (lambda (x y) (+ x y)) (lambda () (if (null r) 1 0)))
+								  (gstat 'scan-and-subst-unknown (lambda (x y) (+ x y)) (lambda () (if (eq r :unknown) 1 0)))
+								  #|
+								   (when (and (not (null r)) (not (eq r :unknown)))
+									 (print `(scan-and-subst rule ,rule-node ,(hget rule-node 'name) env ,r)))
+								  |#
+								  r))))))))))))))
 
 			(defl old-scan-and-subst (preds root-var obj-node)
 			  (defr
@@ -3329,7 +3453,8 @@
 				  (let ((rule-comps (get-rule-components rule-node)))
 					(let ((preds (second (filter-new-node-pred-edges (! (rule-comps preds))))))
 					  (let ((pred-const-nodes (get-rule-consts-pred preds)))
-						(let ((ipo (intersect pred-const-nodes obj-nodes)))
+						;; (let ((ipo (intersect pred-const-nodes obj-nodes)))	;; all-var-mod
+						(let ((ipo obj-nodes))									;; all-var-mod
 						  (lambda (root-var)			;; Returns (pos-match = {t, nil}, scan-and-subst-status = {:unknown, :not-called, <an env>, nil})
 							(timer 'possible-match
 							  (lambda ()
@@ -3379,6 +3504,7 @@
 			;; (rem-edge '(global-node global-rule-pool-ref global-rule-pool-node))
 			(dolist (rule-edge rule-edges)
 			  (! (rule-graph add-edge) rule-edge))
+			(! (rule-graph add-edge) `(,rule-node name ,(hget rule-node 'name)))
 			rule-graph))))
 
 	;; Builds new graph from current one by substituting nodes in the
@@ -3476,8 +3602,8 @@
 								(hget-inverse-all 'rule 'type))))
 			(let ((rulesq (mapcad (lambda (x) (when (not (is-new-pool-node (first x))) x)) rulesq)))	;; Hack!!!!!! Don't have good way of filtering out "orphan" rules like those tied NNx nodes
 			  (print rulesq)
-			  (or local-pool-add-node (setq local-pool-add-node (list-to-edge-elem-node '(?x local-rule-pool ?y))))
-			  (or global-pool-add-node (setq global-pool-add-node (list-to-edge-elem-node '(?x global-rule-pool ?y))))
+			  ;; (or local-pool-add-node (setq local-pool-add-node (list-to-edge-elem-node '(?x local-rule-pool ?y))))
+			  ;; (or global-pool-add-node (setq global-pool-add-node (list-to-edge-elem-node '(?x global-rule-pool ?y))))
 			  (dolist (r1q rulesq)
 				(let ((r1 (first r1q))
 					  (r1n (second r1q)))
@@ -3491,40 +3617,45 @@
 							 (or (null rules)
 								 (and (member r1n rules :test #'eq)
 									  (member r2n rules :test #'eq))))
-						(let ((r1as (append (hget-all r1 'add) (list local-pool-add-node global-pool-add-node))))
-						  (let ((r2ps (hget-all r2 'pred)))
-							(dolist (r1a r1as)
-							  (dolist (r2p r2ps)
-								(let ((r1ae (edge-elem-node-to-list r1a)))
-								  (let ((r2pe (edge-elem-node-to-list r2p)))
-									(let ((r1aes (format nil "~a" r1ae)))
-									  (let ((r2pes (format nil "~a" r2pe)))
-										(when (or (match-one-edge r1ae r2pe nil nil nil)
-												  (match-one-edge r2pe r1ae nil nil nil))
-										  ;; (add-edge (list 'rd 1 r1n "" "" r2n))
-										  ;; (add-edge (list 'rd 2 r1n r1aes r2pes r2n))
-										  (add-edge (list r1 'rd r2))
-										  ;; (add-edge (list 'rr r1n r1a r2p r2n))
+						(let ((local-pool-add-node (list-to-edge-elem-node '(?x local-rule-pool ?y))))
+						  (let ((global-pool-add-node (list-to-edge-elem-node '(?x global-rule-pool ?y))))
+							(let ((r1as (append (hget-all r1 'add) (list local-pool-add-node global-pool-add-node))))
+							  (let ((r2ps (hget-all r2 'pred)))
+								(dolist (r1a r1as)
+								  (dolist (r2p r2ps)
+									(let ((r1ae (edge-elem-node-to-list r1a)))
+									  (let ((r2pe (edge-elem-node-to-list r2p)))
+										(let ((r1aes (format nil "~a" r1ae)))
+										  (let ((r2pes (format nil "~a" r2pe)))
+											(when (or (match-one-edge r1ae r2pe nil nil nil)
+													  (match-one-edge r2pe r1ae nil nil nil))
+											  (print (list (list r1n r1ae) (list r2n r2pe)))
+											  ;; (add-edge (list 'rd 1 r1n "" "" r2n))
+											  ;; (add-edge (list 'rd 2 r1n r1aes r2pes r2n))
+											  (add-edge (list r1 'rd r2))
+											  ;; (add-edge (list 'rr r1n r1a r2p r2n))
 
-										  #|
-										  ;; For work with rd-based eval, these extra edges clutter the system ; ;
+											  #|
+										  ;; For work with rd-based eval, these extra edges clutter the system ; ; ; ;
 
-										  ;; add and pred relations already present -- need x versions to avoid display overload ; ;
+										  ;; add and pred relations already present -- need x versions to avoid display overload ; ; ; ;
 
-									(add-edge (list r1 'xadd r1a))
-									(add-edge (list r1a 'rule-dep r2p))
-									(add-edge (list r2p 'xpred r2))
-									(add-edge (list r1a 'as-string r1aes))
-									(add-edge (list r2p 'as-string r2pes))
+											  (add-edge (list r1 'xadd r1a))
+											  (add-edge (list r1a 'rule-dep r2p))
+											  (add-edge (list r2p 'xpred r2))
+											  (add-edge (list r1a 'as-string r1aes))
+											  (add-edge (list r2p 'as-string r2pes))
+											  |#
 
 									(let ((r1a-r1aes (symcat r1a '- r1aes)))
 										  (let ((r2p-r2pes (symcat r2p '- r2pes)))
 										  (add-edge (list r1 'xxadd r1a-r1aes))
 										  (add-edge (list r1a-r1aes 'xrule-dep r2p-r2pes))
 										  (add-edge (list r2p-r2pes 'xxpred r2))))
-									|#
 
-										  )))))))))))))))))))
+
+										  )))))))))))))))))))))
+
 
 	(defm dimensions ()
 	  (let ((r (sort (let ((e (! (edge-to-trace as-list))))
@@ -3627,7 +3758,7 @@
 					(dolist (event events)
 					  (let ((kind (first event)))
 						(let ((seqno (second event)))
-							(let ((rule-name (third event)))
+							(let ((rule-name (fourth event)))
 							  (when (or (null rules)
 										(memq rule-name rules))
 								(when (or (null except-rules)
@@ -3676,11 +3807,11 @@
 				(let ((events (second entry)))
 				  (when (has-preds events)
 					(let ((add-event (find-add events)))
-					  (let ((add-rule-name (third add-event)))
+					  (let ((add-rule-name (fourth add-event)))
 						(dolist (event events)
 						  (let ((kind (first event)))
 							(let ((seqno (second event)))
-							  (let ((rule-name (third event)))
+							  (let ((rule-name (fourth event)))
 								(when (or (null rules)
 										  (memq add-rule-name rules)
 										  (memq rule-name rules))
@@ -3688,7 +3819,8 @@
 											(and
 											 (not (memq rule-name except-rules))
 											 (not (memq add-rule-name except-rules))))
-									(when (eq kind 'pred)
+									(when (and (eq kind 'pred)
+											   (not (null add-rule-name)))
 									  (! (g add-edge) (list add-rule-name 'r rule-name))))))))))))))))
 		  g)))
 
@@ -3929,108 +4061,6 @@
 														   (children-fcn ni level))))
 												(insert-dims)))))))))))))))))))))
 
-	(defm x-execute-rule-dep (init-rule-name &key init-edges rule-dep-rules rule-dep-rule-exceptions) ;; init-edges just for test
-	  (let ((count 0)
-			;; (rule-node-to-new-edges (make-sur-map))		;; "Static" versions defined above
-			;; (rule-node-to-edge-entry (make-sur-map))		;; This maps the rule to the last edge
-															;; entry (index) matched by the rule, so we can get edges created from there to current.
-			)
-		(let ((init-rule-node (query `((?r type rule)(?r name ,init-rule-name)) '?r)))
-		  (let ((saved-init-edges nil))
-			(defr
-
-			  (defl get-init-edges ()
-				(when (not saved-init-edges)
-				  (setq saved-init-edges (or init-edges (get-all-edges))))
-				saved-init-edges)
-
-			  (defl exec-until-no-new-edges (thunk)
-				(block b
-				  (let ((nedges 0)
-						(prev-nedges 0))
-					(loop
-					 (setq nedges (length (get-all-edges)))
-					 (when (= prev-nedges nedges)
-					   (return-from b nil))
-					 (setq prev-nedges nedges)
-					 (setq count (+ count 1))
-					 (print (list 'exec count))
-					 (funcall thunk))
-					nil)))
-
-			  (defl install-init-edges (init-edges)		;; Install each edge per-rule but only if it matches one of the preds
-				(timer 'install-init-edges
-				  (lambda ()
-					(print (list 'init-edges (length init-edges)))
-					(depth init-rule-node
-						   (lambda (rule-node level)
-							 (let ((rc (get-rule-components rule-node)))
-							   (let ((pred-nodes (! (rc pred-nodes))))
-								 (let ((preds (! (rc preds))))
-								   (dolist (init-edge init-edges)
-									 (block b
-									   (dolists ((pred-node pred) (pred-nodes preds))
-										 (when (match-one-edge pred init-edge nil nil nil)
-										   (! (rule-node-to-new-edges insert) rule-node init-edge)
-										   (return-from b nil))))))))
-							 (rule-children-fcn rule-node level))))))
-
-			  (defl rule-children-fcn (rule-node level)
-				(hget-all-list (list rule-node) '(rd)))
-
-			  (defl make-rule-dep-graph ()
-				(print (length (get-edges 'rd)))
-				(rule-dep-graph :rules rule-dep-rules :except-rules rule-dep-rule-exceptions)
-				(print (length (get-edges 'rd))))
-
-			  (let ()
-				(! (rule-node-to-new-edges clear))
-				(! (edge-to-trace clear))
-				(exec-until-no-new-edges
-					(lambda ()
-					  (let ((rule-graph-size0 (length (get-edges 'rd))))
-						(make-rule-dep-graph)
-						(let ((rule-graph-size1 (length (get-edges 'rd))))
-						  (when t ;; (not (= rule-graph-size0 rule-graph-size1)) ;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-							(let ((node-to-level (make-sur-map)))
-							  (depth init-rule-node ;; Establish levels (based on rule-rule relations)
-									 (lambda (rule-node level)
-									   (! (node-to-level insert) rule-node level)
-									   (rule-children-fcn rule-node level)))
-							  ;; (print (! (node-to-level as-list)))
-							  (let ((init-edges (get-init-edges)))
-								(install-init-edges init-edges)
-								(exec-until-no-new-edges
-									(lambda ()
-									  (let ()
-										(depth init-rule-node
-											   (lambda (rule-node level)
-												 (let ((rule-name (hget rule-node 'name)))
-												   (let ((new-edges (get-edges-from-edge-entry (! (rule-node-to-edge-entry lookup-one) rule-node))))
-													 (let ((obj-edges (hunion (hunion init-edges
-																					  (! (rule-node-to-new-edges lookup) rule-node))
-																			  new-edges)))
-													   (when obj-edges
-														 (match-and-execute-rule-on-edges rule-node obj-edges :cont
-														   (lambda (r m e p n)
-															 ;; (print (list 'm (hget rule-node 'name) r m e p n))
-															 (when (eq m :new-edges)
-															   (print (list 'n rule-name (length new-edges) #|(when (< (length new-edges) 300) new-edges)|#))
-															   (let ((matched-and-new-edges-env n))
-																 (! (rule-node-to-new-edges remove) rule-node)
-																 (! (rule-node-to-edge-entry remove) rule-node)
-																 (! (rule-node-to-edge-entry insert) rule-node (get-cur-edge-entry))
-																 (dolist (mne matched-and-new-edges-env)
-																   (let ((matched-edges (first mne)))
-																	 (let ((new-edges (second mne)))
-																	   (dolist (matched-edge matched-edges)
-																		 (! (rule-node-to-new-edges insert) rule-node matched-edge)
-																		 (! (edge-to-trace insert) matched-edge (list 'pred seqno rule-name))
-																		 (setq seqno (+ seqno 1)))
-																	   (dolist (new-edge new-edges)
-																		 (! (rule-node-to-new-edges insert) rule-node new-edge)))))))))))
-													 (rule-children-fcn rule-node level)))))))))))))))))))))
-	
 	(defm rule-dep-walkback (rule-name)
 	  (let ((g (make-objgraph))
 			(h (make-sur-map))
@@ -4088,6 +4118,8 @@
 	  (matched 0)
 	  (new-edges 0)
 	  (not-new-edges 0)
+	  (new-edges-max-expand-len 0)
+	  (last-expand-len 0)
 	  (failed 0))
 
 	(defm get-entry (rule-node)
@@ -4111,7 +4143,8 @@
 												  (rule-stats-entry-matched e)
 												  (rule-stats-entry-new-edges e)
 												  (rule-stats-entry-not-new-edges e)
-												  (rule-stats-entry-failed e)))))))
+												  (rule-stats-entry-failed e)
+												  (rule-stats-entry-new-edges-max-expand-len e)))))))
 							  (! (graph query) '((?x type rule))))))
 			(let ((info (sort info (lambda (x y)
 									 (let ((x (nth sort-colno x))
@@ -4121,7 +4154,7 @@
 										   (> x y)))))))
 			  (let ((s 10)
 					(m (+ m 2)))
-				(format t "~%name~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~%"
+				(format t "~%name~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtmax-expand-len~%"
 						(+ m (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)))
 				(dolist (x info)
 				  (format t "~%~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~a"
@@ -4178,6 +4211,17 @@
 	  (let ((entry (get-entry rule-node)))
 		(setf (rule-stats-entry-not-new-edges entry) (+ (rule-stats-entry-not-new-edges entry) 1)))
 	  nil)
+
+	(defm update-last-expand-len (rule-node len)
+	  (let ((entry (get-entry rule-node)))
+		(setf (rule-stats-entry-last-expand-len entry) (max (rule-stats-entry-last-expand-len entry) len))
+		nil))
+
+	(defm update-new-edges-max-expand-len (rule-node)
+	  (let ((entry (get-entry rule-node)))
+		(setf (rule-stats-entry-new-edges-max-expand-len entry) (max (rule-stats-entry-new-edges-max-expand-len entry) (rule-stats-entry-last-expand-len entry)))
+		nil))
+
 	))
 
 (defc rulegraph objgraph nil
@@ -4592,9 +4636,12 @@
 		  r)))
 	))
 
+
+
 (defc dumper nil ()
   (let ((g nil)
 		(elem-attrs nil)
+		(gv-attrs nil)
 		(nest-prefix 0)
 		(node-map (make-sur-map))
 		(node-set (make-sur-map))
@@ -4602,8 +4649,9 @@
 
 	(defm set-graph (graph)
 	  (setq g graph)
-	  (setq elem-attrs (! (g get-elem-attrs))))
-
+	  (setq elem-attrs (! (g get-elem-attrs)))
+	  (setq gv-attrs (mapcar #'first (! (g query) '((?x gv-attr)) '(?x)))))
+	
 	(defm downcase (x)
 	  (cond
 	   ((symbolp x)
@@ -4630,7 +4678,7 @@
 							  (omitted-attrs nil)
 							  (rules t)
 							  (omitted-rules nil)
-							  (string-attrs-only nil)
+							  (admit-string-attrs nil)					;; Admit edges with a string as the second member, regardless of whether it's in the attrs list
 							  (rule-labels-only nil)					;; Only rule nodes will have labels. Edge labels unaffected.
 							  (emit-labels t)
 							  (omit-unmatched-rules t)
@@ -4642,48 +4690,79 @@
 																		;; :single-graph -- ??? ;; If true, generates a subgraph per rule, but not s separate digraph perf rule.
 																							 ;; The rules in this way are shown directly connected to the data.
 							  (edge-trace-rule-graph nil)
+							  (gv-graph-props nil)						;; String of gv props, e.g., "rankdir=BT;"	Kind of a hack.
 							  )
 	  (let ()
 		(defstruct node-entry
 		  (name nil)
-		  (label nil)
-		  (fontname nil)
-		  (shape nil)
-		  (color nil)
-		  (style nil))
+		  (do-not-emit nil)
+		  (gv-attr-map (make-sur-map)))		;; gv-attr -> attr value
 		(let ((omitted-attrs (append omitted-attrs elem-attrs '(triggered add pred del binding left right print note))))
 		  (with-open-file (s file :direction :output)
 			(defr
 			  (defl string-concat (x y)
 				(concatenate 'string x y))
+
 			  (defl admit-edge (v)
 				(let ((r 
-					   (or (and string-attrs-only
-								(stringp (second v)))
-						   (and (eq attrs t)
-								(not (intersect v omitted-attrs)))
-						   (and (intersect v attrs)
-								(not (intersect (set-subtract v (intersect v attrs)) omitted-attrs))))))
+					   (or 
+						(and admit-string-attrs
+							 (stringp (second v)))
+						(and (eq attrs t)
+							 (not (intersect v omitted-attrs)))
+						(and (intersect v attrs)
+							 (not (intersect (set-subtract v (intersect v attrs)) omitted-attrs))))))
 				  ;; (print (list v r))
 				  r))
-			  (defl create-node-entry (n &key two-input-op as-prop rule-name)
+
+			  ;; create-node-entry should only be called when we define all the node enrties as the first pass.
+
+			  (defl create-node-entry (n &key two-input-op as-prop rule-name do-not-emit)
 				(let ()
 				  (! (node-set insert) n nil)
-				  (let ((ne (! (node-map lookup-one) n)))
-					(or ne
-						(let ((ne (make-node-entry)))
-						  (setf (node-entry-name ne) (format nil "~a~a"
-															 (if rule-name (format nil "~a-" rule-name) "")
-															 n))
-						  (if (and emit-labels
-								   (not rule-labels-only)) ;; Rule labels are set separately
-							  (setf (node-entry-label ne) (format nil "~a" n))
-							  (setf (node-entry-label ne) ""))
-						  (setf (node-entry-fontname ne) "arial")
-						  (when as-prop
-							(setf (node-entry-shape ne) "none"))
-						  (! (node-map insert) n ne)
-						  ne)))))
+				  (let ((ne (make-node-entry)))
+					(! (node-map insert-one) n ne)
+					(setf (node-entry-name ne) (format nil "~a~a"
+													   (if rule-name (format nil "~a-" rule-name) "")
+													   n))
+					(setf (node-entry-do-not-emit ne) do-not-emit)
+					(if (and emit-labels
+							 (not rule-labels-only)) ;; Rule labels are set separately
+						(set-gv-attr n 'label n)
+						(set-gv-attr n 'label ""))
+					(set-gv-attr n 'fontname 'arial)
+					(set-gv-attr n 'style 'filled)
+					(when as-prop
+					  (set-gv-attr n 'shape 'none))
+					(dolist (gv-attr gv-attrs)
+					  (when (! (g hget) n gv-attr)
+						(! ((node-entry-gv-attr-map ne) insert-one) gv-attr (! (g hget) n gv-attr))))
+					nil)))
+
+			  (defl clone-node-entry (n)			;; Returns new sym
+				(let ((r (gensym)))
+				  (! (node-set insert) r nil)
+				  (let ((old-ne (! (node-map lookup-one) n)))
+					(let ((ne (make-node-entry)))
+					  (setf (node-entry-name ne) r)
+					  (setf (node-entry-gv-attr-map ne) (node-entry-gv-attr-map old-ne))		;; Note we don't copy the attr map
+					  (! (node-map insert) r ne)
+					  r))))
+
+			  (defl do-not-emit (n)
+				(let ((ne (! (node-map lookup-one) n)))
+				  (node-entry-do-not-emit ne)))
+
+			  (defl set-gv-attr (n attr value)
+				(let ((ne (! (node-map lookup-one) n)))
+				  (! ((node-entry-gv-attr-map ne) insert-one) attr value)
+				  nil))
+
+			  (defl get-gv-attr (n attr)
+				(let ((ne (! (node-map lookup-one) n)))
+				  (! ((node-entry-gv-attr-map ne) lookup-one) attr)))
+
+
 			  (defl prepend-node-name (n l)
 				(let ((ne (create-node-entry n)))
 				  (setf (node-entry-name ne) (symcat l '- (node-entry-name ne)))
@@ -4691,6 +4770,7 @@
 			  (defl get-node-name (n)
 				(let ((ne (create-node-entry n)))
 				  (node-entry-name ne)))
+
 			  (defl set-node-label (n l)
 				(let ((ne (create-node-entry n)))
 				  (if emit-labels
@@ -4703,19 +4783,23 @@
 					  (setf (node-entry-label ne) (string-concat (node-entry-label ne) l))
 					  (setf (node-entry-label ne) ""))
 				  nil))
-			  (defl set-node-shape (n s)
-				(let ((ne (create-node-entry n)))
-				  (setf (node-entry-shape ne) s)
-				  nil))
-			  (defl set-node-color (n c)
-				(let ((ne (create-node-entry n)))
-				  (setf (node-entry-color ne) c)
-				  nil))
-			  (defl set-node-style (n s)
-				(let ((ne (create-node-entry n)))
-				  (setf (node-entry-style ne) s)
-				  nil))
+
 			  (defl get-format (n)
+				(let ()
+				  (let ((ne (! (node-map lookup-one) n)))
+					(let ((gv-attr-info-list (! ((node-entry-gv-attr-map ne) as-list))))
+					  (let ((r (format nil "\"~a\" [" n)))
+						(let ((comma ""))
+						  (dolist (gv-attr-info gv-attr-info-list)
+							(let ((attr (first gv-attr-info)))
+							  (let ((value (first (second gv-attr-info))))
+								(when value
+								  (setq r (string-concat r (format nil "~a~a=\"~a\"" comma attr value)))
+								  (setq comma ",")))))
+						  (setq r (string-concat r (format nil "];" comma)))
+						  r))))))
+
+			  (defl old-get-format (n)
 				(let ((ne (! (node-map lookup-one) n)))
 				  (let ((r (format nil "\"~a\" [label=\"~a\"" (node-entry-name ne) (node-entry-label ne))))
 					(when (node-entry-fontname ne)
@@ -4726,12 +4810,15 @@
 					  (setq r (string-concat r (format nil ",color=~a" (node-entry-color ne)))))
 					(when (node-entry-style ne)
 					  (setq r (string-concat r (format nil ",style=~a" (node-entry-style ne)))))
+					(when (node-entry-width ne)
+					  (setq r (string-concat r (format nil ",width=~a" (node-entry-width ne)))))
 					(setq r (string-concat r (format nil "];")))
 					r)))
 			  (defl dump-gv-nodes ()
 				(let ((nodes (! (node-set inputs))))
 				  (dolist (n nodes)
-					(format s "~a~%" (get-format n))
+					(when (not (do-not-emit n))
+					  (format s "~a~%" (get-format n)))
 					)))
 			  (defl dump-gv-notes ()
 				(when emit-legend
@@ -4740,46 +4827,53 @@
 				  ;; append it following.
 				  ;;
 				  ;; (! (g add-edge) `(note body "attributes:" "\\n" ,@attrs))
-				  (let ((notes (! (g get-edges) 'note)))
-					(let ((notes (cons `(note body "attributes:" "\\n" ,@attrs) notes)))
-					  (let ((title "")
-							(body "")
-							(footer ""))
-						(let ((n ""))
-						  (dolist (note notes)
-							(when (eq (first note) 'note)
-							  (let ((type-data (if (member (second note) '(title footer body) :test #'eq)
-												   (list (second note) (rest (rest note)))
-												   (list 'body (rest note)))))
-								(let ((type (first type-data))
-									  (data (second type-data)))
-								  (dolist (p data)
-									(setq n (format nil "~a ~a" n p)))
-								  ;; (setq n (format nil "~a~%" n))
-								  (setq n (format nil "~a\\n" n))
-								  (cond
-								   ((eq type 'title)
-									(setq title (format nil "~a~a" title n)))
-								   ((eq type 'body)
-									(setq body (format nil "~a~a" body n)))
-								   ((eq type 'footer)
-									(setq footer (format nil "~a~a" footer n))))
-								  (setq n ""))))))
-						(let ()
-						  (format s "digraph Notes {~%")
-						  (format s "subgraph cluster {~%")
-						  (format s "style=filled;~%")
-						  (format s "color=springgreen;~%")
-						  (format s "label = \"Legend\";~%")
-						  (format s "__x1 [label = \"~a\",fontsize=18,shape=rectangle,color=springgreen,style=filled];~%" title)
-						  (format s "__x2 [label = \"~a\",fontsize=12,shape=rectangle,color=springgreen,style=filled];~%" body)
-						  (format s "__x3 [label = \"~a\",fontsize=8,shape=rectangle,color=springgreen,style=filled];~%" footer)
-						  (format s "__x1 -> __x2 -> __x3 [style=invis];~%")
-						  (format s "}~%")
-						  (format s "}~%")))))))
+				  (let ((title-fontsize (! (g query) '((set note title fontsize ?x)) '?x)))
+					(let ((body-fontsize (! (g query) '((set note body fontsize ?x)) '?x)))
+					  (let ((footer-fontsize (! (g query) '((set note footer fontsize ?x)) '?x)))
+						(let ((notes (! (g get-edges) 'note)))
+						  (let ((xxxnotes (cons `(note body "attributes:" "\\n" ,@attrs) notes)))		;; !!!!!!!!!!!!!!!!!!! Nop !!!!!!!!!!!!!!!!
+							(let ((title "")
+								  (body "")
+								  (footer ""))
+							  (let ((n ""))
+								(dolist (note notes)
+								  (when (eq (first note) 'note)
+									(let ((type-data (if (member (second note) '(title footer body) :test #'eq)
+														 (list (second note) (rest (rest note)))
+														 (list 'body (rest note)))))
+									  (let ((type (first type-data))
+											(data (second type-data)))
+										(dolist (p data)
+										  (setq n (format nil "~a ~a" n p)))
+										;; (setq n (format nil "~a~%" n))
+										(setq n (format nil "~a\\n" n))
+										(cond
+										 ((eq type 'title)
+										  (setq title (format nil "~a~a" title n)))
+										 ((eq type 'body)
+										  (setq body (format nil "~a~a" body n)))
+										 ((eq type 'footer)
+										  (setq footer (format nil "~a~a" footer n))))
+										(setq n ""))))))
+							  (let ()
+								(format s "digraph Notes {~%")
+								(format s "subgraph cluster {~%")
+								(format s "style=filled;~%")
+								(format s "color=springgreen;~%")
+								(format s "label = \"Legend\";~%")
+								(when (not (equal title ""))
+								  (format s "__x1 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" title (or title-fontsize 18)))
+								(when (not (equal body ""))
+								  (format s "__x2 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" body (or body-fontsize 12)))
+								(when (not (equal footer ""))
+								  (format s "__x3 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" footer(or footer-fontsize 8)))
+								(format s "__x1 -> __x2 -> __x3 [style=invis];~%")
+								(format s "}~%")
+								(format s "}~%"))))))))))
 			  (defl dump-gv-edges-data (v)
 				(when (not (and (eq (second v) 'type) (eq (third v) 'rule)))
 				  (when (admit-edge v)
+					#|
 					(when (and (>= (length v) 1)
 							   (! (g hget) (first v) 'color))
 					  (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
@@ -4791,111 +4885,72 @@
 							   (! (g edge-exists) `(,(third v) two-input-op))
 							   (! (g hget) (first v) 'color))
 					  (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
+					|#
 					(let ((l (length v)))
 					  (cond
 					   ((and (= l 2)
 							 (eq (second v) 'next))
 						(format s "\"~a\" -> \"~a\" [label=\"~a\",style=\"setlinewidth(1)\"];~%"
-								(first v) (first v) (second v)))
+								(first v) (first v) 
+								(if emit-labels (second v) "")))
 					   ((and (= l 3)
 							 (eq (second v) 'fcn-color))
 						nil)
-					   ((and (= l 3)
+					   ((and (= l 3)						;; Special-case coloring for rule30 nodes  *******************
 							 (eq (second v) 'rule30val))
  						;; (format s "\"~a\" [color=~a,style=filled];~%" (first v) (if (and (numberp (third v)) (= (third v) 1)) "blue" "pink"))
 						(format s "\"~a\" [color=~a,style=filled];~%" (first v) (if (and (numberp (third v)) (= (third v) 1)) "cyan" "magenta"))
 						)
 					   ((= l 3)
 						(block b
-						  (let ((in-node (first v))
-								(out-node (third v))
-								(prop (second v)))
-							(let ((in-node-color (! (g hget) prop 'in-node-color))
-								  (out-node-color (! (g hget) prop 'out-node-color))
-								  (edge-color (! (g hget) prop 'edge-color))
-								  (edge-color-string ""))
-							  (create-node-entry in-node)
-							  (create-node-entry out-node)
-							  (dolist (r (list in-node out-node))
-								(when (eq (! (g hget) r 'type) 'rule)
-								  (let ((n (! (g hget) r 'name)))
-									;; (when (not (admit-edge (list n)))			;; !!!!!!!!!!!!!!!!!!!!!!!!
-									(when (member n omitted-attrs :test #'eq)
-									  (return-from b nil))
-									(set-node-shape r (or (! (g hget) n 'shape) (! (g hget) 'rule 'shape)))
-									(set-node-color r (or (! (g hget) n 'color) (! (g hget) 'rule 'color)))
-									(set-node-style r (or (! (g hget) n 'style) (! (g hget) 'rule 'style)))
-									(set-node-label r n)
-									(when (memq graph-type '(:subgraph :single-graph))
-									  (let ((rule-entry-node (designated-rule-entry-node r)))
-										(when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
-										  (! (designated-rule-edges insert) (list r rule-entry-node) (list r rule-entry-node))
-										  (format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
-												  (get-node-name r) (get-node-name rule-entry-node))))))))
-							  (when (eq prop 'note)
-								(set-node-shape out-node "rectangle"))
-							  (let ((shape (! (g hget) in-node 'shape)))
-								(when shape
-								  (set-node-shape in-node shape)))
-							  (let ((shape (! (g hget) out-node 'shape)))
-								(when shape
-								  (set-node-shape out-node shape)))
-							  (let ((color (! (g hget) in-node 'color)))
-								(cond
-								 (color
-								  (set-node-color in-node color)
-								  (set-node-style in-node "filled"))
-								 (in-node-color
-								  (set-node-color in-node in-node-color)
-								  (set-node-style in-node "filled"))))
-							  (let ((color (! (g hget) out-node 'color)))
-								(cond
-								 (color
-								  (set-node-color out-node color)
-								  (set-node-style out-node "filled"))
-								 (out-node-color
-								  (set-node-color out-node out-node-color)
-								  (set-node-style out-node "filled"))))
-							  (when edge-color
-								(setq edge-color-string (format nil ",color=~a" edge-color)))
-							  (let ((in-node-name (get-node-name in-node))
-									(out-node-name (get-node-name out-node)))
-								(if emit-labels
-									(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
-											in-node-name out-node-name prop edge-color-string)
-									(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
-											in-node-name out-node-name "" edge-color-string)))))))
+						  (let ((in-node (first v)))
+							(let ((out-node (third v)))
+							  (let ((prop (second v)))
+								(create-node-entry in-node)
+								(create-node-entry out-node)
+								(create-node-entry prop :do-not-emit t)
+								(let ((prop-label (get-gv-attr prop 'label)))
+								  (let ((edge-color (! (g hget) prop 'edge-color)))
+									(let ((edge-color-string ""))
+									  (dolist (r (list in-node out-node))
+										(when (eq (! (g hget) r 'type) 'rule)
+										  (let ((n (! (g hget) r 'name)))
+											(when (member n omitted-attrs :test #'eq)
+											  (return-from b nil))
+											(when (memq graph-type '(:subgraph :single-graph))
+											  (let ((rule-entry-node (designated-rule-entry-node r)))
+												(when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
+												  (! (designated-rule-edges insert) (list r rule-entry-node) (list r rule-entry-node))
+												  (format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
+														  r rule-entry-node)))))))
+									  (when (eq prop 'note)
+										(set-gv-attr out-node 'shape 'rectangle))
+									  (when edge-color
+										(setq edge-color-string (format nil ",color=~a" edge-color)))
+									  (if emit-labels
+										  (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
+												  in-node out-node prop-label edge-color-string)
+										  (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
+												  in-node out-node "" edge-color-string))))))))))
+					   #|
 					   ((eq (second v) 'zero)
-						(append-to-node-label (first v) "-z"))
-					   ((and (= l 4)
+						(create-node-entry (first v))
+						(if emit-labels
+							(set-gv-attr (first v) 'label (symcat (first v) '-z))
+							(set-gv-attr (first v) 'label "")))
+					   |#
+					   ((and t
+							 (= l 4)
 							 (! (g edge-exists) `(,(third v) two-input-op)))
 						(let ((i1 (first v))
 							  (i2 (second v))
-							  (fcn-name (third v))
+							  (fcn (third v))
 							  (o (fourth v)))
-						  (let ((fcn (format nil "~a-~a" fcn-name o))
-								(color (! (g hget) fcn-name 'color))
-								(in-node-color (! (g hget) fcn-name 'in-node-color))
-								(out-node-color (! (g hget) fcn-name 'out-node-color))
-								(fcn-color (! (g hget) o 'fcn-color)))
-							(when fcn-color
-							  (setq color fcn-color))
-							(create-node-entry fcn :two-input-op t)
-							(create-node-entry i1)
-							(create-node-entry i2)
-							(create-node-entry o)
-							(when in-node-color
-							  (set-node-color i1 in-node-color)
-							  (set-node-style i1 "filled")
-							  (set-node-color i2 in-node-color)
-							  (set-node-style i2 "filled"))
-							(when out-node-color
-							  (set-node-color o out-node-color)
-							  (set-node-style o "filled"))
-							(when color
-							  (set-node-color fcn color)
-							  (set-node-shape fcn "ellipse") ;; (if (= (random 5) 0) "invtrapezium" "none")
-							  (set-node-style fcn "filled"))
+						  (create-node-entry i1)
+						  (create-node-entry i2)
+						  (create-node-entry o)
+						  (create-node-entry fcn :do-not-emit t)
+						  (let ((fcn (clone-node-entry fcn)))
 							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i1 fcn)
 							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i2 fcn)
 							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" fcn o))))
@@ -4903,8 +4958,11 @@
 						(let ((n (first v))
 							  (p (second v)))
 						  (create-node-entry n)
-						  (create-node-entry p :as-prop t)
-						  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",label=\"\",arrowhead=none];~%" n p)))
+						  (create-node-entry p)
+						  (let ((p (clone-node-entry p)))
+							(set-gv-attr p 'shape 'none)
+							(set-gv-attr p 'style 'solid)
+							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",label=\"\",arrowhead=none];~%" n p))))
 					   ((and (= l 6)
 							 (eq (first v) 'rd)) ;; Special case of a rule-dep edge		;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 						(let ((fmt (nth 1 v))
@@ -4913,8 +4971,8 @@
 							  (r2pes (format nil "~a" (nth 4 v)))
 							  (r2n (nth 5 v)))
 						  #|
-									(format s "\"~a\" -> \"~a\" [fontname=arial,labelfontsize=6,headlabel=\"~a\",taillabel=\"~a\",style=\"setlinewidth(1)\"];~%" r1n r2n r2pes r1aes)
-									|#
+						  (format s "\"~a\" -> \"~a\" [fontname=arial,labelfontsize=6,headlabel=\"~a\",taillabel=\"~a\",style=\"setlinewidth(1)\"];~%" r1n r2n r2pes r1aes)
+						  |#
 						  (cond
 						   ((= fmt 1)
 							(create-node-entry r1n)
@@ -5057,9 +5115,9 @@
 						(dump-gv-nodes)
 						
 						#|
-									(when (memq graph-type '(:digraph :subgraph))
-(format s "\"~a\" [label=\"~a\"];~%" rule rule))
-									|#
+											  (when (memq graph-type '(:digraph :subgraph))
+						(format s "\"~a\" [label=\"~a\"];~%" rule rule))
+											  |#
 
 						(when (eq graph-type :single-graph)
 									  (let ((rule-entry-node (designated-rule-entry-node rule)))
@@ -5088,16 +5146,552 @@
 							  (set-node-label rule-node2 (! (g hget) rule-node2 'name))
 							  (format s "\"~a\" -> \"~a\" [label=\"\",style=solid,color=violet];~%" rule-node1 rule-node2)))))))))
 			  (let ((*print-case* :downcase))
-				(dump-gv-notes)
-				(format s "digraph G {~%")
-				(! (g dump-edges) :dump-fcn #'dump-gv-edges-data :sort nil)
-				(dump-rule-trace-edges)
-				(dump-gv-nodes)
-				(when (memq graph-type '(:digraph))
-				  (format s "}~%"))
-				(! (g dump-edges) :dump-fcn #'dump-gv-edges-rules :sort nil)
-				(when (memq graph-type '(:subgraph :single-graph))
-				  (format s "}~%"))))))))))
+				(block b
+				  (dump-gv-notes)
+				  (format s "digraph G {~%")
+				  (when gv-graph-props
+					(format s "~a" gv-graph-props))
+				  (! (g dump-edges) :dump-fcn #'dump-gv-edges-data :sort nil)
+				  (dump-rule-trace-edges)
+				  (dump-gv-nodes)
+				  (when (memq graph-type '(:digraph))
+					(format s "}~%"))
+				  (! (g dump-edges) :dump-fcn #'dump-gv-edges-rules :sort nil)
+				  (when (memq graph-type '(:subgraph :single-graph))
+					(format s "}~%")))))))))))
+
+
+
+
+(defc old-dumper nil ()
+  (let ((g nil)
+		(elem-attrs nil)
+		(nest-prefix 0)
+		(node-map (make-sur-map))
+		(node-set (make-sur-map))
+		(designated-rule-edges (make-sur-map)))
+
+	(defm set-graph (graph)
+	  (setq g graph)
+	  (setq elem-attrs (! (g get-elem-attrs))))
+
+	(defm downcase (x)
+	  (cond
+	   ((symbolp x)
+		(string-downcase (symbol-name x)))
+	   ((stringp x)
+		(string-downcase x))
+	   (t x)))
+
+	(defm designated-rule-entry-node (rule-node)
+	  (let ((preds (! ((! (g get-rule-components) rule-node) preds))))
+		(let ((s (sort preds (lambda (x y) (< (sxhash x) (sxhash y))))))
+		  (symcat nest-prefix '- (! (g hget) rule-node 'name) '- (first (first s))))))
+
+	;; "c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" -Tjpeg fe.gv -o fe.jpg
+	;; (let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "yyy3.gv" '(sigma even-func)))
+
+	;; an attr is simply a node which must appear somewhere in an edge
+	;; attrs is a list of attrs to draw. If attrs = t, draw all
+	;; omitted-attrs is the set of attrs whose presence causes the edge not to be drawn, except if it's explicitly in the attrs list
+	;; rules is a list of rules to draw. If rules = t, draw all
+
+	(defm dump-gv-edges (file &key
+							  (attrs t)
+							  (omitted-attrs nil)
+							  (rules t)
+							  (omitted-rules nil)
+							  (string-attrs-only nil)
+							  (rule-labels-only nil)					;; Only rule nodes will have labels. Edge labels unaffected.
+							  (emit-labels t)
+							  (omit-unmatched-rules t)
+							  (emit-legend t)
+
+							  (graph-type :digraph)						;; :digraph -- The data and each rule is a digraph, with its own cluster box.
+																		;; :subgraph -- The data is a digraph with data edges and the rules are subgraphs
+																		;; 			 of the data graph, each rule with its own cluster box.
+																		;; :single-graph -- ??? ;; If true, generates a subgraph per rule, but not s separate digraph perf rule.
+																							 ;; The rules in this way are shown directly connected to the data.
+							  (edge-trace-rule-graph nil)
+							  (gv-graph-props nil)						;; String of gv props, e.g., "rankdir=BT;"	Kind of a hack.
+							  )
+	  (let ()
+		(defstruct node-entry
+		  (name nil)
+		  (label nil)
+		  (fontname nil)
+		  (shape nil)
+		  (color nil)
+		  (style nil)
+		  (width nil))
+		(let ((omitted-attrs (append omitted-attrs elem-attrs '(triggered add pred del binding left right print note))))
+		  (with-open-file (s file :direction :output)
+			(defr
+			  (defl string-concat (x y)
+				(concatenate 'string x y))
+			  (defl admit-edge (v)
+				(let ((r 
+					   (or (and string-attrs-only
+								(stringp (second v)))
+						   (and (eq attrs t)
+								(not (intersect v omitted-attrs)))
+						   (and (intersect v attrs)
+								(not (intersect (set-subtract v (intersect v attrs)) omitted-attrs))))))
+				  ;; (print (list v r))
+				  r))
+			  (defl create-node-entry (n &key two-input-op as-prop rule-name)
+				(let ()
+				  (! (node-set insert) n nil)
+				  (let ((ne (! (node-map lookup-one) n)))
+					(or ne
+						(let ((ne (make-node-entry)))
+						  (setf (node-entry-name ne) (format nil "~a~a"
+															 (if rule-name (format nil "~a-" rule-name) "")
+															 n))
+						  (if (and emit-labels
+								   (not rule-labels-only)) ;; Rule labels are set separately
+							  (setf (node-entry-label ne) (format nil "~a" n))
+							  (setf (node-entry-label ne) ""))
+						  (setf (node-entry-fontname ne) "arial")
+						  (when as-prop
+							(setf (node-entry-shape ne) "none"))
+						  (! (node-map insert) n ne)
+						  ne)))))
+			  (defl prepend-node-name (n l)
+				(let ((ne (create-node-entry n)))
+				  (setf (node-entry-name ne) (symcat l '- (node-entry-name ne)))
+				  nil))
+			  (defl get-node-name (n)
+				(let ((ne (create-node-entry n)))
+				  (node-entry-name ne)))
+			  (defl set-node-label (n l)
+				(let ((ne (create-node-entry n)))
+				  (if emit-labels
+					  (setf (node-entry-label ne) (format nil "~a" l))
+					  (setf (node-entry-label ne) ""))
+				  nil))
+			  (defl append-to-node-label (n l)
+				(let ((ne (create-node-entry n)))
+				  (if emit-labels
+					  (setf (node-entry-label ne) (string-concat (node-entry-label ne) l))
+					  (setf (node-entry-label ne) ""))
+				  nil))
+			  (defl set-node-shape (n s)
+				(let ((ne (create-node-entry n)))
+				  (setf (node-entry-shape ne) s)
+				  nil))
+			  (defl set-node-color (n c)
+				(let ((ne (create-node-entry n)))
+				  (setf (node-entry-color ne) c)
+				  nil))
+			  (defl set-node-style (n s)
+				(let ((ne (create-node-entry n)))
+				  (setf (node-entry-style ne) s)
+				  nil))
+			  (defl set-node-width (n w)
+				(let ((ne (create-node-entry n)))
+				  (setf (node-entry-width ne) w)
+				  nil))
+			  (defl get-format (n)
+				(let ((ne (! (node-map lookup-one) n)))
+				  (let ((r (format nil "\"~a\" [label=\"~a\"" (node-entry-name ne) (node-entry-label ne))))
+					(when (node-entry-fontname ne)
+					  (setq r (string-concat r (format nil ",fontname=~a" (node-entry-fontname ne)))))
+					(when (node-entry-shape ne)
+					  (setq r (string-concat r (format nil ",shape=~a" (node-entry-shape ne)))))
+					(when (node-entry-color ne)
+					  (setq r (string-concat r (format nil ",color=~a" (node-entry-color ne)))))
+					(when (node-entry-style ne)
+					  (setq r (string-concat r (format nil ",style=~a" (node-entry-style ne)))))
+					(when (node-entry-width ne)
+					  (setq r (string-concat r (format nil ",width=~a" (node-entry-width ne)))))
+					(setq r (string-concat r (format nil "];")))
+					r)))
+			  (defl dump-gv-nodes ()
+				(let ((nodes (! (node-set inputs))))
+				  (dolist (n nodes)
+					(format s "~a~%" (get-format n))
+					)))
+			  (defl dump-gv-notes ()
+				(when emit-legend
+				  ;; Can add a large edge and cause undiagnosed some
+				  ;; explosion in subqet processing. So now just
+				  ;; append it following.
+				  ;;
+				  ;; (! (g add-edge) `(note body "attributes:" "\\n" ,@attrs))
+				  (let ((title-fontsize (! (g query) '((set note title fontsize ?x)) '?x)))
+					(let ((body-fontsize (! (g query) '((set note body fontsize ?x)) '?x)))
+					  (let ((footer-fontsize (! (g query) '((set note footer fontsize ?x)) '?x)))
+						(let ((notes (! (g get-edges) 'note)))
+						  (let ((xxxnotes (cons `(note body "attributes:" "\\n" ,@attrs) notes)))		;; !!!!!!!!!!!!!!!!!!! Nop !!!!!!!!!!!!!!!!
+							(let ((title "")
+								  (body "")
+								  (footer ""))
+							  (let ((n ""))
+								(dolist (note notes)
+								  (when (eq (first note) 'note)
+									(let ((type-data (if (member (second note) '(title footer body) :test #'eq)
+														 (list (second note) (rest (rest note)))
+														 (list 'body (rest note)))))
+									  (let ((type (first type-data))
+											(data (second type-data)))
+										(dolist (p data)
+										  (setq n (format nil "~a ~a" n p)))
+										;; (setq n (format nil "~a~%" n))
+										(setq n (format nil "~a\\n" n))
+										(cond
+										 ((eq type 'title)
+										  (setq title (format nil "~a~a" title n)))
+										 ((eq type 'body)
+										  (setq body (format nil "~a~a" body n)))
+										 ((eq type 'footer)
+										  (setq footer (format nil "~a~a" footer n))))
+										(setq n ""))))))
+							  (let ()
+								(format s "digraph Notes {~%")
+								(format s "subgraph cluster {~%")
+								(format s "style=filled;~%")
+								(format s "color=springgreen;~%")
+								(format s "label = \"Legend\";~%")
+								(when (not (equal title ""))
+								  (format s "__x1 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" title (or title-fontsize 18)))
+								(when (not (equal body ""))
+								  (format s "__x2 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" body (or body-fontsize 12)))
+								(when (not (equal footer ""))
+								  (format s "__x3 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" footer(or footer-fontsize 8)))
+								(format s "__x1 -> __x2 -> __x3 [style=invis];~%")
+								(format s "}~%")
+								(format s "}~%"))))))))))
+			  (defl dump-gv-edges-data (v)
+				(when (not (and (eq (second v) 'type) (eq (third v) 'rule)))
+				  (when (admit-edge v)
+					(when (and (>= (length v) 1)
+							   (! (g hget) (first v) 'color))
+					  (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
+					(when (and (= (length v) 4)
+							   (! (g edge-exists) `(,(third v) two-input-op))
+							   (! (g hget) (second v) 'color))
+					  (format s "\"~a\" [color=~a,style=filled];~%" (second v) (! (g hget) (second v) 'color)))
+					(when (and (= (length v) 4)
+							   (! (g edge-exists) `(,(third v) two-input-op))
+							   (! (g hget) (first v) 'color))
+					  (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
+					(let ((l (length v)))
+					  (cond
+					   ((and (= l 2)
+							 (eq (second v) 'next))
+						(format s "\"~a\" -> \"~a\" [label=\"~a\",style=\"setlinewidth(1)\"];~%"
+								(first v) (first v) 
+								(if emit-labels (second v) "")))
+					   ((and (= l 3)
+							 (eq (second v) 'fcn-color))
+						nil)
+					   ((and (= l 3)
+							 (eq (second v) 'rule30val))
+ 						;; (format s "\"~a\" [color=~a,style=filled];~%" (first v) (if (and (numberp (third v)) (= (third v) 1)) "blue" "pink"))
+						(format s "\"~a\" [color=~a,style=filled];~%" (first v) (if (and (numberp (third v)) (= (third v) 1)) "cyan" "magenta"))
+						)
+					   ((= l 3)
+						(block b
+						  (let ((in-node (first v))
+								(out-node (third v))
+								(prop (second v)))
+							(let ((in-node-color (! (g hget) prop 'in-node-color))
+								  (out-node-color (! (g hget) prop 'out-node-color))
+								  (edge-color (! (g hget) prop 'edge-color))
+								  (edge-color-string ""))
+							  (create-node-entry in-node)
+							  (create-node-entry out-node)
+							  (dolist (r (list in-node out-node))
+								(when (eq (! (g hget) r 'type) 'rule)
+								  (let ((n (! (g hget) r 'name)))
+									;; (when (not (admit-edge (list n)))			;; !!!!!!!!!!!!!!!!!!!!!!!!
+									(when (member n omitted-attrs :test #'eq)
+									  (return-from b nil))
+									(set-node-shape r (or (! (g hget) n 'shape) (! (g hget) 'rule 'shape)))
+									(set-node-color r (or (! (g hget) n 'color) (! (g hget) 'rule 'color)))
+									(set-node-style r (or (! (g hget) n 'style) (! (g hget) 'rule 'style)))
+									(set-node-label r n)
+									(when (memq graph-type '(:subgraph :single-graph))
+									  (let ((rule-entry-node (designated-rule-entry-node r)))
+										(when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
+										  (! (designated-rule-edges insert) (list r rule-entry-node) (list r rule-entry-node))
+										  (format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
+												  (get-node-name r) (get-node-name rule-entry-node))))))))
+							  (when (eq prop 'note)
+								(set-node-shape out-node "rectangle"))
+							  (let ((shape (! (g hget) in-node 'shape)))
+								(when shape
+								  (set-node-shape in-node shape)))
+							  (let ((shape (! (g hget) out-node 'shape)))
+								(when shape
+								  (set-node-shape out-node shape)))
+							  (let ((color (! (g hget) in-node 'color)))
+								(cond
+								 (color
+								  (set-node-color in-node color)
+								  (set-node-style in-node "filled"))
+								 (in-node-color
+								  (set-node-color in-node in-node-color)
+								  (set-node-style in-node "filled"))))
+							  (let ((color (! (g hget) out-node 'color)))
+								(cond
+								 (color
+								  (set-node-color out-node color)
+								  (set-node-style out-node "filled"))
+								 (out-node-color
+								  (set-node-color out-node out-node-color)
+								  (set-node-style out-node "filled"))))
+							  (when edge-color
+								(setq edge-color-string (format nil ",color=~a" edge-color)))
+							  (let ((in-node-name (get-node-name in-node))
+									(out-node-name (get-node-name out-node)))
+								(if emit-labels
+									(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
+											in-node-name out-node-name prop edge-color-string)
+									(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
+											in-node-name out-node-name "" edge-color-string)))))))
+					   ((eq (second v) 'zero)
+						(append-to-node-label (first v) "-z"))
+					   ((and (= l 4)
+							 (! (g edge-exists) `(,(third v) two-input-op)))
+						(let ((i1 (first v))
+							  (i2 (second v))
+							  (fcn-name (third v))
+							  (o (fourth v)))
+						  (let ((fcn (format nil "~a-~a" fcn-name o))
+								(color (! (g hget) fcn-name 'color))
+								(shape (! (g hget) fcn-name 'shape))
+								(in-node-color (! (g hget) fcn-name 'in-node-color))
+								(out-node-color (! (g hget) fcn-name 'out-node-color))
+								(fcn-color (! (g hget) o 'fcn-color)))
+							(when fcn-color
+							  (setq color fcn-color))
+							(create-node-entry fcn :two-input-op t)
+							(create-node-entry i1)
+							(create-node-entry i2)
+							(create-node-entry o)
+							(when in-node-color
+							  (set-node-color i1 in-node-color)
+							  (set-node-style i1 "filled")
+							  (set-node-color i2 in-node-color)
+							  (set-node-style i2 "filled"))
+							(when out-node-color
+							  (set-node-color o out-node-color)
+							  (set-node-style o "filled"))
+							(when color
+							  (set-node-color fcn color)
+							  (set-node-shape fcn "ellipse") ;; (if (= (random 5) 0) "invtrapezium" "none")
+							  (set-node-style fcn "filled"))
+							(when shape
+							  (set-node-shape fcn shape))
+							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i1 fcn)
+							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i2 fcn)
+							(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" fcn o))))
+					   ((= l 2)
+						(let ((n (first v))
+							  (p (second v)))
+						  (create-node-entry n)
+						  (create-node-entry p :as-prop t)
+						  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",label=\"\",arrowhead=none];~%" n p)))
+					   ((and (= l 6)
+							 (eq (first v) 'rd)) ;; Special case of a rule-dep edge		;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+						(let ((fmt (nth 1 v))
+							  (r1n (nth 2 v))
+							  (r1aes (format nil "~a" (nth 3 v)))
+							  (r2pes (format nil "~a" (nth 4 v)))
+							  (r2n (nth 5 v)))
+						  #|
+											  (format s "\"~a\" -> \"~a\" [fontname=arial,labelfontsize=6,headlabel=\"~a\",taillabel=\"~a\",style=\"setlinewidth(1)\"];~%" r1n r2n r2pes r1aes)
+											  |#
+						  (cond
+						   ((= fmt 1)
+							(create-node-entry r1n)
+							(create-node-entry r2n)
+							(format s "\"~a\" -> \"~a\" [fontname=arial,labelfontsize=6,headlabel=\"~a\",taillabel=\"~a\",style=\"setlinewidth(1)\"];~%" 
+									r1n r2n "" ""))
+						   ((= fmt 2)
+							(let ((r1nx (symcat r1n 'x))
+								  (r2nx (symcat r2n 'x)))
+							  (create-node-entry r1nx)
+							  (create-node-entry r2nx)
+							  (format s "\"~ax\" -> \"~ax\" [fontname=arial,labelfontsize=6,headlabel=\"~a\",taillabel=\"~a\",style=\"setlinewidth(1)\"];~%" 
+									  r1n r2n r2pes r1aes))))
+						  ))
+					   (t
+						(dotimes (i l)
+						  (let ((node (nth i v)))
+							(format s "\"~a\" " node)
+							(when (< i (- l 1))
+							  (format s "-> "))))
+						(format s ";~%")))))))
+			  (defl dump-gv-edges-rules (v)
+				(when (and (eq (second v) 'type)
+						   (eq (third v) 'rule)
+						   (or (eq rules t)
+							   (member (! (g hget) (first v) 'name) rules))
+						   (not (member (! (g hget) (first v) 'name) omitted-rules))
+						   (not (! (g hget-edge-inverse) (first v) 'nested-rule)))
+				  (let ((rule-node (first v)))
+					(when (or (not omit-unmatched-rules)
+						  (> (! (g get-matched) rule-node) 0))
+					  (let ((rule-name (! (g hget) rule-node 'name)))
+						(when (eq graph-type :digraph)
+						  (format s "digraph \"~a\" {~%" rule-name))
+						(dump-gv-rule rule-node)
+						(when (eq graph-type :digraph)
+						  (format s "}~%")))))))
+			  (defl dump-gv-rule (rule)
+				(when (or (not omit-unmatched-rules)
+						  (> (! (g get-matched) rule) 0))
+				  (let ((rule-components (! (g get-rule-components) rule))
+						(rule-name (! (g hget) rule 'name)))
+					(let ((p-rule-name (symcat nest-prefix '- rule-name)))
+					  (let ((pred-edges (! (rule-components preds)))
+							(del-edges (! (rule-components dels)))
+							;;(add-edges (! (rule-components adds)))
+							(add-edges (or (! (rule-components add-mains))
+										   (! (rule-components adds))))
+							(not-edges (! (rule-components nots)))
+							(rule-nodes (! (rule-components all-nodes)))
+							(i 0))
+						(setq nest-prefix (+ nest-prefix 1))
+						(setq node-map (make-sur-map))
+						(setq node-set (make-sur-map))
+						(when (memq graph-type '(:digraph :subgraph))
+						  (format s "subgraph \"cluster-~a\" {~%" rule-name)
+						  (format s "label = \"~a\";~%" rule-name))
+						;; (format s "\"~a\" [label=\"~a\"];~%" rule rule-name)
+						;; (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" "rules" rule-name  "")
+						(dolist (rule-edges (list pred-edges del-edges add-edges not-edges))
+						  (when (or (eq rule-edges pred-edges)
+									(eq rule-edges add-edges))
+							(setq i (+ i 1))
+							(dolist (rule-edge rule-edges)
+							  (when (not (and (eq rule-edges add-edges)
+											  (or (eq (first rule-edge) 'print)
+												  (eq (first rule-edge) 'note)
+												  #| (eq (second rule-edge) 'rule) |# )))
+								(let ((l (length rule-edge)))
+								  (cond
+								   ((and (= l 2)
+										 (eq (second rule-edge) 'next))
+									(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name (first rule-edge) (first rule-edge))
+									(format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a\",style=~a,fontname=arial,color=~a];~%"
+											p-rule-name (first rule-edge)
+											p-rule-name (first rule-edge)
+											(second rule-edge)
+											(if (eq rule-edges add-edges) "dashed" "solid")
+											(if (eq rule-edges add-edges) "red" "black")))
+								   ((= l 2)
+									(let ((n (first rule-edge))
+										  (p (second rule-edge)))
+									  (create-node-entry n :rule-name p-rule-name)
+									  (create-node-entry p :as-prop t :rule-name p-rule-name)
+									  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"\",style=~a,fontname=arial,color=~a,arrowhead=none];~%"
+											  p-rule-name n
+											  p-rule-name p
+											  (if (eq rule-edges add-edges) "dashed" "solid")
+											  (if (eq rule-edges add-edges) "red" "black"))))
+								   ((= l 3)
+									;; (when (admit-edge (list (second rule-edge)))						;; !!!!!!!!!!!!!!!!!!!
+									(when (not (member (second rule-edge) omitted-attrs :test #'eq))
+									  (create-node-entry (first rule-edge) :rule-name p-rule-name)
+									  (create-node-entry (third rule-edge) :rule-name p-rule-name)
+									  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a~a\",style=~a,fontname=arial,color=~a];~%"
+											  p-rule-name (first rule-edge)
+											  p-rule-name (third rule-edge)
+											  (if (member rule-edge del-edges :test #'equal) "X " "")
+											  (second rule-edge)
+											  (if (eq rule-edges add-edges) "dashed" "solid")
+											  (cond
+											   ((eq rule-edges add-edges) "red")
+											   ((member rule-edge del-edges :test #'equal) "blue")
+											   (t "black")))))
+								   ((and (= l 4)
+										 (! (g edge-exists) `(,(third rule-edge) two-input-op)))
+									(let ((i1 (first rule-edge))
+										  (i2 (second rule-edge))
+										  (fcn-name (third rule-edge))
+										  (o (fourth rule-edge)))
+									  (let ((fcn (format nil "~a-~a-~a-~a-~a" p-rule-name fcn-name i1 i2 o))
+											(color (! (g hget) fcn-name 'color)))
+										(format s "\"~a\" [label=\"~a\",fontname=arial];~%" fcn fcn-name)
+										(when color
+										  (format s "\"~a\" [color=~a,style=filled]~%" fcn color))
+										(format s "\"~a-~a\" -> \"~a\"" p-rule-name i1 fcn)
+										(format s "[style=~a,color=~a];~%" 
+												(if (eq rule-edges add-edges) "dashed" "solid")
+												(if (eq rule-edges add-edges) "red" "black"))
+										(format s "\"~a-~a\" -> \"~a\"" p-rule-name i2 fcn)
+										(format s "[style=~a,color=~a];~%"
+												(if (eq rule-edges add-edges) "dashed" "solid")
+												(if (eq rule-edges add-edges) "red" "black"))
+										(format s "\"~a\" -> \"~a-~a\"" fcn p-rule-name o)
+										(format s "[style=~a,color=~a];~%"
+												(if (eq rule-edges add-edges) "dashed" "solid")
+												(if (eq rule-edges add-edges) "red" "black")))))
+								   (t
+									(dotimes (i l)
+									  (let ((rule-node (nth i rule-edge)))
+										(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name rule-node rule-node)))
+									(dotimes (i l)
+									  (let ((rule-node (nth i rule-edge)))
+										(format s "\"~a-~a\"" p-rule-name rule-node)
+										(when (< i (- l 1))
+										  (format s " -> "))))
+									(format s "[style=~a,fontname=arial,color=~a];~%"
+											(if (eq rule-edges add-edges) "dashed" "solid")
+											(if (eq rule-edges add-edges) "red" "black")))))))))
+						(dump-gv-nodes)
+						
+						#|
+											  (when (memq graph-type '(:digraph :subgraph))
+						(format s "\"~a\" [label=\"~a\"];~%" rule rule))
+											  |#
+
+						(when (eq graph-type :single-graph)
+									  (let ((rule-entry-node (designated-rule-entry-node rule)))
+										(format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
+												(get-node-name rule) (get-node-name rule-entry-node))))
+
+						(let ((nested-rules (! (g hget-all) rule 'nested-rule)))
+						  (dolist (nested-rule nested-rules)
+							(let ((nested-rule-name (! (g hget) nested-rule 'name)))
+							  (dump-gv-rule nested-rule)
+							  (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" rule nested-rule  "NESTED-RULE"))))
+						(when (memq graph-type '(:digraph :subgraph))
+						  (format s "}~%"))
+						(setq nest-prefix (- nest-prefix 1)))))))
+			  (defl dump-rule-trace-edges ()
+				(when edge-trace-rule-graph
+				  (let ((attr (second (first (! (edge-trace-rule-graph get-edges-from-subqet) '(attr))))))
+					(let ((attr (or attr 'r)))
+					  (let ((edges (! (edge-trace-rule-graph get-edges) attr)))
+						(dolist (edge edges)
+						  (let ((rule-node1 (first edge)))
+							(let ((rule-node2 (third edge)))
+							  (create-node-entry rule-node1)
+							  (set-node-label rule-node1 (! (g hget) rule-node1 'name))
+							  (create-node-entry rule-node2)
+							  (set-node-label rule-node2 (! (g hget) rule-node2 'name))
+							  (format s "\"~a\" -> \"~a\" [label=\"\",style=solid,color=violet];~%" rule-node1 rule-node2)))))))))
+			  (let ((*print-case* :downcase))
+				(block b
+				  (dump-gv-notes)
+				  (format s "digraph G {~%")
+				  (when gv-graph-props
+					(format s "~a" gv-graph-props))
+				  (! (g dump-edges) :dump-fcn #'dump-gv-edges-data :sort nil)
+				  (dump-rule-trace-edges)
+				  (dump-gv-nodes)
+				  (when (memq graph-type '(:digraph))
+					(format s "}~%"))
+				  (! (g dump-edges) :dump-fcn #'dump-gv-edges-rules :sort nil)
+				  (when (memq graph-type '(:subgraph :single-graph))
+					(format s "}~%")))))))))))
+
+
 
 ;; This class of set utils assumes that lists passed in are true sets,
 ;; i.e., no dups. And though generally ordering is not a concern,
@@ -5211,6 +5805,20 @@
 	  (numberp x)
 	  (symbolp x)))
 
+;; Checks for node of the form n<integer>, i.e., was generated by new-obj-node
+
+(defun is-new-obj-node (node)
+  (block b
+	(when (symbolp node)
+	  (let ((s (symbol-name node)))
+		(let ((l (length s)))
+		  (when (equal (aref s 0) #\N)
+			(dotimes (i (- l 1))
+			  (when (not (digit-char-p (aref s (+ i 1))))
+				(return-from b nil)))
+			t))))))
+
+
 ;; Also see edge-exists in the class graph. is-edge really means "is
 ;; in edge form" so must be used with care.
 
@@ -5288,7 +5896,7 @@
 
 (defun cross-aux2-info (info))
 
-(defun cross-aux2 (envs-list &key record-lengths)
+(defun cross-aux2 (envs-list &key record-lengths rule-trace-info)
   (timer 'cross-aux2
 	(lambda ()
 	  (let ((lengths (and record-lengths
@@ -5309,6 +5917,10 @@
 		  (let ((r (cross-aux2-aux envs-list)))
 			(when record-lengths
 			  (cross-aux2-info (cons (length r) lengths)))
+			(when rule-trace-info
+			  (let ((rule-node (first rule-trace-info)))
+				(let ((rule-name (second rule-trace-info)))
+			  (print `(rule-trace cross-aux2 rule ,rule-node ,rule-name envs-list-in ,envs-list envs-list-result ,r)))))
 			r))))))
 
 ;; Experiment -- should be more efficient sorted, but does not work
@@ -5945,6 +6557,48 @@
 
 ;; end do-eval test section
 
+
+;; An experiment in debug. This module allows the subsitution of an
+;; indicator for getting a value, rather than the value itself. This
+;; supports printing logs where we want to print some value that's too
+;; big to fit reasonably on one or a few lines.
+;;
+;; It's nicely self-contained, but does use packages, which are bad in
+;; general. However, at least th eth emoment like this use, which
+;; easily automates the definition of an arbitrary function, but it is
+;; behind the scenes and easily deleted (just by deleting the
+;; package), thus avoiding buildup of debug data
+
+(let ((log-value-fcn-pkg-name 'log-value-fcn-pkg))
+  (defr
+	(defl tree-length (l)
+	  (if (or (null l)
+			  (not (listp l)))
+		  1
+		  (+ (tree-length (first l)) (tree-length (rest l)))))
+	(let ()
+	  ;; Return the value if its tree-length is less than a
+	  ;; bound. tree-length is roughly proprtional to the total print
+	  ;; length. If the bound is exceeded, return a fcn indicator.
+	  (defun log-value (value)
+		(if (< (tree-length value) 50)
+			value
+			(let ()
+			  (when (null (find-package log-value-fcn-pkg-name))
+				(make-package log-value-fcn-pkg-name))
+			  (let ((f (intern (symbol-name (gensym)) log-value-fcn-pkg-name)))
+				(setf (symbol-function f) (lambda () value))
+				(symbol-name f)))))
+	  (defun clear-log-value-pkg ()
+		(when (find-package log-value-fcn-pkg-name)
+		  (delete-package log-value-fcn-pkg-name)))
+	  (defmacro get-log-value (fcn)
+		`(log-value-fcn ',fcn))
+	  (defun log-value-fcn (fcn-desc)
+		(let ((fcn-name (if (stringp fcn-desc) fcn-desc (symbol-name fcn-desc))))
+		  (let ((fcn (symbol-function (find-symbol fcn-name log-value-fcn-pkg-name))))
+			(funcall fcn)))))))
+
 (defc base-graph objgraph nil
   (let ()
 	(defm add-natural-number-edges (n)
@@ -5981,7 +6635,11 @@
 	  (read-rule-file "fft-delta.lisp")
 	  (read-rule-file "fe.lisp")
 	  (read-rule-file "copy-rule.lisp")
+	  
 	  (read-rule-file "display-data.lisp")
+
+	  ;;; (read-rule-file "gettysburg-address.lisp")
+
 	  ;; (read-rule-file "fe-no-copy.lisp")
 	  ;; (read-rule-file "rule-dep.lisp")
 	  )
@@ -6053,7 +6711,7 @@
 			(?r name std-notes))
 		   (add
 			(print std-notes)
-			(note footer "Copyright (c) 2019 Lawrence Stabile"))
+			(note footer "Copyright (c) 2020 Lawrence Stabile"))
 		   (del
 			(global-node rule ?this-rule)))
 		  
@@ -6073,6 +6731,8 @@
 		   (name gen-inverse)
 		   ;; (local)
 		   ;; (disabled)
+		   (attach-to inverse)
+		   (root-var inverse)
 		   (pred
 			(?a inverse ?i))
 		   (add
@@ -6087,7 +6747,8 @@
 									 (print add-inverse ?a ?i ?x ?y)
 									 (?y ?i ?x)))))
 		   (del
-			(?a global-rule-pool global-rule-pool-node)))
+			;; (?a global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!
+			))
 
 		  (rule
 		   (name inverse-data)
@@ -6099,9 +6760,10 @@
 		   (add
 			(print inverse-data)
 			(member inverse is-member-of)
-			(member global-rule-pool global-rule-pool-node)
+			;; (member global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!!!
 			(elem inverse is-elem-of)
-			(elem global-rule-pool global-rule-pool-node)))
+			;; (elem global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!!!
+			))
 
 		  (rule
 		   (name ev-init-gen)
@@ -6136,8 +6798,8 @@
 		   (local)
 		   ;; (root-var ?e0)
 		   (pred
-			(?a elem ?e0)
-			(?a elem ?e1)
+			;; (?a elem ?e0)				;; !!!!!!!!!!!!! 9/19/20 -- in removing this the system still works, and the expansion length shrinks by a lot, but still not constant across trials
+			;; (?a elem ?e1)
 			(?e0 is-elem-of ?a)
 			(?e1 is-elem-of ?a)
 			(?e0 next ?e1)
@@ -6154,8 +6816,8 @@
 		   (local)
 		   ;; (root-var ?e0)
 		   (pred
-			(?a elem ?e0)
-			(?a elem ?e1)
+			;; (?a elem ?e0)				;; !!!!!!!!!!!!!!!!!!!! -- ditto 
+			;; (?a elem ?e1)
 			(?e0 is-elem-of ?a)
 			(?e1 is-elem-of ?a)
 			(?e0 next ?e1)
@@ -6286,32 +6948,47 @@
 			(global-node rule ?this-rule)))
 
 		  (rule
-		   (name is)
-		   (root-var ?x)
+		   (name is-1-param)
+		   (local)
+		   (attach-to is)
+		   (pred
+			(?x is ?y ?p ?v)
+			(?y rule ?r))
+		   (del
+			(?x is ?y ?p ?v))
+		   (add
+			(print is-1-param ?this-obj ?x ?y ?r ?p ?v)
+			(?x rule ?r)
+			(?x ?p ?v)
+			(?x from-is-1-param-rule ?r)))
+
+		  (rule
+		   (name is-0-param)
+		   (local)
+		   (attach-to is)
 		   (pred
 			(?x is ?y)
 			(?y rule ?r))
 		   (del
 			(?x is ?y))
 		   (add
-			(print is ?x ?y ?r)
-			;; (dont-queue)
+			(print is-0-param ?this-obj ?x ?y ?r)
 			(?x rule ?r)
-			(?x from-is-rule ?r)))
+			(?x from-is-0-param-rule ?r)))
 
 		  (rule
-		   (name xis)
-		   (root-var ?x)
+		   (name is-0-param-xrule)
+		   (local)
+		   (attach-to is)
 		   (pred
-			(?x xis ?y)
+			(?x is ?y)
 			(?y xrule ?r))
 		   (del
-			(?x xis ?y))
+			(?x is ?y))
 		   (add
-			(print xis ?this-obj ?x ?y ?r)
-			;; ;; (dont-queue)
+			(print is-0-param-xrule ?this-obj ?x ?y ?r)
 			(?x rule ?r)
-			(?x from-xis-rule ?r)))
+			(?x from-is-0-param-xrule-rule ?r)))
 
 		  (rule
 		   (name is-not)
@@ -6365,7 +7042,7 @@
 			(?nn1 oe-ref ?e0)
 			(?nn1 ref ?e0)
 
-			(?nn1 xis ev-od-obj)
+			(?nn1 is ev-od-obj)
 			(?nn1 rule ?self-cycle)
 			(?nn1 rule ?even-zero)
 			(?nn1 rule ?odd-zero)
@@ -6431,7 +7108,7 @@
 			(?nn1 oe-ref ?e0)
 			(?nn1 ref ?e0)
 
-			(?nn1 xis ev-od-obj)
+			(?nn1 is ev-od-obj)
 			(?nn1 rule ?self-cycle)
 			(?nn1 rule ?even-zero)
 			(?nn1 rule ?odd-zero)
@@ -6628,7 +7305,8 @@
 			(?e0 next))
 		   (add
 			(print copy-array-struct-next-sing ?a ?a1 ?ae0 ?e0)
-			(?ae0 next))
+			(?ae0 next)
+			(?e0 casns-ref ?ae0))
 		   (del
 			;; (?this-obj rule ?this-rule)  ;; Don't del
 			))
@@ -6690,12 +7368,14 @@
 				 ;; (root-var ?e0)
 				 (pred
 				  (?e0 is-elem-of ?a)
+				  (?a level ?l)
 				  (?nn1 new-node sn1))
 				 (add
 				  (print copy-array-struct-new ?a ?a1 ?e0 ?nn1)
 				  (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
 				  (?a1 elem ?nn1)
 				  (?nn1 ref ?e0)
+				  (?al level ?l)
 
 				  (?nn1 casn-ref ?e0)
 
@@ -6854,42 +7534,6 @@
 		   (del
 			(?this-obj rule ?this-rule)))
 
-		  (comment
-		   (rule
-			(name fft-comb-rule-next)
-			(local)
-			(root-var ?ey0) ; Need root var on single output to be sure we get a single match ; ;
-			(pred
-			 (?x0 ?x1 fft-comb ?y)
-			 (?ef0 is-elem-of ?x0)
-			 (?ef1 is-elem-of ?x0)
-			 (?eg0 is-elem-of ?x1)
-			 (?eg1 is-elem-of ?x1)
-			 (?ef0 next ?ef1)
-			 (?eg0 next ?eg1)
-			 (?ey0 is-elem-of ?y)
-			 (?ey1 is-elem-of ?y)
-			 (?ey0 next ?ey1)
-			 (?ef0 ?eg0 fft-hb ?ey0)
-			 (?ey0 local-rule-pool ?p)
-			 (?p lrp-rule ?fft-comb-rule-next-sing)
-			 (?fft-comb-rule-next-sing name fft-comb-rule-next-sing))
-			(add
-			 (print fft-comb-rule-next ?x0 ?x1 ?y ?ef0 ?ef1 ?eg0 ?eg1 ?ey0 ?ey1)
-			 (?ef0 rule ?fft-comb-rule-next-sing)
-			 (?ef1 rule ?fft-comb-rule-next-sing)
-			 (?eg0 rule ?fft-comb-rule-next-sing)
-			 (?eg1 rule ?fft-comb-rule-next-sing)
-			 (?ey0 rule ?fft-comb-rule-next-sing)
-			 (?ey1 rule ?fft-comb-rule-next-sing)
-			 (?ef1 rule ?this-rule)
-			 (?eg1 rule ?this-rule)
-			 (?ey1 rule ?this-rule)
-			 (?ef1 ?eg1 fft-hb ?ey1))
-			(del
-			 (?this-obj rule ?this-rule)
-			 )))
-
 		  (rule
 		   (name fft-comb-rule-zero)
 		   (local)
@@ -6932,6 +7576,7 @@
 		   (add
 			(print fft-rule-zero ?x ?y ?r)
 			(?x copy-array-struct ?y)
+			(?y level 0)
 			(?x d ?y)			;; display-connection
 			(?y rule ?fft-comb-rule-zero))
 		   (del
@@ -6944,7 +7589,6 @@
 			(local)
 			(pred
 			 (?x fft ?y)
-			 (?x level 0)
 			 (?x local-rule-pool ?p)
 			 (?p lrp-rule ?copy-array-struct-new)
 			 (?p lrp-rule ?fft-comb-rule-zero)
@@ -6987,6 +7631,7 @@
 			(?nn1 fft ?nn3)
 			(?nn2 fft ?nn4)
 			(?nn3 ?nn4 fft-comb ?y)
+			(?y level ?l)
 			(?nn1 level ?l1)
 			(?nn2 level ?l1))
 		   (del
@@ -6995,7 +7640,13 @@
 		  (rule
 		   (name fft-top-rule)
 		   (pred
-			(?x fft-top)
+
+			(?x fft-top)		;; An experiment in symbol-free matching, i.e., looking for the three
+								;; commented-out edges rather than fft-top, for max locality. Works, but slow.
+			;; (?x ?n1)
+			;; (?n1 ?n2)
+			;; (?n2 ?n3)
+			
 			(?x odd ?y)
 			(?x even ?z)
 			(?x rand ?r)

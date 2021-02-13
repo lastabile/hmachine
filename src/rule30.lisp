@@ -155,6 +155,45 @@
   (?x1 rule-30-next ?y1)))
 
 (rule
+ (name rule-30-weave1)
+ (pred
+  (?x zero)
+  (?x top ?t)
+  (?x next ?xn)
+  (?xn up ?xnu)
+  (?xnu level ?l)
+  (?y max)
+  (?y top ?t)
+  (?yp next ?y)
+  (?yp up ?ypu)
+  (?ypu level ?l))
+ (add
+  (print rule-30-weave1 ?x ?y ?xn ?xnu ?yp ?ypu ?l)
+  (?ypu rule-30-weave-next ?x)))
+
+(rule
+ (name rule-30-weave2)
+ (pred
+  (?x rule-30-next ?y))
+ (add
+  (print rule-30-weave2 ?x ?y)
+  (?x rule-30-weave-next ?y)))
+
+;; Gettysburg Address rules
+
+(rule
+ (name rule-30-ga1)
+ (pred
+  (?x rule-30-weave-next ?y)
+  (?x ga-word ?ga)
+  (?ga next-ga-word ?gan)
+  (?ga value ?w))
+ (add
+  (print rule-30-ga1 ?x ?y ?ga ?w)
+  (?y ga-word ?gan)
+  (?y label ?w)))
+
+(rule
  (name rule-30-center)
  (pred
   (?x center)
@@ -223,14 +262,30 @@
   (?nn3 rule30val 1)))
 
 (rule
- (name rule-30-top-propagate)
+ (name rule-30-top-propagate1)
  (pred
   (?x top ?t)
   (?y up ?x)
   (?x center)
   (?y center))
  (add
-  (print rule-30-top-propagate ?x ?y)
+  (print rule-30-top-propagate1 ?x ?y)
+  (?y top ?t)))
+
+(rule
+ (name rule-30-top-propagate2)
+ (pred
+  (?x zero)
+  (?x next ?xn)
+  (?xn up ?xnu)
+  (?xnu top ?t)
+  (?y max)
+  (?yp next ?y)
+  (?yp up ?ypu)
+  (?ypu top ?t))
+ (add
+  (print rule-30-top-propagate2 ?x ?y)
+  (?x top ?t)
   (?y top ?t)))
 
 (rule

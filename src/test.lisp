@@ -1,6 +1,6 @@
 
 
-;; Prototype for the "canonica;" fft test loop. Note should clean up
+;; Prototype for the "canonical" fft test loop. Note should clean up
 ;; the others in this file.  As of the veriosn checked in 8/11/20,
 ;; this supports tree.lisp (local rules); commented-out (x is
 ;; treetopobj levels ,n) is needed for globaltree.lisp
@@ -8,6 +8,7 @@
 (let ((n 3))
   (clear-counters)
   (clear-perf-stats)
+  (clear-log-value-pkg)
   (setq g (make-the-graph))
   ;; (! (g add-natural-number-edges) 50)
   (! (g define-rule) `(rule
@@ -23,10 +24,13 @@
 
 						;; (x is treetopobj levels ,n)		;; Supports global-tree.lisp
 
-						(x is treetopobj)					;; Supports tree.lisp
-						(x l ,n)
+						(x is treetopobj l ,n)							;; Supports tree.lisp
 
-						(x fft-top)
+						(x fft-top)		;; An experiment in symbol-free matching, for max locality. Works, but slow. See fft-top-rule
+						;; (x n1)
+						;; (n1 n2)
+						;; (n2 n3)
+
 						(x fft xfft)
 						(x level ,n)
 						(x color navajowhite)
@@ -269,6 +273,83 @@
 
 
 
+(let ((d (make-dumper)))
+  (let ((notes (! (g get-edges) 'note)))
+	(dolist (note notes)
+	  (when (or (eq (first note) 'note)
+				(and (eq (first note) 'set)
+					 (eq (second note) 'note)))
+		(! (g rem-edge) note)))
+	(! (g add-edge) `(set note title fontsize ,(! (g query) '((r level ?x)) '?x)))
+	(! (g add-edge) '(note title "FFT Butterflies with Rule-30 Random Deltas\\\nLawrence Stabile, 2020\\\nSee nerdlynotions.org, H-Machine Series"))
+	(! (d set-graph) g)
+	(! (d dump-gv-edges) "xfft.gv" :omit-unmatched-rules nil :rules nil :emit-labels nil :attrs
+	   '(
+		 fft-hb
+		 fft-comb
+		 odd 
+		 even
+		 zero
+		 d-casz
+		 d
+		 center-up
+		 ;;     next-color
+		 rule30val
+		 ;;	   rule-30-next
+		 up
+		 ;;	   delta3
+		 ;;	   delta3-rand
+		 next
+		 casz-ref
+		 casz-ref1
+		 ;;     copy-array-struct
+		 ))))
+
+;;
+;; For the graphviz gallery 
+;;
+
+;; This version generates an fft top-down/bottom-up connected diagram, without excess
+
+(let ((d (make-dumper)))
+  (let ((notes (! (g get-edges) 'note)))
+	(dolist (note notes)
+	  (when (or (eq (first note) 'note)
+				(and (eq (first note) 'set)
+					 (eq (second note) 'note)))
+		(! (g rem-edge) note)))
+	(! (g add-edge) `(set note title fontsize ,(! (g query) '((r level ?x)) '?x)))
+	(! (g add-edge) '(note title "FFT Butterflies with Rule-30 Random Deltas\\\nLawrence Stabile, 2020\\\nSee nerdlynotions.org, H-Machine Series"))
+	(! (d set-graph) g)
+	(! (d dump-gv-edges) "xfft.gv" :omit-unmatched-rules nil :rules nil :emit-labels t :emit-legend nil 
+	   :omitted-attrs
+	   '(in-node-color color shape two-input-op local-rule-pool global-rule-pool  rule is-two-input-op)
+	   :attrs
+	   `(
+		    zero ;; ga-word value rule-30-weave-next   ;;	top level max  zero is-elem-of 
+		 ;; is-two-input-op
+		 fft-hb
+		 fft-comb
+		 odd 
+		 even
+		 ;; zero
+		 ;;	d-casz
+		 ;;	d
+		 ;; center-up
+		 ;; next-color
+		 rule30val
+		 ;; rule-30-next
+		  up
+		 ;;	delta3
+		 ;;	delta3-rand
+		 ;; next
+		 ;;	casz-ref
+		 ;;	casz-ref1
+		 ;;	casn-ref
+		 ;;	casns
+		 e
+		 ;; copy-array-struct
+		 ))))
 
 
 
@@ -1946,3 +2027,149 @@ Gerry S
   (perf-stats)
   (print (list 'gc (gc)))
   (print (list 'gc (gc))))
+
+
+;; all-var-mod
+;;
+;; 9/27/20 This section tests all-vars rule preds. Though all-vars
+;; preds have been disallowed form the beginning, I made changes to
+;; permit it (see "all-var-mod" comment), so that we could try rules
+;; which did not rely on specific global constants, thus allowing for
+;; lower edge-expansion sizes when matching rules.
+
+(let ()
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-the-graph))
+)
+
+(! (g define-rule)
+  '(rule
+	(name xxx)
+	(pred
+	 (?x abc ?y))
+	(add
+	 (print xxx ?x ?y)
+	 (def)))
+)
+
+
+(! (g define-rule)
+  '(rule
+	(name yyy)
+	(pred
+	 (?x ?n1)
+	 (?n1 ?n2)
+	 (?n2 ?n3)
+	 (?n3 ?y))
+	(add
+	 (print yyy ?x ?y)
+	 (ghi)))
+)
+
+(dolist (x '((x1 abc y1)(x2 n1)(n1 n2)(n2 n3)(n3 y2)))
+  (! (g add-obj-edge) x))
+
+(! (g trace-rule) 'xxx)
+
+(! (g trace-rule) 'yyy)
+
+(! (g execute-obj) 'x2)
+
+(! (g execute-obj) 'x1)
+
+;; end all-var-mod
+
+
+(setq x (! (g make-rule-graph) 'N691))
+(! (x all-qets))
+(setq y (! (x make-qet-graph)))
+(! (y get-all-edges))
+(let ((d (make-dumper))) (! (d set-graph) y)(! (d dump-gv-edges) "xxx.gv" :attrs '(up)))
+
+
+(setq y (! (g make-qet-graph)))
+(let ((d (make-dumper))) (! (d set-graph) y)(! (d dump-gv-edges) "yyy.gv" :attrs '(up)))
+
+
+
+(let ()
+  (setq x1 (! (g make-rule-graph) 'N691))
+  (setq x2 (! (x1 make-qet-graph)))
+  (dolist (e (! (x2 get-all-edges)))
+	(print (list 'e e))
+	(when (and (= (length e) 1)
+			   (intersect '(fft-comb is-elem-of zero local-rule-pool lrp-rule name fft-comb-rule-next fft-comb-rule-next-sing
+									 local-rule-pool-node global-node global-rule-pool-ref global-rule-pool-node fft-comb-rule-zero)
+						  e))
+	  (print (list 'd e))
+	  (! (x2 rem-edge) e)))
+  (setq x3 (! (x2 make-hasse-graph))))
+
+
+(let ()
+  (setq x1 
+		(let ((x (make-objgraph)))
+		  (dolist (e (! (g get-all-edges)))
+			(when (intersect '(elem is-elem-of) e)
+			  (when (not (intersect '(_elem) e))
+				(! (x add-edge) e))))
+		  x))
+  (setq x2 (! (x1 make-qet-graph)))
+  (setq x3
+		(let ((x (make-objgraph)))
+		  (dolist (e (! (x2 get-all-edges)))
+			  (when (not (intersect '(elem is-elem-of) e))
+				(! (x add-edge) e)))
+		  x))
+  (setq x4 (! (x3 make-qet-graph)))
+  (setq x5 (! (x4 make-hasse-graph) :levels-to-omit '(0))))
+
+(let ()
+  (setq x1 
+		(let ((x (make-objgraph)))
+		  (dolist (e (! (g get-all-edges)))
+			(when (intersect '(elem is-elem-of) e)
+			  (when (not (intersect '(_elem) e))
+				(! (x add-edge) e))))
+		  x))
+  (setq x2 (! (x1 make-qet-graph)))
+  (setq x3
+		(let ((x (make-objgraph)))
+		  (dolist (e (! (x2 get-all-edges)))
+			  (when (not (intersect '(elem is-elem-of) e))
+				(! (x add-edge) e)))
+		  x))
+  (setq x4 (! (x3 make-qet-graph)))
+  (setq x5 (! (x4 make-hasse-graph) :levels-to-omit '(0))))
+
+(setq x
+	  (let ((x (! (g graph-filter) (lambda (e) (intersect '(elem is-elem-of) e)))))
+		(let ((x (! (x graph-filter) (lambda (e) (not (intersect '(_elem) e))))))
+		  (let ((x (! (x make-qet-graph))))
+			(let ((x (! (x graph-filter) (lambda (e) (not (intersect '(elem is-elem-of) e))))))
+			  (let ((x (! (x make-qet-graph))))
+				(let ((x (! (x make-hasse-graph))))
+				  x)))))))
+
+(setq x
+	  (let ((x (! (g graph-filter) (lambda (e) (intersect '(oe-ref next is-elem-of) e)))))
+		(let ((x (! (x graph-filter) (lambda (e) (not (intersect '(_elem) e))))))
+		  (let ((x (! (x graph-filter) (lambda (e) (intersect e
+															  '(N2199 N2184 N2029 N2207  
+																N2182 N2194 N1998 N2196  
+																N2194 N2182 N1999 N2204  
+																N2190 N2181 N2014 N2200  
+																N2180 N2186 N1983 N2188  
+																N2181 N2190 N2013 N2192  
+																N2184 N2199 N2028 N2201  
+																N2186 N2180 N1984 N2195))))))
+			(let ((x (! (x make-simplicial-complex-graph))))
+			  x)))))
+
+(setq x
+	  (let ((x (! (g make-rule-graph) 'N388)))
+		(let ((x (! (x graph-filter) (lambda (e) (intersect '(oe-ref next is-elem-of) e)))))
+		  (let ((x (! (x graph-filter) (lambda (e) (not (intersect '(_elem) e))))))
+			(let ((x (! (x make-simplicial-complex-graph))))
+			  x)))))

@@ -77,6 +77,17 @@
   (print fft-rule-delta5 ?this-obj ?x ?y ?z)
   (?x d-casz ?z)))
 
+(rule
+ (name fft-rule-delta6)
+ ;; (local)
+ (pred
+  (?x d-casz ?y)
+  (?y casns-ref ?z))
+ (add
+  (print fft-rule-delta6 ?this-obj ?x ?y ?z)
+  (?x d-casz-casns-ref ?z)  ;; These two are eqv. e shortcut for display
+  (?x e ?z)))				;; 
+
 ;; Rule optimizer (for a specific rule). Changes the target rule from
 ;; global to local, and adds rule propagators.
 

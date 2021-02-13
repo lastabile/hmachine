@@ -1,8 +1,4 @@
 
-;;; 11/1/17 Commented-out remaining queueing operations (retaining old
-;;; commenting-out) since I'm taking queue operations out of the rule
-;;; language, but would like retain this file and the rule-passing.
-
 (rule
  (name tree-next-zero-rule)
  (local)
@@ -12,7 +8,6 @@
   (?x0 tree-next ?x1))
  (add
   (print tree-next-zero-rule ?this-obj ?x0 ?x1)
-  ;; (dont-queue)
   (?x0 next ?x1)))
 
 (rule
@@ -33,7 +28,6 @@
   (?p0 tree-next ?p1))
  (add
   (print tree-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
-  ;; (dont-queue)
   (?x01 tree-next ?x10)))
 
 (rule
@@ -49,7 +43,6 @@
   (?y l 0))
  (add
   (print tree-loop-rule ?this-obj ?x ?y ?root-var)
-  ;; ;; (dont-queue)
   (?y next ?x))
  (del
   (?this obj rule ?this-rule)
@@ -63,7 +56,7 @@
   (?y aup ?p)
   (?x tree-next ?y)
   (?p top)
-  (?p p)
+  ;; (?p p)
   (?p local-rule-pool ?rp)
   (?rp lrp-rule ?tree-top-propagate-rule)
   (?tree-top-propagate-rule name tree-top-propagate-rule)
@@ -73,8 +66,6 @@
   (?tree-elem-zero-rule name tree-elem-zero-rule))
  (add
   (print tree-top-order-rule ?this-obj ?x ?y ?p)
-  ;; (queue ?x)
-  ;; ;; (dont-queue)
   (?x top ?p)
   (?y top ?p)
   (?x zero)
@@ -117,10 +108,10 @@
  (pred
   (?x aup ?p)
   (?p top ?t)
-  (?p p))
+  ;; (?p p)
+  )
  (add
   (print tree-top-propagate-rule ?this-obj ?x ?p)
-  ;; (dont-queue)
   (?x top ?t)
   (?x rule ?this-rule))
  (del
@@ -138,7 +129,6 @@
   (?tree-elem-rule-prune name tree-elem-rule-prune))
  (add
   (print tree-elem ?this-obj ?t ?x)
-  ;; (dont-queue)
   (?t elem ?x)
   (?x value ?v)
   (?x rule ?tree-elem-rule-prune)
@@ -158,8 +148,7 @@
   (?x zero))
  (add
   (print tree-elem-zero-rule ?this-obj ?t ?x)
-  ;; ;; (dont-queue)
-  (?x xis ev-od-obj))
+  (?x is ev-od-obj))
  (del
   (?this-obj rule ?this-rule)))
 
@@ -173,7 +162,6 @@
   (?tree-rule name tree-rule))
  (add
   (print tree-elem-rule-prune ?this-obj ?x)
-  ;; ;;(dont-queue)
   )
  (del
   (?x rule ?tree-rule)
@@ -210,7 +198,6 @@
   (?tree-elem-zero-rule name tree-elem-zero-rule))
  (add
   (print tree-zero-rule ?this-obj ?x ?y ?p)
-  ;; (dont-queue)
   (?x zero)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule))
@@ -229,7 +216,6 @@
   (?p max))
  (add
   (print tree-max-rule ?this-obj ?x ?y ?p)
-  ;; (dont-queue)
   (?y max)))
 
 (rule
@@ -237,7 +223,7 @@
  (root-var ?x)
  (local)
  (pred
-  (?x p)
+  ;; (?x p)
   (?x l ?l)
   (?l1 sigma ?l)
   (?nn1 new-node sn1)
@@ -252,14 +238,14 @@
   (print tree-rule ?this-obj ?x ?nn1 ?nn2 ?l)
   (?nn1 aup ?x)
   (?x adn ?nn1)
-  (?nn1 p)
+  ;; (?nn1 p)
   (?nn1 l ?l1)
-  (?nn1 xis treeobj)
+  (?nn1 is treeobj)
   (?nn2 aup ?x)
   (?x adn ?nn2)
-  (?nn2 p)
+  ;; (?nn2 p)
   (?nn2 l ?l1)
-  (?nn2 xis treeobj)
+  (?nn2 is treeobj)
   (?nn1 tree-next ?nn2))
  (del
   (?x rule ?this-rule)))
@@ -283,7 +269,6 @@
   (?tree-rule name tree-rule))
  (add
   (print treeobj-rule)
-  ;; ;; (dont-queue)
   (treeobj xrule ?tree-next-zero-rule)
   (treeobj xrule ?tree-next-rule)
   (treeobj xrule ?tree-elem-rule)
@@ -302,7 +287,6 @@
   (?tree-top-rule name tree-top-rule))
  (add
   (print treetopobj-rule)
-  ;; ;; (dont-queue)
   (treetopobj rule ?tree-top-rule))
  (del
   (global-node rule ?this-rule)))
@@ -320,14 +304,64 @@
   (?tree-elem-zero-rule name  tree-elem-zero-rule))
  (add
   (print tree-top-rule ?this-obj ?x)
-  ;; (queue ?x)
-  ;; ;; (dont-queue)
-  (?x p)
+  ;; (?x p)
   (?x top)
-  (?x xis treeobj)
+  (?x is treeobj)
   (?x rule ?tree-top-order-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
   )
  (del
   (?x rule ?this-rule)))
+
+
+;;;;;;;;;; Experimental fnext ("flat" next, does not loop like next does)
+;;
+;; With the not clause, we remove the need to assert then retract,
+;; which is to some degree definitionally superior, but has ordering/consistency
+;; issues.
+
+(rule
+ (name fnext-rule)
+ (pred
+  (?x next ?y))
+ (not							;; If we remove this not, then can use rule below, which
+								;; deletes the undesired edge. Raises interesting temporal-logical questions
+  (?y zero))
+ (add
+  (print fnext-rule ?x ?y)
+  (?x fnext ?y)))
+
+(rule
+ (name fnext-del-rule)
+ (pred
+  (?x fnext ?y)
+  (?y zero))
+ (add
+  (print fnext-del-rule ?x ?y)
+  (?y fnext-del-run))
+ (del
+  (?x fnext ?y)))
+
+
+(comment 
+
+(rule
+ (name del-rule-opt)
+ (pred
+  (?r1 type rule)
+  (?r1 name ?n1)
+  (?r1 pred ?p1)
+  (?r1 add ?a1)
+  (?r2 type rule)
+  (?r2 name ?n2)
+  (?r2 pred ?p2)
+  (?r2 del ?a1))
+ (add
+  (print del-rule-opt ?r1 ?n1 ?r2 ?n2)
+  (?r1 done)))
+
+)
+
+
+  

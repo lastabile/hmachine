@@ -72,7 +72,7 @@
   (?x zero))
  (add
   (print tree-elem-zero-rule ?this-obj ?t ?x)
-  (?x xis ev-od-obj)))
+  (?x is ev-od-obj)))
 
 (rule
  (name tree-zero-rule)

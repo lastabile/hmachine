@@ -1364,7 +1364,195 @@ Finally back to rule opt, and so forth! Really need to record
 thoughts, code, and experiments regarding dimension, since it seems
 fundamental to h-machine attributes.
 
-Note some glimmer of ideas in this vein began in 2017; see "[See ref to here from 8/5/2020]", above.
+Note some glimmer of ideas in this vein began in 2017; see "[See ref
+to here from 8/5/2020]", above.
+
+"Dimension" is a cute term, but really what's defined here is more
+akin to "order" in set theory. I.e., given a family of subsets S over
+a universe X, the order of S is the largest number of sets in S in
+which a given x element-of X appears. So e.g. if X = {1,2,3,4,5} and S =
+{{1,2},{1,3},{3,4},(1,4},{5}}, then the order is 3, since the element 1
+appears in 3 subsets, the element 3 appears in 2 subsets, and all
+other elements each appear in just 1 subset.
+
+We can also define order as the largest number n of non-empty n-way
+intersections among the elements of S.
+
+In the case of the h-machine, the universe is G, the hypergraph of the
+h-machine. Imagine a G that is completely "built", i.e., some set of
+rules has run to completion. Thus the preds of the rules of G will all
+match subgraphs of G. Each pred set thus induces a cover on a subset
+of G, i.e., each pred maps to a set of subsets of the edges of G. 
+
+Call one of these families P, and p1...pn elements, i.e. edge sets, of
+P. The *dimension* of P is largest number of edges in common with
+p1...pn, i.e., the order of P.
+
+Operationally, this is viewed as the number of times an edge is needed
+to match a rule successfully, where by successful we mean a rule which
+ran and produced new edges. So if a rule ran 10 times producing new
+edges, and some edge was needed 5 times, and no other edge was needed
+more than 5 times, then the dimension of the rule is 5. If no edge is
+needed more than once, then the rule has a dimension of one.
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----------------------------------------------------------
+8/20/20 -- Info on papers and history thereof
+
+[8/20/20] Wolfram has written about hypergraphs and physics -- looks
+like he lifted my ideas! Maybe not, but now I wonder if he or someone
+on his staff read my paper.
+
+Earliest form of complexity.doc looks like it's from 2008. 
+
+Submitted to Wolfram's "Complex Systemss Journal" in 2013. Revceived email ack from them 
+wrt the sdubmission:
+
+
+	[WR #3230387] Lawrence Stabile: Chaos and Complexity
+	Complex Systems Journal
+	<info@complex-systems.com>
+	12/18/2013 8:39 AM
+	To  lstabile@alum.mit.edu  
+	
+	Dear Lawrence Stabile,
+	
+	Thank you for submitting the following paper to Complex Systems.
+	
+	Lawrence Stabile, "Chaos and Complexity"
+	
+	We will assign a reviewer and update you once comments have been 
+	received. For future inquiries regarding the status please send email to 
+	info@complex-systems.com  including the subject of this email:   [WR 
+	#3230387] Lawrence Stabile: Chaos and Complexity
+	
+	Sincerely,
+	
+	Complex Systems
+	PO Box 6149
+	Champaign, IL 61826
+	info@complex-systems.com
+
+I had prodded them a couple of times over the next year and they said
+at least once that they were still in process. Finally heard again in
+Feb 2017 that I could revamp it to include more of NKS stuff and
+resubmit. Final email from Todd Rowland, timestamped 2/3/2017 3:44 PM:
+
+	Dear Larry Stabile,
+	
+	I have good news and bad news. Today is my last day as the managing editor 
+	of Complex Systems (http://www.complex-systems.com/).
+	
+	This means that, if you are still interested, you can improve your paper 
+	and resubmit it so that it will be considered by the new editor.
+	
+	I highly recommend adding more graphics, but especially explaining the 
+	connections to Stephen Wolfram's "A New Kind of Science" 
+	(http://www.wolframscience.com/nksonline/toc.html), which is the epitome 
+	of Complex Systems publications.
+	
+	The main issue with your paper was that it did not appear to take into 
+	account the ideas and evidence in that book.
+	
+	Thank you for submitting your work. I apologize again for the delays.
+	
+	Sincerely,
+	
+	Todd Rowland
+	Managing Editor
+	Complex Systems
+
+
+I did not follow up, in particular since it didn't seem correct to
+push it further toward NKS. NKS provided some ideas but not all, and
+it would not have been correct to try to pump it up.  I instead began
+to find other outlets. However *at least one person* read the paper at
+Wolfram, at least I know that.
+
+I worked more on the h-machine system and experiments and wrote the
+h-machine paper. This had concrete ideas and results, as opposed to
+"Chaos and Complexity", which had theory and philosophy.  The full
+paper referred to the original "Chaos and Complexity", but I removed
+those references and wrote a self-contained version for an IEEE conf,
+from which it was rejected (Aug 2017). See above "Notes on submission
+to IEEE ICRC 2017"
+
+----------------------------------------------------------
+9/22/20 -- Removed edge-sequence code
+
+This includes the edge-entry struct: prev, next, and seqno. 
+
+Old version saved in h.9.22.20.lisp.
+
+I had various ideas for using the time sequence of edge creation in
+optimization algorithms. I had started a version of execute-rule-dep
+(x-execute-rule-dep), which would have attempted to prune down edges
+incident on preds in the rule-dep graph by looking at whether they
+were "new", and melding that with the dimension of the pred. The
+dimension is only calc'ed empirically though, at this point -- i.e., I
+have not found a way to derive dimension from the rules alone -- and
+thus a feedback loop is required to use this info.
+
+These ideas -- newness of edges, use of dimension, rule-dep graphs --
+don't seem to be converging on good general rule execution methods. So
+while most of the code will be left in, e.g., dimension calcs,
+rule-dep exec, those which affect perf are being removed. In
+particular this is the next/prev edge history structure.
+
+I have concluded recently that the best optimization will come about
+via improvemnets to the existing rule eval structure.  In essence, the
+notion of local rules attached to nodes, and providing rules which
+pass rules to other nodes, is a pretty good one, and we should keep
+it. Also global rules work, though slow, thus providing a
+development/optimization path.
+
+Other than the problem of basic optimization of rules into such local
+mechanisms, the only other issue wrt performance is the *expansion*
+problem, i.e., keeping the search for matching subgraphs as local to
+the attaching object as possible (and not growing effectively with the
+size of the graph).
+
+I have concluded that this problem is fundamental to the H-machine
+structure, as opposed to something such that a clever internal
+optimization in the kernel will suffice. 
+
+----------------------------------------------------------
+2/13/21 -- Graphviz goals and issues
+
+I would like to submit a set of graphs (gv files) to Graphviz for
+display in their gallery. I propose to base this on the fft
+butterflies and rule 30. One thing I souhgt to resxolve is to shpow
+that the butterfly diagram I generate is isomorphic to the standard
+form that appears in many books, e.g., Opp 1975. After much effort to
+generate array indices which can be used to correlate the nodes and
+edges, I then used a graphviz editing tool, the Qt Visual Graph Editor
+(installed). This works much better than dotty, which is too buggy to
+be usable.
+
+The file fft-8-with-indices.gv (and subsequent fft-8-with-indices.svg)
+show the original graphviz-produce layout. fft-8-with-indices.xgr
+shows the hand-edited form thereof, where I moved around edges and
+nodes until I got a diagram which shows the input array in normal
+order and tne output array in bit-reversed order. This diagram is
+identical to that in Opp 1975 page 300 fig. 6.12.
 
