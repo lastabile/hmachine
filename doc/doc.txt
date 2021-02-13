@@ -1556,4 +1556,4 @@ nodes until I got a diagram which shows the input array in normal
 order and tne output array in bit-reversed order. This diagram is
 identical to that in Opp 1975 page 300 fig. 6.12.
 
-Details of fft and rule 30:
+Details of fft and rule 30 follow.
