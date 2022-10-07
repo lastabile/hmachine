@@ -105,3 +105,32 @@
 			   (setq r (cons v r)))
 			 h)
 	r))
+
+;; Some baseic utils for CL hash tables too
+
+(defun hash-table-to-list (h)
+  (let ((r nil))
+	(maphash (lambda (k v)
+			   (setq r (cons (list k v) r)))
+			 h)
+	r))
+
+(defun hash-table-key-to-list (h)
+  (let ((r nil))
+	(maphash (lambda (k v)
+			   (setq r (cons k r)))
+			 h)
+	r))
+
+(defun hash-table-value-to-list (h)
+  (let ((r nil))
+	(maphash (lambda (k v)
+			   (setq r (cons v r)))
+			 h)
+	r))
+
+(defun mapappend (fcn l)
+  (if (null l)
+	  nil
+	  (append (funcall fcn (first l)) (mapappend fcn (rest l)))))
+

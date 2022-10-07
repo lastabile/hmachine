@@ -6,7 +6,7 @@
  ((find-package 'sb-int)				;; SBCL (Steel Bank Common Lisp)
   (let ()
 	(load "ht-sbcl.lisp")))
- (t										;; Assume abcl (Armed Bear Common Lisp) until others come along
+ (t										;; Assume ABCL (Armed Bear Common Lisp) until others come along
   (let ()
 	(load "ht-abcl.lisp"))))
 
@@ -38,6 +38,8 @@
   (hcload "hoss")
   (hcompile "top-obj" :warnings warnings)
   (hcload "top-obj")
+  (hcompile "file-utils" :warnings warnings)
+  (hcload "file-utils")
   (hcompile "h" :warnings warnings)
   (hcload "h")
   nil)
@@ -46,6 +48,7 @@
   (hiload "hashtab")
   (hiload "hoss")
   (hiload "top-obj")
+  (hiload "file-utils")
   (hiload "h")
   nil)
 
@@ -53,5 +56,6 @@
   (hcload "hashtab")
   (hcload "hoss")
   (hcload "top-obj")
+  (hcload "file-utils")
   (hcload "h")
   nil)

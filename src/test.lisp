@@ -156,7 +156,7 @@
   (! (g add-natural-number-edges) 20)
   (! (g read-rule-file) "fe.lisp")
   (! (g read-rule-file) "copy-rule.lisp")
-  (! (g read-rule-file) "display-data.lisp")
+  (! (g read-rule-file) "display-rules.lisp")
   (! (g add) 0 'rule (! (g query) '((?x name fe-0-rule)) '?x))
   (timer 'main
 	(lambda ()
@@ -175,7 +175,7 @@
 	  (! (g add-natural-number-edges) (* (+ i 1) 5))
 	  (! (g read-rule-file) "fe.lisp")
 	  (! (g read-rule-file) "copy-rule.lisp")
-	  (! (g read-rule-file) "display-data.lisp")
+	  (! (g read-rule-file) "display-rules.lisp")
 	  (! (g add) 0 'rule (! (g query) '((?x name fe-0-rule)) '?x))
 	  (timer 'main
 		(lambda ()
@@ -1926,7 +1926,7 @@ Gerry S
   (! (g add-natural-number-edges) 20)
   (! (g read-rule-file) "fe.lisp")
   (! (g read-rule-file) "copy-rule.lisp")
-  (! (g read-rule-file) "display-data.lisp")
+  (! (g read-rule-file) "display-rules.lisp")
   (let ((r (! (g query) '((?r type rule)(?r name fwd-fe-rule)) '?r)))
 	(let ((c (! (g query) '((?r type rule)(?r name copy-rule-rule)) '?r)))
 	  (! (g def-obj-edges) `((,r copy-rule r1)(,r rule ,c)))
@@ -2173,3 +2173,77 @@ Gerry S
 		  (let ((x (! (x graph-filter) (lambda (e) (not (intersect '(_elem) e))))))
 			(let ((x (! (x make-simplicial-complex-graph))))
 			  x)))))
+
+
+
+
+
+;; 3/6/21
+
+;; Rule30 test, building up levels by fives. Save the resulting perf
+;; stats in a file like xxx and then run gnuplot graphs as described
+;; in rule30,lisp
+
+(let ()
+  (dotimes (i 10)
+	(let ((filename (format nil "edge-dump-~a" i)))
+	  (with-open-file (s filename :direction :output)
+		(let ((n 3))
+		  (clear-counters)
+		  (clear-perf-stats)
+		  (clear-log-value-pkg)
+		  (setq g (make-the-graph))
+		  (! (g add-natural-number-edges) 50)
+		  (! (g define-rule) `(rule
+							   (name init)
+							   (attach-to global-node)
+							   (pred
+								(global-node rule ?r)
+								(?r name init))
+							   (add
+								(print init)
+								(r level ,(* 5 i))
+								(r rule-30-top)
+								(x local-rule-pool local-rule-pool-node)
+								(x global-rule-pool global-rule-pool-node)
+								(r local-rule-pool local-rule-pool-node)
+								(r global-rule-pool global-rule-pool-node))
+							   (del
+								(global-node rule ?this-rule))))
+		  ;; (! (g trace-rule) 'fft-comb-rule-next-sing-delta)
+		  (timer 'main
+			(lambda ()
+			  (! (g execute-global-all-objs-loop))
+			  ))
+		  (print (list '************* i))
+		  (perf-stats)
+		  (! (g rule-stats))
+		  (room t)
+		  (dolist (x (! (g get-all-edges)))
+			(print x s))))))
+  nil)
+
+
+
+
+;; 9/20/22 Basic test on hoss wrt inhertited ctor args
+
+(defc x nil (a b &key c)
+  (let ()
+	(defm f ()
+	  (list a b c))))
+#'make-x
+(defc y x (d e f &key (g 42) h)
+  (let ()
+	(defm g ()
+	  (list a b c d e f g  h))))
+#'make-y
+(defc z y (i j)
+  (let ()
+	(defm h ()
+	  (list a b c d e f g h i j))))
+#'make-z
+(setq x (make-z 1 2 3 4 5 6 7 :g 8 :h 9 :c 10))
+(! (x f))
+(! (x g))
+(! (x h))

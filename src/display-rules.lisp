@@ -1,71 +1,3 @@
-
-
-(rule
- (name display-data)
- (attach-to global-node)
- (root-var global-node)
- (pred
-  (global-node rule ?r)
-  (?r name display-data))
- (add
-  (print display-data)
-  ;; (fft color green)
-  ;; (fft in-node-color springgreen)
-  ;; (fft out-node-color darkturquoise)
-  (zero color violet)
-  (aup in-node-color deeppink)
-  (aup out-node-color dodgerblue)
-  (aup edge-color springgreen)
-  ;; (odd out-node-color palegreen)
-  ;; (even out-node-color palevioletred)
-  ;; (elem in-node-color  palevioletred)
-  (elem out-node-color palevioletred)
-  (elem edge-color  darkturquoise)
-  (tree-next color dodgerblue)
-  (fft-comb two-input-op)
-  (fft-comb color lightskyblue)
-
-  (fft-hb two-input-op)
-  ;; (fft-hb in-node-color deeppink)
-  ;; (fft-hb out-node-color dodgerblue)
-  (fft-hb color turquoise)
-  (fft-hb shape ellipse)
-
-  (fft-hb-delta two-input-op)
-  (fft-hb-delta in-node-color springgreen)
-  (fft-hb-delta color turquoise)
-
-  (color gv-attr)
-  (shape gv-attr)
-  (label gv-attr)
-  (fontname gv-attr)
-  (style gv-attr)
-  (width gv-attr)
-  (fixedsize gv-attr)
-
-  ;; (rule shape rectangle)
-  ;; (rule color mistyrose)
-  ;; (rule style filled)
-
-  ;; (fwd-fe-rule color paleturquoise)
-
-  (+ two-input-op))
- (del
-  (global-node rule ?this-rule)))
-
-;; Set color, shape, etc. for arrays and array elements
-
-(rule
- (name array-gv-attr-rule)
- (attach-to is-elem-of)
- (pred
-  (?e is-elem-of ?a))
- (add
-  (print array-gv-attr-rule ?a)
-  (?a shape trapezium)
-  (?e shape rectangle)
-  (?e color paleturquoise)))
-
 ;; Set the color, shape, and label for rules, when they are referred to by data.
 	  
 (rule
@@ -80,6 +12,52 @@
   (?r color mistyrose)
   (?r style filled)
   (?r label ?n)))
+
+
+;; Set color, shape, etc. for arrays and array elements
+
+(rule
+ (name array-gv-attr-rule)
+ (attach-to is-elem-of)
+ (pred
+  (?e is-elem-of ?a))
+ (add
+  (print array-gv-attr-rule ?a)
+  (?a shape trapezium)
+  (?e shape rectangle)
+  (?e color paleturquoise)))
+
+;; fnext ("flat" next, does not loop like next does)
+;;
+;; With the not clause, we remove the need to assert then retract,
+;; which is to some degree definitionally superior, but has ordering/consistency
+;; issues.
+
+(rule
+ (name fnext-rule)
+ (local)
+ (attach-to next)
+ (pred
+  (?x next ?y))
+ (not							;; If we remove this not, then can use rule below, which
+								;; deletes the undesired edge. Raises interesting temporal-logical questions
+  (?y zero))
+ (add
+  (print fnext-rule ?x ?y)
+  (?x fnext ?y)))
+
+(comment 
+(rule
+ (name fnext-del-rule)
+ (pred
+  (?x fnext ?y)
+  (?y zero))
+ (add
+  (print fnext-del-rule ?x ?y)
+  (?y fnext-del-run))
+ (del
+  (?x fnext ?y)))
+)
 
 ;; These rules set an index number for the array elements and label the nodes with that index number
 

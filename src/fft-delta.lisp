@@ -23,8 +23,10 @@
 
 (rule
  (name fft-rule-delta2)
- ;; (local)
- (root-var ?x)
+ (attach-to fft)
+ (attach-to color)
+ (attach-to next-color)
+ ;; (root-var ?x)
  (pred
   (?x fft ?y)
   (?x color ?c)
@@ -55,7 +57,11 @@
 
 (rule
  (name fft-rule-delta4)		;; Propagate color and rand along weave-next
- ;; (local)
+ (attach-to weave-next)
+ (attach-to color)
+ (attach-to rand)
+ (attach-to center-up)
+ (attach-to next-color)
  (pred
   (?x weave-next ?y)
   (?x color ?c)
@@ -69,7 +75,8 @@
 
 (rule
  (name fft-rule-delta5)
- ;; (local)
+ (attach-to d)
+ (attach-to casz-ref)
  (pred
   (?x d ?y)
   (?x casz-ref ?z))
@@ -79,7 +86,8 @@
 
 (rule
  (name fft-rule-delta6)
- ;; (local)
+ (attach-to d-casz)
+ (attach-to casns-ref)
  (pred
   (?x d-casz ?y)
   (?y casns-ref ?z))

@@ -792,8 +792,9 @@ good class and var names for the code, to avoid confusion.
 Intersection on sets can be defined as the largest common subset
 between two sets. It can be shown that the subset relation on the
 powerset forms a lattice, and that thus there exists a unique such
-set. However this definition does not hold for qets, and iterseciton is not necessarily unique. E.g,
-(1 2 a b 3 4) qet-intersect (5 6 b a 7 8) could be (a) or (b). 
+set. However this definition does not hold for qets, and itersection
+is not necessarily unique. E.g, (1 2 a b 3 4) qet-intersect (5 6 b a 7
+8) could be (a) or (b).
 
 
 qet-intersect (qi) definition:
@@ -815,9 +816,9 @@ We define the following properties:
   like set intersection where the set of possible common subsets is
   not unique.
 
-- First define a subqet of a qet q, analogously to subsets, as all
-  subsets of q when considered as a multiset, while retaining
-  order. So for instance:
+- First define a subqet of a qet q, analogously to a subset, as any
+  subset of q when considered as a multiset, while retaining order. So
+  for instance:
 
 	subqets((1 1 2 3)) = {(1)(2)(3)(1 1)(1 2)(1 3)(2 3)(1 1 2)(1 2 3)(1 1 2 3)}
 
@@ -982,6 +983,71 @@ See top-obj.lisp -- all defc's inherit from it
    ...code...)
 
 |#
+----------------------------------------------------------
+9/12/22 -- Began these Hoss doc and notes, beyond the file notes above
+
+Override/"Virtual" Methods
+--------------------------
+Superclass methods maybe overridden, ala "virtual functions" but the
+call site needs to be object-invoked, i.e., (! (self f) x) rather than
+just (f x). Provide automatic way to do this, via marking the method
+"overridable"?  
+
+Class constructor args
+----------------------
+New model combines arg lists from the class inheritance
+chain. Effectively, we only allow required and keyword args. The lower
+make functions accept a list of args from the current class and go in
+bottom-up, left-to-right order, gathering all the required args in
+that manner, and gethering all keyword args at the end of the arg
+list.
+
+&optional and &rest won't work but they are not detected. Similarly
+duplicate vars are not detected.  Use of these constructs likely will
+result in errors downstream.
+
+Example:
+
+(defc x nil (a b &key c)
+  (let ()
+	(defm f ()
+	  (list a b c))))
+
+(defc y x (d e f &key (g 42) h)
+  (let ()
+	(defm g ()
+	  (list a b c d e f g  h))))
+
+(defc z y (i j)
+  (let ()
+	(defm h ()
+	  (list a b c d e f g h i j))))
+
+#'make-x
+#<FUNCTION MAKE-X (A B &KEY C) ...
+#'make-y
+#<FUNCTION MAKE-Y (D E F A B &KEY (G 42) H C)...
+#'make-z
+#<FUNCTION MAKE-Z (I J D E F A B &KEY (G 42) H C)
+
+This seems to work pretty well. Wave equation stuff from poly.lisp:
+
+(defc differential-equation nil (nsize msize file c &key 2d (mfrac 0) (yscale 1000.0) (unit-pulse-loc 0))
+(defc euler-bernoulli-beam-equation differential-equation ()
+(defc wave-equation differential-equation ()
+(defc damped-wave-equation differential-equation (&key (damping-coeff 0))
+
+The damped class adds in the damping coeff, and we can pass it in with all the other args, e.g.:
+
+(let ((msize 80))
+  (setq x (make-damped-wave-equation 1000000 msize
+									 "x55.wav"
+									 .999
+									 :yscale 1e3
+									 :mfrac 0
+									 :unit-pulse-loc (/ msize 10)
+									 :damping-coeff 5e-5))
+  (! (x run)))
 
 ----------------------------------------------------------
 2/15/17 -- Got rid of partial-match code based on envs and cross-aux2
@@ -1012,7 +1078,7 @@ happen to take the newer edge first, stranding the old one.
 
 Another experiment is to disable a rule if >N edges have been produced
 since its last edge-producing match. This requires the ordering to be
-working well, and really need to be redesigned as a btree to do it
+working well, and really needs to be redesigned as a btree to do it
 right. This is not the first time I exprimented with throwing out
 rules heuristcially, and none has worked out. The method here may have
 promise, and I might return to something like it.
@@ -1351,6 +1417,48 @@ java -Xmx4000m -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
 
 sbcl -- Steel Bank Common Lisp
 
+Looks likes it accepts very large heaps. See below. 
+Emits many warnings on builds.
+Considerably faster than clisp. Not clear if faster than abcl.
+
+sbcl --help
+Usage: sbcl [runtime-options] [toplevel-options] [user-options]
+Common runtime options:
+  --help                     Print this message and exit.
+  --version                  Print version information and exit.
+  --core <filename>          Use the specified core file instead of the default.
+  --dynamic-space-size <MiB> Size of reserved dynamic space in megabytes.
+  --control-stack-size <MiB> Size of reserved control stack in megabytes.
+
+Common toplevel options:
+  --sysinit <filename>       System-wide init-file to use instead of default.
+  --userinit <filename>      Per-user init-file to use instead of default.
+  --no-sysinit               Inhibit processing of any system-wide init-file.
+  --no-userinit              Inhibit processing of any per-user init-file.
+  --disable-debugger         Invoke sb-ext:disable-debugger.
+  --noprint                  Run a Read-Eval Loop without printing results.
+  --script [<filename>]      Skip #! line, disable debugger, avoid verbosity.
+  --quit                     Exit with code 0 after option processing.
+  --non-interactive          Sets both --quit and --disable-debugger.
+Common toplevel options that are processed in order:
+  --eval <form>              Form to eval when processing this option.
+  --load <filename>          File to load when processing this option.
+
+User options are not processed by SBCL. All runtime options must
+appear before toplevel options, and all toplevel options must
+appear before user options.
+
+For more information please refer to the SBCL User Manual, which
+should be installed along with SBCL, and is also available from the
+website <http://www.sbcl.org/>.
+
+c:\Users\lstabile\hmachine\src> sbcl --dynamic-space-size 3000
+
+Ran sbcl --dynamic-space-size 8000, and used with 200-level rule-30 run.
+		Failed!
+Ran sbcl --dynamic-space-size 16000, and used with 200-level rule-30 run.
+	Succeeded, and got a dump of y.gv (with center-up) and y1.gv
+	(without center-up). Each was too big for neato, so no graphics.
   
 ----------------------------------------------------------
 3/26/19 -- Rule copying
@@ -1541,7 +1649,7 @@ optimization in the kernel will suffice.
 
 I would like to submit a set of graphs (gv files) to Graphviz for
 display in their gallery. I propose to base this on the fft
-butterflies and rule 30. One thing I souhgt to resxolve is to shpow
+butterflies and rule 30. One thing I sought to resolve is to show
 that the butterfly diagram I generate is isomorphic to the standard
 form that appears in many books, e.g., Opp 1975. After much effort to
 generate array indices which can be used to correlate the nodes and
@@ -1550,10 +1658,46 @@ edges, I then used a graphviz editing tool, the Qt Visual Graph Editor
 be usable.
 
 The file fft-8-with-indices.gv (and subsequent fft-8-with-indices.svg)
-show the original graphviz-produce layout. fft-8-with-indices.xgr
+show the original graphviz-produced layout. fft-8-with-indices.xgr
 shows the hand-edited form thereof, where I moved around edges and
 nodes until I got a diagram which shows the input array in normal
 order and tne output array in bit-reversed order. This diagram is
-identical to that in Opp 1975 page 300 fig. 6.12.
+identical to that in Opp 1975 page 300 fig. 6.12.The app used for this
+is the "Qt Visual Graph Editor", C:\Program
+Files\QVGE\bin\qvgeapp.exe.
 
 Details of fft and rule 30 follow.
+
+
+g10.gv -- 125-level rule-30. g10.svg took about 3 hours to produce:
+"c:\Program Files (x86)\Graphviz2.38\bin\neato.exe" g10.gv -s -Tsvg | sed -e "s/<svg.*$/\<svg/" > g10.svg
+g10.gv took awhile to produce. Higher than that and Clisp ran out of
+space. This was 2/25/21 and I'm working on further efficiencies.
+
+----------------------------------------------------------
+9/20/22 Papers on nerdlynotions
+
+Noticed that links in the full paper hmachine.docx (and posted
+hmachine.pdf) were stale and needed updating.
+
+The original paper and the target of the link is in
+c:\Users\lstabile\h (~/h). The paper is ~/h/hmachine.docx. This should
+remain the ground source file.  The link should be to ~/h/pub.
+
+So ~/h should not be deleted nor its name changed.
+
+On 9/20/22:
+
+	Copied ~/h/pub to google drive/H-Machine. The link is:
+		https://drive.google.com/drive/folders/1nbd3awkaKdWRUWhX1XA87uz6R5Qzkriu?usp=sharing
+
+	Removed ieee version of h-machine from nerdlynotions. Doesn't
+		seem to be any point in showing it there.
+
+	Updated ~/h/hmachine.docx with new links and produced ~/h/hmachine.pdf therefrom.
+
+	Copied ~/h/hmachine.pdf to ~/hmachine/doc, replacing the on there,
+		for checking to github.
+
+Should have the goal of referencing all this stuff to github at some
+point -- when I get to updating the paper(s).

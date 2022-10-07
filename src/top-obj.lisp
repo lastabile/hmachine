@@ -6,5 +6,3 @@
 	  self)
 	(defm init ()
 	  nil)))
-
-  

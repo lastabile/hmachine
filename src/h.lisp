@@ -1092,9 +1092,13 @@
 				  (new-edges nil)
 				  (matched-edges nil))
 			  (defr
+				(defl while (thunk)
+				  (let ((r (funcall thunk)))
+					(when r
+					  (while thunk))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
-					(lambda (m s e p)
+					(lambda (m s e p d)
 					  (setq new-edges (hunion new-edges e))
 					  (setq matched-edges (hunion matched-edges (mapunion (lambda (edges) edges) p)))
 					  (when (or (and (not (eq match-status :new-edges))
@@ -1103,7 +1107,8 @@
 									 (eq s :no-new-edges)))
 						(setq match-status s))
 					  (when m
-						(setq r t)))))
+						(setq r t))
+					  d)))
 				(cond
 				 (only-these-rules
 				  (dolist (rule only-these-rules)
@@ -1128,9 +1133,21 @@
 				 ((or (eq rule-mode :local-only)
 					  (eq rule-mode :local-global))
 				  (let ()
-					(let ((rules (hget-all node 'rule)))
-					  (dolist (rule rules)
-						(m-and-e rule node)))
+
+					(let ((evaled-rules nil))
+					  (while
+						  (lambda ()
+							(block b
+							  (let ((rules (set-subtract (hget-all node 'rule) evaled-rules)))
+								(dolist (rule rules)
+								  (let ((r (m-and-e rule node)))
+									(setq evaled-rules (cons rule evaled-rules))
+									(when r
+									  ;; (print (list 'refresh-list node rule (hget rule 'name) rules (hget-all node 'rule)))
+									  (return-from b t)
+									  )))
+								nil)))))
+
 					(when (not (eq rule-mode :local-only))
 					  (let ((global-rule-pool (hget node 'global-rule-pool)))
 						(when global-rule-pool
@@ -1729,10 +1746,19 @@
 											  (! (new-edges insert) add-node new-edge)))))
 									  ;; (print new-node-hash)
 									  )))))
+						  ;; 3/2/21 Moved it back. Lots of redundant prints, e.g., add-inverse
+						  ;; 3/1/21 Moved the print to here from below (just
+						  ;; inside the next "when") so that we get a
+						  ;; print when it's the only edge in an
+						  ;; add. It does not look like it will cause
+						  ;; redundant prints, but we'll see how it
+						  ;; works out.
+						  ;; (dolist (p print-list)
+						  ;; (print p))
 						  (when (not (= (hash-table-count all-node-hash) 0))
-							(setq r t)
 							(dolist (p print-list)
 							  (print p))
+							(setq r t)
 							(let ((me (matched-edges pred-edges env)))
 							  (setq matched-edges (cons me matched-edges))
 							  (setq matched-and-new-edges-env (cons (list me (! (env-new-edges results))) matched-and-new-edges-env)))
@@ -1795,25 +1821,29 @@
 	
 	  ;; Delete edges after evaluating their elements as vars. 
 	  ;; First evaluates not-edges and for each env if any not-edge exists, then bail from that env
+	  ;; Returns t if any edges were deleted, else nil
 
 	  (defm del-consequent-edges (edges not-edges envlist)
-		(dolist (env envlist)
-		  (block xxx
-			(dolist (edge not-edges)
-			  (let ((not-edge 
-					 (mapcar (lambda (node)
-							   (env-lookup node env))
-							 edge)))
-				(when (edge-exists not-edge)
-				  (return-from xxx nil))))
-			(dolist (edge edges)
-			  (let ((del-edge 
-					 (mapcar (lambda (node)
-							   (env-lookup node env))
-							 edge)))
-				(rem-edge del-edge)
-				(! (env-triggered-table removed-edge) del-edge)))))
-		nil)
+		(let ((r nil))
+		  (dolist (env envlist)
+			(block b
+			  (dolist (edge not-edges)
+				(let ((not-edge 
+					   (mapcar (lambda (node)
+								 (env-lookup node env))
+							   edge)))
+				  (when (edge-exists not-edge)
+					(return-from b nil))))
+			  (dolist (edge edges)
+				(let ((del-edge 
+					   (mapcar (lambda (node)
+								 (env-lookup node env))
+							   edge)))
+				  (when del-edge
+					(rem-edge del-edge)
+					(setq r t))
+				  (! (env-triggered-table removed-edge) del-edge)))))
+		  r))
 
 	  (defm trace-rule (rule-name)
 		(add-edge `(rule-trace ,rule-name)))
@@ -1854,12 +1884,13 @@
 	  (defm get-matched (rule-node)
 		(! (rule-stats get-matched) rule-node))
 
-	  ;; Calls (cont <edge-creation-status> <match-status> <new-edges> <matched-edges>)
+	  ;; Calls (cont <edge-creation-status> <match-status> <new-edges> <matched-edges> <edges-were-deleted>)
 	  ;; 
 	  ;; <edge-creation-status> == t if any new edges were created, else nil
 	  ;; <match-status> == (match-status)
 	  ;; <new-edges> == edges created
 	  ;; <matched-edges> == of form (edges ...), one set of edges per env
+	  ;; <edges-were-deleted> == t if any edges were deleted, else nil
 
 	  (defm match-and-execute-rule (rule-node obj-node &key cont)
 		(bool-timer 'match-and-execute-rule-true 'match-and-execute-rule-false 
@@ -1867,7 +1898,8 @@
 			(let ((r nil)
 				  (match-status nil)
 				  (new-edges nil)
-				  (matched-edges nil))
+				  (matched-edges nil)
+				  (edges-were-deleted nil))
 			  (when (not (edge-exists `(,rule-node disabled)))
 				(let ((rule-name (hget rule-node 'name)))
 				  (when (or am-traced
@@ -1886,7 +1918,7 @@
 							(update-matched rule-node)
 							(when (edge-exists `(rule-trace ,rule-name))
 							  (print `(rule-trace match-and-execute-rule matched rule ,rule-node ,rule-name envlist ,envlist)))
-							(del-consequent-edges del-list not-list envlist)
+							(setq edges-were-deleted (del-consequent-edges del-list not-list envlist))
 							(add-consequent-edges obj-node pred-list pred-node-list add-list add-node-list not-list rule-node envlist :cont
 							  (lambda (m x-new-edges x-matched-edges matched-and-new-edges-env)
 								(when m
@@ -1927,7 +1959,7 @@
 						  (setq match-status :failed)
 						  (update-failed rule-node)
 						  )))))
-			  (funcall cont r match-status new-edges matched-edges)))))
+			  (funcall cont r match-status new-edges matched-edges edges-were-deleted)))))
 
 	  (defm match-and-execute-rule-on-edges (rule-node obj-edges &key cont)
 		(timer 'match-and-execute-rule-on-edges
@@ -2880,7 +2912,7 @@
 					  (setq add-to-global-node t))
 					 ((eq clause-type 'attach-to)
 					  (pushe (add-edge `(,rule attach-to ,(second clause))))
-					  (setq add-to-node (second clause)))
+					  (setq add-to-node (cons (second clause) add-to-node)))
 					 ((member clause-type '(add) :test #'eq)
 					  (dolist (edge (rest clause))
 						(let ((edge (xform-std-vars edge)))
@@ -2954,7 +2986,8 @@
 			  (when (null (hget rule 'root-var))
 				(pushe (addraw rule 'root-var nil)))
 			  (if add-to-node
-				  (addraw add-to-node 'rule rule)
+				  (dolist (n add-to-node)
+					(addraw n 'rule rule))
 				  (let ()
 					(when (not local)
 					  (addraw global-rule-pool 'grp-rule rule))
@@ -4108,19 +4141,23 @@
 
 	)))
 
+;; This defstruct was inside the rule-stats defc, but seems to be
+;; somewhat faster on the outside. Conjecture is the compiler can't
+;; optimize-out runtime redef. See similar comment herein about sbcl.
+
+(defstruct rule-stats-entry
+  (tested 0)
+  (matched 0)
+  (new-edges 0)
+  (not-new-edges 0)
+  (new-edges-max-expand-len 0)
+  (last-expand-len 0)
+  (failed 0))
+
 (defc rule-stats nil (graph)
   (let ((rule-stats-table (make-sur-map))
 		(all-rules-tested 0)
 		(all-rules-new-edges 0))
-
-	(defstruct rule-stats-entry
-	  (tested 0)
-	  (matched 0)
-	  (new-edges 0)
-	  (not-new-edges 0)
-	  (new-edges-max-expand-len 0)
-	  (last-expand-len 0)
-	  (failed 0))
 
 	(defm get-entry (rule-node)
 	  (let ((entry (! (rule-stats-table lookup-one) rule-node)))
@@ -4132,6 +4169,8 @@
 	(defm rule-stats (&optional (sort-colno 1))
 	  (defr
 		(defl symbol< (x y) (string< (symbol-name x) (symbol-name y)))
+		(defl div (x y)
+		  (if (= y 0) 0 (/ x y)))
 		(let ((m 0))
 		  (let ((info (mapcan (lambda (l) 
 								(let ((x (env-lookup '?x l)))
@@ -4144,7 +4183,9 @@
 												  (rule-stats-entry-new-edges e)
 												  (rule-stats-entry-not-new-edges e)
 												  (rule-stats-entry-failed e)
-												  (rule-stats-entry-new-edges-max-expand-len e)))))))
+												  (rule-stats-entry-new-edges-max-expand-len e)
+												  (div (* (float (rule-stats-entry-new-edges e)) 100) (float (rule-stats-entry-tested e)))
+												  (div (* (float (rule-stats-entry-not-new-edges e)) 100) (float (rule-stats-entry-matched e)))))))))
 							  (! (graph query) '((?x type rule))))))
 			(let ((info (sort info (lambda (x y)
 									 (let ((x (nth sort-colno x))
@@ -4154,17 +4195,19 @@
 										   (> x y)))))))
 			  (let ((s 10)
 					(m (+ m 2)))
-				(format t "~%name~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtmax-expand-len~%"
-						(+ m (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)))
+				(format t "~%name~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtmax-expand-len~vtefficiency%~vtredundancy%~%"
+						(+ m (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)) (+ m 6 (* s 6)) (+ m 8 (* s 7)))
 				(dolist (x info)
-				  (format t "~%~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~a"
+				  (format t "~%~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~,2f~vt~,2f"
 						  (nth 0 x) (+ m (* s 0))
 						  (nth 1 x) (+ m (* s 1))
 						  (nth 2 x) (+ m (* s 2))
 						  (nth 3 x) (+ m (* s 3))
 						  (nth 4 x) (+ m (* s 4))
 						  (nth 5 x) (+ m (* s 5))
-						  (nth 6 x))))))
+						  (nth 6 x) (+ m 6 (* s 6))
+						  (nth 7 x) (+ m 8 (* s 7))
+						  (nth 8 x))))))
 		  nil)))
 
 	(defm update-tested (rule-node)
@@ -4664,6 +4707,23 @@
 	  (let ((preds (! ((! (g get-rule-components) rule-node) preds))))
 		(let ((s (sort preds (lambda (x y) (< (sxhash x) (sxhash y))))))
 		  (symcat nest-prefix '- (! (g hget) rule-node 'name) '- (first (first s))))))
+
+	;; Given a file <x>.gv, produce <x>.svg. Current wd is used unless given absolute paths
+
+	(defm gv-to-svg (file-root)
+	  (defr
+		(defl cat (&rest x)
+		  (apply #'concatenate 'string x))
+		(let ((cmd (format nil (cat "\"c:/Program Files (x86)/Graphviz2.38/bin/dot.exe\" ~a.gv | "
+									"\"c:/Program Files (x86)/Graphviz2.38/bin/gvpack.exe\" -m0 | "
+									"\"c:/Program Files (x86)/Graphviz2.38/bin/neato.exe\" -s -n2 -Tsvg | "
+									"sed -e \"s/<svg.*$/\<svg/\" > ~a.svg")
+						   file-root file-root)))
+		  (let ((cmd (format nil "sh -c '~a'" cmd)))
+			(shell cmd)))))
+
+;;  "c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" x.gv | "c:\Program Files (x86)\Graphviz2.38\bin\gvpack.exe" -m0  | "c:\Program Files (x86)\Graphviz2.38\bin\neato.exe" -s  -Tsvg | sed -e "s/<svg.*$/\<svg/" > x.svg
+
 
 	;; "c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" -Tjpeg fe.gv -o fe.jpg
 	;; (let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "yyy3.gv" '(sigma even-func)))
@@ -6325,32 +6385,14 @@
 (defun memqq (x l)
   (member x l :test (lambda (x y) (and (eq (first x) (first y)) (eq (second x) (second y))))))
 
-(defun hash-table-to-list (h)
-  (let ((r nil))
-	(maphash (lambda (k v)
-			   (setq r (cons (list k v) r)))
-			 h)
-	r))
+;; Was inside of perf-hash let but moved out in case performance will improved
 
-(defun hash-table-key-to-list (h)
-  (let ((r nil))
-	(maphash (lambda (k v)
-			   (setq r (cons k r)))
-			 h)
-	r))
-
-(defun hash-table-value-to-list (h)
-  (let ((r nil))
-	(maphash (lambda (k v)
-			   (setq r (cons v r)))
-			 h)
-	r))
+(defstruct timerec 
+  (sum 0)
+  (count 0)
+  (type 'time)) ;; { time, gen }
 
 (let ((perf-hash (make-hash-table :test #'eq)))
-  (defstruct timerec 
-	(sum 0)
-	(count 0)
-	(type 'time)) ;; { time, gen }
   (let ((display-order		;; Any not in this list go on the end
 		 '(
 		   main
@@ -6621,22 +6663,68 @@
 	(defm init ()
 	  (objgraph-init))))
 
-(defc the-graph base-graph nil
+(defc foundation base-graph nil
+  (let ()
+	(defm init ()
+	  (base-graph-init)
+	  (add-natural-number-edges 20)
+	  (read-rule-file "foundation.lisp"))))
+
+(defc rule-30-test foundation nil
+  (let ()
+	(defm init ()
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (clear-log-value-pkg)
+	  (foundation-init)
+	  (read-rule-file "rule30.lisp")
+	  )
+	(defm run (levels)
+	  (add-natural-number-edges levels)
+	  (! (g define-rule) `(rule
+						   (name init)
+						   (attach-to global-node)
+						   (pred
+							(global-node rule ?r)
+							(?r name init)
+							(?r1 name add-inverse-is-member-of)
+							(?r2 name add-inverse-is-elem-of)
+							(is rule ?r3)
+							(?r3 name is-0-param)
+							(is rule ?r4)
+							(?r4 name is-1-param))
+						   (add
+							(print init)
+							(r level ,levels)
+							(r rule-30-top)
+							(r local-rule-pool local-rule-pool-node)
+							(r global-rule-pool global-rule-pool-node))
+						   (del
+							(global-rule-pool-node grp-rule ?r1)
+							(global-rule-pool-node grp-rule ?r2)
+							(is rule ?r3)
+							(is rule ?r4)
+							(global-node rule ?this-rule))))
+	  (timer 'main
+		(lambda ()
+		  (! (g execute-global-all-objs-loop)))))))
+
+(defc the-graph foundation nil
   (let ()
 
 	(defm init ()
-	  (base-graph-init)
+	  (foundation-init)
 	  (clear-perf-stats) ;; Note the perf stats are global
-	  (add-natural-number-edges 20)
 	  (do-defg)
-	  (read-rule-file "tree.lisp")  ;;; 8/11/20 -- Fixed issues with this anbd it should hold as the default now
+	  (read-rule-file "fft.lisp")
+	  (read-rule-file "tree.lisp")  ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
 	  ;; (read-rule-file "globaltree.lisp")
 	  (read-rule-file "rule30.lisp")
 	  (read-rule-file "fft-delta.lisp")
 	  (read-rule-file "fe.lisp")
 	  (read-rule-file "copy-rule.lisp")
 	  
-	  (read-rule-file "display-data.lisp")
+	  ;; (read-rule-file "display-rules.lisp")
 
 	  ;;; (read-rule-file "gettysburg-address.lisp")
 
@@ -6647,220 +6735,6 @@
 	(defm do-defg ()
 	  (defg
 		'(
-		  ;; Don't have a null add-rule-link capability for now -- so we always do
-
-		  (rule
-		   (name data)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node rule ?r)
-			(?r name data)
-			(?light new-node sn5)
-			(?switch new-node sn6)
-			(?room new-node sn7)
-			(?add-out new-node sn8)
-			(?add new-node sn9)
-			(?add2 new-node sn10))
-		   (add
-			(print data)
-			(off light-illum-mapping unlit)
-			(on  light-illum-mapping lit)
-			(occupied room-switch-mapping on)
-			(unoccupied room-switch-mapping off)
-			(?light is switch-room-obj)
-			(?light name light1)
-			(?light state undefined)
-			(?light type light)
-			(?switch is switch-room-obj)
-			(?switch type switch)
-			(?switch name switch1)
-			(?switch state undefined)
-			(?switch connected-to ?light)
-			(?room is switch-room-obj)
-			(?room type room)
-			(?room name room1)
-			(?room contains ?switch)
-			(?room state undefined)
-			(?add-out type add-out)
-			(?add-out name add-out1)
-			(?add-out value 0)
-			(?add name add1)
-			(?add type add)
-			(?add input1 1)
-			(?add input2 0)
-			(?add output ?add-out)
-			(?add2 name add2)
-			(?add2 type addx)
-			(?add2 input1 0)
-			(?add2 input2 0)
-			(?add2 value 0)
-			(global-node next-color)
-			(+ 1 2 3)
-			(+ 2 2 4)
-			(+ 2 3 5))
-		   (del
-			(global-node rule ?this-rule)))
-
-		  (rule
-		   (name std-notes)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node rule ?r)
-			(?r name std-notes))
-		   (add
-			(print std-notes)
-			(note footer "Copyright (c) 2020 Lawrence Stabile"))
-		   (del
-			(global-node rule ?this-rule)))
-		  
-		  ;; gen-inverse used now 
-
-		  (rule
-		   (name add-parent)
-		   (disabled)
-		   ;; (local)
-		   (pred
-			(?a elem ?e))
-		   (add
-			(print add-parent ?e ?a)
-			(?e is-elem-of ?a)))
-
-		  (rule
-		   (name gen-inverse)
-		   ;; (local)
-		   ;; (disabled)
-		   (attach-to inverse)
-		   (root-var inverse)
-		   (pred
-			(?a inverse ?i))
-		   (add
-			(print gen-inverse ?a ?i)
-			(global-rule-pool-node grp-rule
-								   (rule
-									(name (add-inverse ?i))
-									(root-var ?x)
-									(pred
-									 (?x ?a ?y))
-									(add
-									 (print add-inverse ?a ?i ?x ?y)
-									 (?y ?i ?x)))))
-		   (del
-			;; (?a global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!
-			))
-
-		  (rule
-		   (name inverse-data)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node rule ?r)
-			(?r name inverse-data))
-		   (add
-			(print inverse-data)
-			(member inverse is-member-of)
-			;; (member global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!!!
-			(elem inverse is-elem-of)
-			;; (elem global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!!!
-			))
-
-		  (rule
-		   (name ev-init-gen)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node local-rule-pool ?p)
-			(?p lrp-rule ?od-next)
-			(?od-next name od-next))
-		   (add
-			(print ev-init-gen)
-			(global-rule-pool-node grp-rule
-								   (rule
-									(name ev-init)
-									;; (local)
-									(root-var ?e0) ;; was ?a
-									(pred
-									 (?a elem ?e0)
-									 (?e0 is-elem-of ?a)
-									 (?e0 zero))
-									(add
-									 (print ev-init ?e0)
-									 (?e0 ev)
-									 (?e0 rule ?od-next))
-									(del
-									 (?this-obj rule ?this-rule)))))
-		   (del
-			(?this-obj rule ?this-rule)))
-
-		  (rule
-		   (name od-next)
-		   (local)
-		   ;; (root-var ?e0)
-		   (pred
-			;; (?a elem ?e0)				;; !!!!!!!!!!!!! 9/19/20 -- in removing this the system still works, and the expansion length shrinks by a lot, but still not constant across trials
-			;; (?a elem ?e1)
-			(?e0 is-elem-of ?a)
-			(?e1 is-elem-of ?a)
-			(?e0 next ?e1)
-			(?e0 ev))
-		   (add
-			(print od-next ?e1 ?root-var)
-			(?e1 od))
-		   (del
-			(?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name ev-next)
-		   (local)
-		   ;; (root-var ?e0)
-		   (pred
-			;; (?a elem ?e0)				;; !!!!!!!!!!!!!!!!!!!! -- ditto 
-			;; (?a elem ?e1)
-			(?e0 is-elem-of ?a)
-			(?e1 is-elem-of ?a)
-			(?e0 next ?e1)
-			(?e0 od))
-		   (add
-			(print ev-next ?e1 ?root-var)
-			(?e1 ev))
-		   (del
-			(?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name ev-od-opt)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node local-rule-pool ?p)
-			(?p lrp-rule ?od-next)
-			(?od-next name od-next)
-			(?p lrp-rule ?ev-next)
-			(?ev-next name ev-next))
-		   (add
-			(print ev-od-opt)
-			(?od-next add (?e1 rule ?ev-next))
-			(?ev-next add (?e1 rule ?od-next)))
-		   (del
-			(?this-obj rule ?this-rule)))
-
-		  (rule
-		   (name ev-od-obj-rule)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node local-rule-pool ?p)
-			(?p lrp-rule ?ev-init)
-			(?ev-init name ev-init))
-		   (add
-			(print ev-od-obj-rule)
-			(ev-od-obj xrule ?ev-init)
-			)
-		   (del
-			(global-node rule ?this-rule)))
-
 		  (rule
 		   (name add-rule)
 		   (pred
@@ -6947,855 +6821,12 @@
 		   (del
 			(global-node rule ?this-rule)))
 
-		  (rule
-		   (name is-1-param)
-		   (local)
-		   (attach-to is)
-		   (pred
-			(?x is ?y ?p ?v)
-			(?y rule ?r))
-		   (del
-			(?x is ?y ?p ?v))
-		   (add
-			(print is-1-param ?this-obj ?x ?y ?r ?p ?v)
-			(?x rule ?r)
-			(?x ?p ?v)
-			(?x from-is-1-param-rule ?r)))
-
-		  (rule
-		   (name is-0-param)
-		   (local)
-		   (attach-to is)
-		   (pred
-			(?x is ?y)
-			(?y rule ?r))
-		   (del
-			(?x is ?y))
-		   (add
-			(print is-0-param ?this-obj ?x ?y ?r)
-			(?x rule ?r)
-			(?x from-is-0-param-rule ?r)))
-
-		  (rule
-		   (name is-0-param-xrule)
-		   (local)
-		   (attach-to is)
-		   (pred
-			(?x is ?y)
-			(?y xrule ?r))
-		   (del
-			(?x is ?y))
-		   (add
-			(print is-0-param-xrule ?this-obj ?x ?y ?r)
-			(?x rule ?r)
-			(?x from-is-0-param-xrule-rule ?r)))
-
-		  (rule
-		   (name is-not)
-		   (disabled)
-		   (pred
-			(?x is-not ?y) ;; Put this...	; ; ; ;
-			(?x is ?y)	   ;; ...and detect this ; ; ; ;
-			(?y rule ?r)
-			(?x rule ?r))
-		   (add
-			(print is-not ?x ?y ?r))
-		   (del
-			(?x is ?y)
-			(?x is-not ?y)
-			(?x rule ?r)
-			(?this-obj rule ?this-rule)))
-
-		  ;; An array is a node denoted in a rule as ?a with a set of nodes
-		  ;; denoted by property elem related by next
-
-		  (rule
-		   (name even-new)
-		   (local)
-		   ;; (root-var ?a)
-		   (root-var ?e0)
-		   (pred
-			(?a even ?a1)
-			(?e0 is-elem-of ?a)
-			(?e0 ev)
-			(?e0 value ?v)
-			(?nn1 new-node sn1)
-			(?e0 local-rule-pool ?p)
-			(?p lrp-rule ?self-cycle)
-			(?p lrp-rule ?even-zero)
-			(?p lrp-rule ?odd-zero)
-			(?p lrp-rule ?odd-next)
-			(?p lrp-rule ?even-next)
-			(?self-cycle name self-cycle)
-			(?even-zero name even-zero)
-			(?odd-zero name odd-zero)
-			(?odd-next name odd-next)
-			(?even-next name even-next))
-		   (add
-			(print even-new ?this-obj ?a ?e0 ?nn1)
-			(?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-			(?a1 elem ?nn1)
-			(?nn1 value ?v)
-			(?nn1 ref ?e0)
-
-			(?nn1 en-ref ?e0)
-			(?nn1 oe-ref ?e0)
-			(?nn1 ref ?e0)
-
-			(?nn1 is ev-od-obj)
-			(?nn1 rule ?self-cycle)
-			(?nn1 rule ?even-zero)
-			(?nn1 rule ?odd-zero)
-			(?nn1 rule ?odd-next)
-			(?nn1 rule ?even-next)
-			)
-		   (del
-			 (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name even-next)
-		   (local)
-		   (root-var ?ae0)
-		   (pred
-			(?a even ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae1 is-elem-of ?a1)
-			(?ae0 ref ?e0)
-			(?ae1 ref ?e1)
-			(?e0 is-elem-of ?a)
-			(?e0.5 is-elem-of ?a)
-			(?e1 is-elem-of ?a)
-			(?e0 next ?e0.5)
-			(?e0.5 next ?e1))
-		   (add
-			(print even-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
-			(?ae0 next ?ae1))
-		   (del
-			;; (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name odd-new)
-		   (local)
-		   ;; (root-var ?a)
-		   (root-var ?e0) ;; Need rule to trigger on element not array to avoid non-det (single match)
-		   (pred
-			(?a odd ?a1)
-			(?e0 is-elem-of ?a)
-			(?e0 od)
-			(?e0 value ?v)
-			(?nn1 new-node sn1)
-			(?e0 local-rule-pool ?p)
-			(?p lrp-rule ?self-cycle)
-			(?p lrp-rule ?even-zero)
-			(?p lrp-rule ?odd-zero)
-			(?p lrp-rule ?odd-next)
-			(?p lrp-rule ?even-next)
-			(?self-cycle name self-cycle)
-			(?even-zero name even-zero)
-			(?odd-zero name odd-zero)
-			(?odd-next name odd-next)
-			(?even-next name even-next))
-		   (add
-			(print odd-new ?a ?e0 ?nn1)
-			(?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-			(?a1 elem ?nn1)
-			(?nn1 value ?v)
-			(?nn1 ref ?e0)
-
-			(?nn1 on-ref ?e0)
-			(?nn1 oe-ref ?e0)
-			(?nn1 ref ?e0)
-
-			(?nn1 is ev-od-obj)
-			(?nn1 rule ?self-cycle)
-			(?nn1 rule ?even-zero)
-			(?nn1 rule ?odd-zero)
-			(?nn1 rule ?odd-next)
-			(?nn1 rule ?even-next)
-			)
-		   (del
-			 (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name odd-next)
-		   (local)
-		   (root-var ?ae0)
-		   (pred
-			(?a odd ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae1 is-elem-of ?a1)
-			(?ae0 ref ?e0)
-			(?ae1 ref ?e1)
-			(?e0 is-elem-of ?a)
-			(?e0.5 is-elem-of ?a)
-			(?e1 is-elem-of ?a)
-			(?e0 next ?e0.5)
-			(?e0.5 next ?e1))
-		   (add
-			(print odd-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
-			(?ae0 next ?ae1))
-		   (del
-			;; (?this-obj rule ?this-rule)
-			))
-
-
-		  (rule
-		   (name even-zero)
-		   (local)
-		   (pred
-			(?a even ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae0 ref ?e0)
-			(?e0 zero))
-		   (add
-			(print even-zero ?this-obj ?a ?a1 ?ae0 ?e0)
-			(?ae0 zero))
-		   (del
-			;; (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name odd-zero)
-		   (local)
-		   (pred
-			(?a odd ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae0 ref ?e1)
-			(?e0 next ?e1)
-			(?e0 zero))
-		   (add
-			(print odd-zero ?this-obj ?a ?a1 ?ae0 ?e0)
-			(?ae0 zero))
-		   (del
-			;; (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name self-cycle)
-		   ;; (disabled)
-		   (local)
-		   ;; (root-var ?ae0)           ;; We get further with just the queue without a root var specified
-		   (pred
-			(?ae0 is-elem-of ?a1)
-			(?ae0 oe-ref ?e1)
-			(?e0 next ?e1)
-			(?e1 next ?e0))
-		   (add
-			(print self-cycle ?ae0 ?a1 ?e0 ?e1)
-			(?ae0 next))
-		   (del
-			;; (?this-obj rule ?this-rule) ;; don't del
-			))
-
-		  (rule
-		   (name odd-new-rule-propagate)
-		   (local)
-		   (root-var ?a)
-		   (pred
-			(?a odd ?a1)
-			(?e0 is-elem-of ?a)
-			(?a local-rule-pool ?p)
-			(?p lrp-rule ?odd-new)
-			(?odd-new name odd-new))
-		   (add
-			(print odd-new-rule-propagate ?a ?e0)
-			(?e0 rule ?odd-new)))
-
-		  (rule
-		   (name even-new-rule-propagate)
-		   (local)
-		   (root-var ?a)
-		   (pred
-			(?a even ?a1)
-			(?e0 is-elem-of ?a)
-			(?a local-rule-pool ?p)
-			(?p lrp-rule ?even-new)
-			(?even-new name even-new))
-		   (add
-			(print even-new-rule-propagate ?a ?e0)
-			(?e0 rule ?even-new)))
-
-		  (rule
-		   (name even-tree-max)
-		   (pred
-			(?x even ?y)
-			(?x odd ?z)
-			(?z weave-next ?y)
-			(?x oe-max))
-		   (add
-			(print even-tree-max ?this-obj ?x ?y)
-			(?y oe-max)))
-
-		  (rule
-		   (name odd-tree-zero)
-		   (pred
-			(?x odd ?y)
-			(?x even ?z)
-			(?y weave-next ?z)
-			(?x oe-zero))
-		   (add
-			(print odd-tree-zero ?this-obj ?x ?y)
-			(?y oe-zero)))
-
-		  (rule
-		   (name odd-even-weave)
-		   (pred
-			(?p0 odd ?x00)
-			(?p0 even ?x01)
-			(?p1 odd ?x10)
-			(?p1 even ?x11)
-			(?x00 oe-zero)
-			(?x11 oe-max)
-			(?p0 oe-zero)
-			(?p1 oe-max)
-			(?p0 level ?l)
-			(?p1 level ?l)
-			(?x00 weave-next ?x01)
-			(?x10 weave-next ?x11))
-		   (add
-			(print odd-even-weave ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
-			(?p1 weave-next ?x00)))
-
-		  (rule
-		   (name weave-next-rule)
-		   (pred
-			(?p0 odd ?x00)
-			(?p0 even ?x01)
-			(?p1 odd ?x10)
-			(?p1 even ?x11)
-			(?x00 weave-next ?x01)
-			(?x10 weave-next ?x11)
-			(?p0 weave-next ?p1))
-		   (add
-			(print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
-			(?x01 weave-next ?x10)))
-
-		  (rule
-		   (name copy-array-struct-next)
-		   (local)
-		   ;; (root-var ?ae0)
-		   (pred
-			(?a copy-array-struct ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae1 is-elem-of ?a1)
-			(?ae0 ref ?e0)
-			(?ae1 ref ?e1)
-			(?e0 is-elem-of ?a)
-			(?e1 is-elem-of ?a)
-			(?e0 next ?e1))
-		   (add
-			(print copy-array-struct-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
-			(?ae0 next ?ae1))
-		   (del
-			;; (?this-obj rule ?this-rule) ;; Don't del
-			))
-
-		  (rule
-		   (name copy-array-struct-next-sing)
-		   (local)
-		   ;; (root-var ?ae0)
-		   (pred
-			(?a copy-array-struct ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae0 ref ?e0)
-			(?e0 is-elem-of ?a)
-			(?e0 next))
-		   (add
-			(print copy-array-struct-next-sing ?a ?a1 ?ae0 ?e0)
-			(?ae0 next)
-			(?e0 casns-ref ?ae0))
-		   (del
-			;; (?this-obj rule ?this-rule)  ;; Don't del
-			))
-
-		  (comment
-		   (rule
-			(name copy-array-struct-zero)
-			(local)	;;;;;;;;;;;;;;;
-			;; (root-var ?ae0) ;;;;;;;;;;;;
-			(pred
-			 (?a copy-array-struct ?a1)
-			 (?ae0 is-elem-of ?a1)
-			 (?ae0 ref ?e0)
-			 (?e0 zero))
-			(add
-			 (print copy-array-struct-zero ?this-obj ?a ?a1 ?ae0 ?e0)
-			 (?ae0 zero)
-			 (?a casz-ref ?ae0))
-			(del
-			 ;; (?this-obj rule ?this-rule) ;; Don't del ;
-			 )))
-
-		  (rule
-		   (name copy-array-struct-zero)
-		   (local)		;;;;;;;;;;;;;;;
-		   ;; (root-var ?ae0) ;;;;;;;;;;;;
-		   (pred
-			(?a copy-array-struct ?a1)
-			(?ae0 is-elem-of ?a1)
-			(?ae0 ref ?e0)
-			(?e0 zero))
-		   (add
-			(print copy-array-struct-zero ?this-obj ?a ?a1 ?ae0 ?e0)
-			(?ae0 zero)
-			(?a1 casz-ref1 ?ae0)
-			(?a casz-ref ?e0))
-		   (del
-			;; (?this-obj rule ?this-rule) ;; Don't del
-			))
-
-		  (rule
-		   (name copy-array-struct-new-gen)
-		   (pred
-			(?a copy-array-struct ?a1)
-			(?a local-rule-pool ?p)
-			(?p lrp-rule ?copy-array-struct-zero)
-			(?p lrp-rule ?copy-array-struct-next)
-			(?p lrp-rule ?copy-array-struct-next-sing)
-			(?copy-array-struct-zero name copy-array-struct-zero)
-			(?copy-array-struct-next name copy-array-struct-next)
-			(?copy-array-struct-next-sing name copy-array-struct-next-sing))
-		   (add
-			(print copy-array-struct-new-gen ?a ?a1)
-			(?a rule
-				(rule
-				 (name (copy-array-struct-new ?a))
-				 (local)
-				 (root-var ?a) ;; Should subst ?a above
-				 ;; (root-var ?e0)
-				 (pred
-				  (?e0 is-elem-of ?a)
-				  (?a level ?l)
-				  (?nn1 new-node sn1))
-				 (add
-				  (print copy-array-struct-new ?a ?a1 ?e0 ?nn1)
-				  (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-				  (?a1 elem ?nn1)
-				  (?nn1 ref ?e0)
-				  (?al level ?l)
-
-				  (?nn1 casn-ref ?e0)
-
-				  (?nn1 rule ?copy-array-struct-zero)
-				  (?nn1 rule ?copy-array-struct-next)
-				  (?nn1 rule ?copy-array-struct-next-sing)
-
-				  )
-				 (del
-				  ;; (?this-obj rule ?this-rule) ;; Don't del
-				  )))))
-
-		  (comment
-		   (rule
-			(name copy-array-struct-new-gen)
-			(pred
-			 (?a copy-array-struct ?a1)
-			 (?a local-rule-pool ?p)
-			 (?p lrp-rule ?copy-array-struct-zero)
-			 (?p lrp-rule ?copy-array-struct-next)
-			 (?p lrp-rule ?copy-array-struct-next-sing)
-			 (?copy-array-struct-zero name copy-array-struct-zero)
-			 (?copy-array-struct-next name copy-array-struct-next)
-			 (?copy-array-struct-next-sing name copy-array-struct-next-sing))
-			(add
-			 (print copy-array-struct-new-gen ?a ?a1)
-			 (global-rule-pool-node grp-rule 
-									(rule
-									 (name (copy-array-struct-new ?a))
-									 ;; (local)
-									 (root-var ?a) ;; Should subst ?a above
-									 ;; (root-var ?e0)
-									 (pred
-									  (?e0 is-elem-of ?a)
-									  (?nn1 new-node sn1))
-									 (add
-									  (print copy-array-struct-new ?a ?a1 ?e0 ?nn1)
-									  (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-									  (?a1 elem ?nn1)
-									  (?nn1 ref ?e0)
-
-									  (?nn1 casn-ref ?e0)
-
-									  (?nn1 rule ?copy-array-struct-zero)
-									  (?nn1 rule ?copy-array-struct-next)
-									  (?nn1 rule ?copy-array-struct-next-sing)
-
-									  )
-									 (del
-									  ;; (?this-obj rule ?this-rule) ;; Don't del
-									  ))))))
-
-		  (comment 
-		   (rule
-			(name copy-array-struct-new)
-			;; (local)
-			(root-var ?a)
-			;; (root-var ?e0)
-			(pred
-			 (?a copy-array-struct ?a1)
-			 (?e0 is-elem-of ?a)
-			 (?nn1 new-node sn1)
-			 (?a local-rule-pool ?p)
-			 (?p lrp-rule ?copy-array-struct-zero)
-			 (?p lrp-rule ?copy-array-struct-next)
-			 (?p lrp-rule ?copy-array-struct-next-sing)
-			 (?copy-array-struct-zero name copy-array-struct-zero)
-			 (?copy-array-struct-next name copy-array-struct-next)
-			 (?copy-array-struct-next-sing name copy-array-struct-next-sing))
-			(add
-			 (print copy-array-struct-new ?a ?a1 ?e0 ?nn1)
-			 (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-			 (?a1 elem ?nn1)
-			 (?nn1 ref ?e0)
-
-			 (?nn1 casn-ref ?e0)
-
-			 (?nn1 rule ?copy-array-struct-zero)
-			 (?nn1 rule ?copy-array-struct-next)
-			 (?nn1 rule ?copy-array-struct-next-sing))
-			(del
-			 ;; (?this-obj rule ?this-rule) ;; Don't del
-			 )))
 
 
 
-		  (rule
-		   (name fft-comb-rule-next-sing)
-		   ;; (disabled)
-		   (local)
-		   ;; (root-var ?ey0)             ;; As with self-cycle, removing the root var allows the queue to get further -- in fact with no further global exec
-		   (pred
-			(?x0 ?x1 fft-comb ?y)
-			(?ef0 is-elem-of ?x0)
-			(?eg0 is-elem-of ?x1)
-			(?ef0 next)
-			(?eg0 next)
-			(?ey0 is-elem-of ?y)
-			(?ey1 is-elem-of ?y)
-			(?ey0 next ?ey1)
-			(?ey0 zero)			  ; Need this to assure a single match
-			(?ef0 ?eg0 fft-hb ?ey0)
-			(?ey0 local-rule-pool ?p)
-			(?p lrp-rule ?fft-comb-rule-next-sing)
-			(?fft-comb-rule-next-sing name fft-comb-rule-next-sing))
-		   (add
-			(print fft-comb-rule-next-sing ?x0 ?x1 ?y ?ef0 ?eg0 ?ey0 ?ey1 ?root-var)
-			(?ef0 ?eg0 fft-hb ?ey1)
-			(?ey1 rule ?fft-comb-rule-next-sing))  ;; Need this to assure rule propagated to next half-butterfly destination
-		   (del
-			 (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name fft-comb-rule-next-gen)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node local-rule-pool ?p)
-			(?p lrp-rule ?fft-comb-rule-next-sing)
-			(?fft-comb-rule-next-sing name fft-comb-rule-next-sing))
-		   (add
-			(print fft-comb-rule-next-gen)
-			(local-rule-pool-node lrp-rule
-								  (rule
-								   (name fft-comb-rule-next)
-								   (local)
-								   (root-var ?ey0) ; Need root var on single output to be sure we get a single match
-								   (pred
-									(?x0 ?x1 fft-comb ?y)
-									(?ef0 is-elem-of ?x0)
-									(?ef1 is-elem-of ?x0)
-									(?eg0 is-elem-of ?x1)
-									(?eg1 is-elem-of ?x1)
-									(?ef0 next ?ef1)
-									(?eg0 next ?eg1)
-									(?ey0 is-elem-of ?y)
-									(?ey1 is-elem-of ?y)
-									(?ey0 next ?ey1)
-									(?ef0 ?eg0 fft-hb ?ey0))
-								   (add
-									(print fft-comb-rule-next ?x0 ?x1 ?y ?ef0 ?ef1 ?eg0 ?eg1 ?ey0 ?ey1)
-									(?ef0 rule ?fft-comb-rule-next-sing)
-									(?ef1 rule ?fft-comb-rule-next-sing)
-									(?eg0 rule ?fft-comb-rule-next-sing)
-									(?eg1 rule ?fft-comb-rule-next-sing)
-									(?ey0 rule ?fft-comb-rule-next-sing)
-									(?ey1 rule ?fft-comb-rule-next-sing)
-									(?ef1 rule ?this-rule)
-									(?eg1 rule ?this-rule)
-									(?ey1 rule ?this-rule)
-									(?ef1 ?eg1 fft-hb ?ey1))
-								   (del
-									(?this-obj rule ?this-rule)
-									))))
-		   (del
-			(?this-obj rule ?this-rule)))
-
-		  (rule
-		   (name fft-comb-rule-zero)
-		   (local)
-		   ;; (root-var ?x0)  ;;;;;;;;;;;;;
-		   (pred
-			(?x0 ?x1 fft-comb ?y)
-			(?e0 is-elem-of ?x0)
-			(?e1 is-elem-of ?x1)
-			(?ey is-elem-of ?y)
-			(?e0 zero)
-			(?e1 zero)
-			(?ey zero)
-			(?x0 local-rule-pool ?p)
-			(?p lrp-rule ?fft-comb-rule-next)
-			(?p lrp-rule ?fft-comb-rule-next-sing)
-			(?fft-comb-rule-next name fft-comb-rule-next)
-			(?fft-comb-rule-next-sing name fft-comb-rule-next-sing))
-		   (add
-			(print fft-comb-rule-zero  ?this-obj ?x0 ?x1 ?y ?e0 ?e1 ?ey)
-			(?e0 rule ?fft-comb-rule-next)
-			(?e0 rule ?fft-comb-rule-next-sing)
-			(?e1 rule ?fft-comb-rule-next)
-			(?e1 rule ?fft-comb-rule-next-sing)
-			(?ey rule ?fft-comb-rule-next)
-			(?ey rule ?fft-comb-rule-next-sing)
-			(?e0 ?e1 fft-hb ?ey))
-		   (del
-			;; (?this-obj rule ?this-rule)
-			))
-
-		  (rule
-		   (name fft-rule-zero)
-		   (local)
-		   (pred
-			(?x fft ?y)
-			(?x level 0)
-			(?x local-rule-pool ?p)
-			(?p lrp-rule ?fft-comb-rule-zero)
-			(?fft-comb-rule-zero name fft-comb-rule-zero))
-		   (add
-			(print fft-rule-zero ?x ?y ?r)
-			(?x copy-array-struct ?y)
-			(?y level 0)
-			(?x d ?y)			;; display-connection
-			(?y rule ?fft-comb-rule-zero))
-		   (del
-			(?this-obj rule ?this-rule)
-			))
-
-		  (comment
-		   (rule
-			(name fft-rule-zero)
-			(local)
-			(pred
-			 (?x fft ?y)
-			 (?x local-rule-pool ?p)
-			 (?p lrp-rule ?copy-array-struct-new)
-			 (?p lrp-rule ?fft-comb-rule-zero)
-			 (?copy-array-struct-new name copy-array-struct-new)
-			 (?fft-comb-rule-zero name fft-comb-rule-zero))
-			(add
-			 (print fft-rule-zero ?x ?y ?r)
-			 (?x copy-array-struct ?y)
-			 (?x d ?y) ;; display-connection
-			 (?x rule ?copy-array-struct-new)
-			 (?y rule ?fft-comb-rule-zero))
-			(del
-			 (?this-obj rule ?this-rule)
-			 )))
-
-		  ;; This rule is global and bare-bones, with no rule-passing
-		  ;; and related optimizations. It's modified explicitly by
-		  ;; the optimizer in fft-delta.lisp.
-
-		  (rule
-		   (name fft-rule)
-		   (pred
-			(?x fft ?y)
-			(?x level ?l)
-			(?l1 sigma ?l)
-			(?nn1 new-node sn1)
-			(?nn2 new-node sn2)
-			(?nn3 new-node sn3)
-			(?nn4 new-node sn4))
-		   (add
-			(print fft-rule ?x ?y ?l)
-			(?x even ?nn1)
-			(?x odd ?nn2)
-			(?nn2 weave-next ?nn1)
-			(?nn1 oe ?x)
-			(?nn2 oe ?x)
-			(?nn1 oev 0)
-			(?nn2 oev 1)
-			(?x copy-array-struct ?y)
-			(?nn1 fft ?nn3)
-			(?nn2 fft ?nn4)
-			(?nn3 ?nn4 fft-comb ?y)
-			(?y level ?l)
-			(?nn1 level ?l1)
-			(?nn2 level ?l1))
-		   (del
-			(?this-obj rule ?this-rule)))
-
-		  (rule
-		   (name fft-top-rule)
-		   (pred
-
-			(?x fft-top)		;; An experiment in symbol-free matching, i.e., looking for the three
-								;; commented-out edges rather than fft-top, for max locality. Works, but slow.
-			;; (?x ?n1)
-			;; (?n1 ?n2)
-			;; (?n2 ?n3)
-			
-			(?x odd ?y)
-			(?x even ?z)
-			(?x rand ?r)
-			(?r level ?level)
-			(?x l ?l))
-		   (add
-			(print fft-top-rule ?x ?y ?z)
-			(note title "FFT Butterflies with Rule-30 Random Deltas")
-			(note fft 2^ ?l points "\\n" rule-30 ?level levels)
-			(?y weave-next ?z)
-			(?x weave-next ?y)
-			(?y oe-zero)
-			(?z oe-max)))
-
-		  (rule
-		   (name clean-fft-rule)
-		   (local)
-		   (pred
-			(?x fft ?y)
-			(?x level ?l)
-			(?l1 sigma ?l)
-			(?nn1 new-node sn1)
-			(?nn2 new-node sn2)
-			(?nn3 new-node sn3)
-			(?nn4 new-node sn4))
-		   (add
-			(?x even ?nn1)
-			(?x odd ?nn2)
-			(?x copy-array-struct ?y)
-			(?nn1 fft ?nn3)
-			(?nn2 fft ?nn4)
-			(?nn3 ?nn4 fft-comb ?y)
-			(?nn1 level ?l1)
-			(?nn2 level ?l1)))
-
-		  (rule
-		   (name clean-fft-comb-rule-zero)
-		   (local)
-		   (pred
-			(?x0 ?x1 fft-comb ?y)
-			(?e0 is-elem-of ?x0)
-			(?e1 is-elem-of ?x1)
-			(?ey is-elem-of ?y)
-			(?e0 zero)
-			(?e1 zero)
-			(?ey zero))
-		   (add
-			(?e0 ?e1 fft-hb ?ey)))
-
-		  (rule
-		   (name clean-fft-comb-rule-next)
-		   (local)
-		   (pred
-			(?x0 ?x1 fft-comb ?y)
-			(?ef0 is-elem-of ?x0)
-			(?ef1 is-elem-of ?x0)
-			(?eg0 is-elem-of ?x1)
-			(?eg1 is-elem-of ?x1)
-			(?ef0 next ?ef1)
-			(?eg0 next ?eg1)
-			(?ey0 is-elem-of ?y)
-			(?ey1 is-elem-of ?y)
-			(?ey0 next ?ey1)
-			(?ef0 ?eg0 fft-hb ?ey0))
-		   (add
-			(?ef1 ?eg1 fft-hb ?ey1)))
-
-		  (rule
-		   (name color-circle-data)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node rule ?r)
-			(?r name color-circle-data))
-		   (add
-			(print color-circle-data)
-			(navajowhite next-color moccasin)
-			(moccasin next-color lemonchiffon)
-			(lemonchiffon next-color seashell)
-			(seashell next-color aliceblue)
-			(aliceblue next-color lavender)
-			(lavender next-color lavenderblush)
-			(lavenderblush next-color mistyrose)
-			(mistyrose next-color dodgerblue)
-			(dodgerblue next-color deepskyblue)
-			(deepskyblue next-color skyblue)
-			(skyblue next-color lightskyblue)
-			(lightskyblue next-color darkturquoise)
-			(darkturquoise next-color mediumturquoise)
-			(mediumturquoise next-color turquoise)
-			(turquoise next-color cyan)
-			(cyan next-color lightseagreen)
-			(lightseagreen next-color palegreen)
-			(palegreen next-color springgreen)
-			(springgreen next-color darkkhaki)
-			(darkkhaki next-color khaki)
-			(khaki next-color yellow)
-			(yellow next-color gold)
-			(gold next-color salmon)
-			(salmon next-color deeppink)
-			(deeppink next-color pink)
-			(pink next-color lightpink)
-			(lightpink next-color palevioletred)
-			(palevioletred next-color mediumvioletred)
-			(mediumvioletred next-color violetred)
-			(violetred next-color magenta)
-			(magenta next-color violet)
-			(violet next-color blueviolet)
-			(blueviolet next-color purple)
-			(purple next-color AntiqueWhite1)
-			(AntiqueWhite1 next-color LemonChiffon1)
-			(LemonChiffon1 next-color LemonChiffon2)
-			(LemonChiffon2 next-color LemonChiffon3)
-			(LemonChiffon3 next-color LavenderBlush1)
-			(LavenderBlush1 next-color MistyRose2)
-			(MistyRose2 next-color MistyRose3)
-			(MistyRose3 next-color SlateBlue1)
-			(SlateBlue1 next-color blue1)
-			(blue1 next-color DodgerBlue3)
-			(DodgerBlue3 next-color DeepSkyBlue3)
-			(DeepSkyBlue3 next-color LightSkyBlue3)
-			(LightSkyBlue3 next-color LightBlue1)
-			(LightBlue1 next-color PaleTurquoise1)
-			(PaleTurquoise1 next-color turquoise1)
-			(turquoise1 next-color SpringGreen1)
-			(SpringGreen1 next-color green2)
-			(green2 next-color chartreuse2)
-			(chartreuse2 next-color khaki1)
-			(khaki1 next-color yellow1)
-			(yellow1 next-color gold2)
-			(gold2 next-color RosyBrown2)
-			(RosyBrown2 next-color navajowhite))
-		   (del
-			(global-node rule ?this-rule)))
-
-		  (rule
-		   (name color-color)
-		   (attach-to global-node)
-		   (root-var global-node)
-		   (pred
-			(global-node next-color)
-			(?x next-color ?y))
-		   (add
-			(print color-color ?x)
-			(?x color ?x))
-		   (del
-			(?this-obj rule ?this-rule)))
 
 		  )))))
+
 
 ;; Local Variables:
 ;; eval: (put 'execute-obj 'lisp-indent-function 'defun)
