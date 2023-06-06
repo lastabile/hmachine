@@ -1,4 +1,9 @@
 ;; Simple fixed-block non-expandable hash table. Not a defc for max performance
+;; We don't want to load hoss before this, so we use the basics, e.g. labels, directly.
+;;
+;; 5/11/23 This file is not currently used, as we went to CL hash
+;; tables with the define-hash-table-test clisp extension. But abcl
+;; and others will break. So someday we might want to restore this.
 
 (defsetf hgethash hputhash)		;; Needs to be defined early for macro expansion purposes
 
@@ -6,20 +11,23 @@
   (block nil)
   (size nil)
   (test nil)
+  (hash nil)
   (count 0))
 
-(defun hmake-hash-table (&key (size 17) (test #'equal))
+(defun hmake-hash-table (&key (size 17) (test #'equal) (hash #'sxhash))
   (let ((h (make-hashtab)))
 	(setf (hashtab-block h) (make-array size :initial-element nil))
 	(setf (hashtab-size h) size)
 	(setf (hashtab-test h) test)
+	(setf (hashtab-hash h) hash)
 	h))
 
 (defun hgethash (key hashtab)
   (let ((s (hashtab-size hashtab))
 		(b (hashtab-block hashtab))
-		(test (hashtab-test hashtab)))
-	(let ((hk (mod (sxhash key) s)))
+		(test (hashtab-test hashtab))
+		(hash (hashtab-hash hashtab)))
+	(let ((hk (mod (funcall hash key) s)))
 	  (let ((l (svref b hk)))
 		(dolist (e l)
 		  (when (funcall test (first e) key)
@@ -30,8 +38,9 @@
   (block b
 	(let ((s (hashtab-size hashtab))
 		  (b (hashtab-block hashtab))
-		  (test (hashtab-test hashtab)))
-	  (let ((hk (mod (sxhash key) s)))
+		  (test (hashtab-test hashtab))
+		  (hash (hashtab-hash hashtab)))
+	  (let ((hk (mod (funcall hash key) s)))
 		(let ((l (svref b hk)))
 		  (dolist (e l)
 			(when (funcall test (first e) key)
@@ -44,8 +53,9 @@
 (defun hremhash (key hashtab)
   (let ((s (hashtab-size hashtab))
 		(b (hashtab-block hashtab))
-		(test (hashtab-test hashtab)))
-	(let ((hk (mod (sxhash key) s)))
+		(test (hashtab-test hashtab))
+		(hash (hashtab-hash hashtab)))
+	(let ((hk (mod (funcall hash key) s)))
 	  (let ((l (svref b hk)))
 		(cond 
 		 ((null l)
@@ -105,32 +115,4 @@
 			   (setq r (cons v r)))
 			 h)
 	r))
-
-;; Some baseic utils for CL hash tables too
-
-(defun hash-table-to-list (h)
-  (let ((r nil))
-	(maphash (lambda (k v)
-			   (setq r (cons (list k v) r)))
-			 h)
-	r))
-
-(defun hash-table-key-to-list (h)
-  (let ((r nil))
-	(maphash (lambda (k v)
-			   (setq r (cons k r)))
-			 h)
-	r))
-
-(defun hash-table-value-to-list (h)
-  (let ((r nil))
-	(maphash (lambda (k v)
-			   (setq r (cons v r)))
-			 h)
-	r))
-
-(defun mapappend (fcn l)
-  (if (null l)
-	  nil
-	  (append (funcall fcn (first l)) (mapappend fcn (rest l)))))
 

@@ -27,7 +27,7 @@
   ;; (fft color green)
   ;; (fft in-node-color springgreen)
   ;; (fft out-node-color darkturquoise)
-  (zero color violet)
+  ;; (zero color seashell)
   (aup in-node-color deeppink)
   (aup out-node-color dodgerblue)
   (aup edge-color springgreen)
@@ -54,8 +54,10 @@
   (shape gv-attr)
   (label gv-attr)
   (fontname gv-attr)
+  (fontsize gv-attr)
   (style gv-attr)
   (width gv-attr)
+  (height gv-attr)
   (fixedsize gv-attr)
 
   ;; (fwd-fe-rule color paleturquoise)
@@ -73,15 +75,13 @@
   (?r name std-notes))
  (add
   (print std-notes)
-  (note footer "Copyright (c) 2020 Lawrence Stabile"))
+  (note footer "Copyright (c) 2023 Lawrence Stabile"))
  (del
   (global-node rule ?this-rule)))
 
 
 (rule
  (name gen-inverse)
- ;; (local)
- ;; (disabled)
  (attach-to inverse)
  (root-var inverse)
  (pred
@@ -96,35 +96,7 @@
 		(?x ?a ?y))
 	   (add
 		(print add-inverse ?a ?i ?x ?y)
-		(?y ?i ?x)))))
- (del
-  ;; (?a global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!
-  ))
-
-(comment
-(rule
- (name gen-inverse)
- ;; (local)
- ;; (disabled)
- (attach-to inverse)
- (root-var inverse)
- (pred
-  (?a inverse ?i))
- (add
-  (print gen-inverse ?a ?i)
-  (global-rule-pool-node grp-rule
-						 (rule
-						  (name (add-inverse ?i))
-						  (root-var ?x)
-						  (pred
-						   (?x ?a ?y))
-						  (add
-						   (print add-inverse ?a ?i ?x ?y)
-						   (?y ?i ?x)))))
- (del
-  ;; (?a global-rule-pool global-rule-pool-node)		;; !!!!!!!!!!!
-  ))
-)
+		(?y ?i ?x))))))
 
 (rule
  (name inverse-data)
@@ -142,7 +114,6 @@
 
 (rule
  (name is-1-param)
- (local)
  (attach-to is)
  (pred
   (?x is ?y ?p ?v)
@@ -153,11 +124,11 @@
   (print is-1-param ?this-obj ?x ?y ?r ?p ?v)
   (?x rule ?r)
   (?x ?p ?v)
-  (?x from-is-1-param-rule ?r)))
+  ;; (?x from-is-1-param-rule ?r) ;; xxx We're not using these now and they add clutter
+  ))
 
 (rule
  (name is-0-param)
- (local)
  (attach-to is)
  (pred
   (?x is ?y)
@@ -167,11 +138,11 @@
  (add
   (print is-0-param ?this-obj ?x ?y ?r)
   (?x rule ?r)
-  (?x from-is-0-param-rule ?r)))
+  ;; (?x from-is-0-param-rule ?r) ;; xxx
+))
 
 (rule
  (name is-0-param-xrule)
- (local)
  (attach-to is)
  (pred
   (?x is ?y)
@@ -181,7 +152,8 @@
  (add
   (print is-0-param-xrule ?this-obj ?x ?y ?r)
   (?x rule ?r)
-  (?x from-is-0-param-xrule-rule ?r)))
+  ;; (?x from-is-0-param-xrule-rule ?r) ;; xxx
+  ))
 
 (comment
  (rule
@@ -203,16 +175,13 @@
 
 (rule
  (name is-not-xrule)
- (local)
  (attach-to is-not)
  (pred
   (?x is-not ?y)
   (?y xrule ?r)
   (?x rule ?r))
  (add
-  (print is-not-xrule ?x ?y ?r)
-  (?x was-is ?y) ;; Still have not solved need for adding an edge in order to print
-  )
+  (print is-not-xrule ?x ?y ?r))
  (del
   (?x is-not ?y)
   (?x rule ?r)))

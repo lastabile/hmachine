@@ -1,17 +1,3 @@
-;; Set the color, shape, and label for rules, when they are referred to by data.
-	  
-(rule
- (name rule-gv-attr-rule)
- (attach-to rule)
- (pred
-  (?r type rule)
-  (?r name ?n))
- (add
-  (print rule-gv-attr-rule ?r ?n)
-  (?r shape rectangle)
-  (?r color mistyrose)
-  (?r style filled)
-  (?r label ?n)))
 
 
 ;; Set color, shape, etc. for arrays and array elements
@@ -35,7 +21,6 @@
 
 (rule
  (name fnext-rule)
- (local)
  (attach-to next)
  (pred
   (?x next ?y))
@@ -59,10 +44,12 @@
   (?x fnext ?y)))
 )
 
-;; These rules set an index number for the array elements and label the nodes with that index number
+;; These rules set an index number (the "index" attribute) for the array
+;; elements and label the nodes with that index number
 
 (rule
  (name index-rule-zero)
+ (attach-to zero)
  (pred
   (?x zero))
  (add
@@ -72,19 +59,20 @@
 
 (rule
  (name index-rule-fnext)
+ (local)
+ (attach-to index)
  (pred
   (?x index ?i)
   (?i sigma ?j)
   (?x fnext ?y))
  (add
-  (print index-rule-fnext ?x ?y ?i)
+  (print index-rule-fnext ?x ?y ?i ?j)
   (?y index ?j)
   (?y label ?j)))
 
-
-
 (rule
  (name top-elems-align)
+ (attach-to is-elem-of)
  (pred
   (?x fft-top)
   (?x fft ?y)
@@ -103,6 +91,7 @@
 
 (rule
  (name top-ref-init)
+ (attach-to is-elem-of)
  (pred
   (?x fft-top)
   (?e is-elem-of ?x)
@@ -113,6 +102,7 @@
 
 (rule
  (name top-ref-propagate)
+ (attach-to top-ref)
  (pred
   (?x top-ref ?y)
   (?z ref ?x))
@@ -122,6 +112,8 @@
 
 (rule
  (name bot-top-ref)
+ (attach-to top-ref)
+ (attach-to is-elem-of)
  (pred
   (?e1 top-ref ?t1)
   (?e1 next)
@@ -139,6 +131,7 @@
 
 (rule
  (name hnext)
+ (attach-to bot-top-ref)
  (pred
   (?e1 bot-top-ref ?r1)
   (?e2 bot-top-ref ?r2)
@@ -149,6 +142,7 @@
 
 (rule
  (name bot-index)
+ (attach-to bot-top-ref) 
  (pred
   (?e bot-top-ref ?r)
   (?r index ?i)

@@ -1,4 +1,5 @@
 
+
 (rule
  (name fft-delta-init)
  (attach-to global-node)
@@ -15,8 +16,8 @@
   (?fft-rule-delta3 name fft-rule-delta3))
  (add
   (print fft-delta-init)
-  (?fft-rule add (?x rule ?fft-rule-delta2))
-  (?fft-rule add (?x rule ?fft-rule-delta3))
+  (?fft-rule add ?x rule ?fft-rule-delta2)
+  (?fft-rule add ?x rule ?fft-rule-delta3)
   )
  (del
   (?this-obj rule ?this-rule)))
@@ -41,7 +42,10 @@
 
 (rule
  (name fft-rule-delta3)
- (local)
+ (attach-to color)
+ (attach-to fcn-color)
+ (attach-to rand)
+ (attach-to rule30val)
  (pred
   (?x color ?c)
   (?y fcn-color ?c)
@@ -53,7 +57,8 @@
   (?x delta3-rand ?r)
   (?y inv-delta3 ?x))
  (del
-  (?this-obj rule ?this-rule)))
+  ;; (?this-obj rule ?this-rule)
+  ))
 
 (rule
  (name fft-rule-delta4)		;; Propagate color and rand along weave-next
@@ -96,47 +101,8 @@
   (?x d-casz-casns-ref ?z)  ;; These two are eqv. e shortcut for display
   (?x e ?z)))				;; 
 
-;; Rule optimizer (for a specific rule). Changes the target rule from
-;; global to local, and adds rule propagators.
-
-#|
-(rule
- (name fft-rule-opt)
- (attach-to global-node)
- (root-var global-node)
- (pred
-  (global-node global-rule-pool-ref global-rule-pool-node)
-  (global-rule-pool-node grp-rule ?fft-rule)
-  (?fft-rule name fft-rule))
- (add
-  (print fft-rule-opt ?fft-rule)
-  (local-rule-pool-node lrp-rule ?fft-rule)
-  (?fft-rule pred (?x local-rule-pool ?p))
-  (?fft-rule pred (?p lrp-rule ?copy-array-struct-new))
-  (?fft-rule pred (?p lrp-rule ?odd-new-rule-propagate))
-  (?fft-rule pred (?p lrp-rule ?even-new-rule-propagate))
-  (?fft-rule pred (?p lrp-rule ?fft-rule-zero))
-  (?fft-rule pred (?p lrp-rule ?fft-comb-rule-zero))
-  (?fft-rule pred (?copy-array-struct-new name copy-array-struct-new))
-  (?fft-rule pred (?even-new-rule-propagate name even-new-rule-propagate))
-  (?fft-rule pred (?odd-new-rule-propagate name odd-new-rule-propagate))
-  (?fft-rule pred (?fft-rule-zero name fft-rule-zero))
-  (?fft-rule pred (?fft-comb-rule-zero name fft-comb-rule-zero))
-  (?fft-rule add (?nn1 rule ?fft-rule))
-  (?fft-rule add (?nn2 rule ?fft-rule))
-  (?fft-rule add (?nn1 rule ?fft-rule-zero))
-  (?fft-rule add (?nn2 rule ?fft-rule-zero))
-  (?fft-rule add (?x rule ?copy-array-struct-new))
-  (?fft-rule add (?x rule ?even-new-rule-propagate))
-  (?fft-rule add (?x rule ?odd-new-rule-propagate))
-  (?fft-rule add (?y rule ?fft-comb-rule-zero))
-  (?fft-rule opt-done))
- (del
-  (global-rule-pool-node grp-rule ?fft-rule)
-  (?this-obj rule ?this-rule)))
-|#
-
-;; Experimental -- note this one adds more rules to a given node than needed
+;; Rule optimizer (for a specific rule). Adds rule propagators.
+;; Experimental -- note this one adds more rules to a given node than needed.
 
 (rule
  (name fft-rule-opt-rule-names)
@@ -160,8 +126,8 @@
  (attach-to global-node)
  (root-var global-node)
  (pred
-  (global-node global-rule-pool-ref global-rule-pool-node)
-  (global-rule-pool-node grp-rule ?fft-rule)
+  (global-node local-rule-pool local-rule-pool-node)
+  (local-rule-pool-node lrp-rule ?fft-rule)
   (?fft-rule name fft-rule)
   (local-rule-pool-node lrp-rule ?r)
   (?r name ?n)
@@ -169,18 +135,18 @@
  (add
   (print fft-rule-opt ?fft-rule)
   (local-rule-pool-node lrp-rule ?fft-rule)
-  (?fft-rule add (print fft-opt-run ?fft-rule))
-  (?fft-rule add (?nn1 rule ?r))
-  (?fft-rule add (?nn2 rule ?r))
-  (?fft-rule add (?x rule ?r))
-  (?fft-rule add (?y rule ?r))
-  (?fft-rule add (?nn1 rule ?fft-rule))
-  (?fft-rule add (?nn2 rule ?fft-rule))
+  (?fft-rule add print fft-opt-run ?fft-rule)
+  (?fft-rule add ?nn1 rule ?r)
+  (?fft-rule add ?nn2 rule ?r)
+  (?fft-rule add ?x rule ?r)
+  (?fft-rule add ?y rule ?r)
+  (?fft-rule add ?nn1 rule ?fft-rule)
+  (?fft-rule add ?nn2 rule ?fft-rule)
   (?fft-rule opt-done))
  (del
-  (global-rule-pool-node grp-rule ?fft-rule)
   (?this-obj rule ?this-rule)))
 
+(comment		;; rem-add-main
 (rule
  (name fft-rule-opt-display)
  (attach-to global-node)
@@ -195,5 +161,5 @@
   (print fft-rule-opt-display ?fft-rule ?a)
   (?fft-rule add-main ?a))
  (del
-  (global-rule-pool-node grp-rule ?fft-rule)
   (?this-obj rule ?this-rule)))
+)

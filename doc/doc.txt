@@ -207,8 +207,8 @@ See below for info on node execution and rule resolution.
 
 [(attach-to <node>)]
 
-If present, the rule is automatically made local and attched to the
-given node. Typically thuis si used with the global-node for data
+If present, the rule is automatically made local and attached to the
+given node. Typically this is used with the global-node for data
 inits and so forth.
 
 [(root-var <node>)]
@@ -682,7 +682,30 @@ Basic graph xform alg is to compare every subgraph with every other
 subgraph. So *subgraphs* interact, and one must be a rule.
 
 ----------------------------------------------------------
-3/20/16 -- Efficiency measures
+10/25/22 -- Efficiency measures, updated
+
+Recently changed the measures to be more mathematically straightforward.
+
+Start with this basic relation:
+
+Tested = matched-new-edges + matched-no-new-edges + failures
+
+Thus if we use Tested as the common denominator we get measures that
+add to unity. However then redundancy is based on tested, not
+matched. This is a little odd but makes the measures make more sense,
+e.g., below the three measures add to 100%. However with the new definition
+of redundancy it can never be 100%.
+
+efficiency% = (matched-new-edges/tested)*100
+redundancy% = (matched-no-new-edges/tested)*100
+failure% = (failured/tested)*100
+
+rule-stats:
+
+name                      tested    matched   new-e     not-new-e failed    max-expand-len  efficiency% redundancy% failure%
+RULE-30-ZERO-RULE-1-1     13        10        9         1         3         70              69.23       7.69        23.08
+
+3/20/16 -- Efficiency measures [original]
 
 Fundamental to the performance of the system is the rate of edge
 production. This in turn is governed by the production of edges
@@ -725,6 +748,12 @@ ME-EFFICIENCY                      0.0072660567         1              0.0072660
 ME-REDUNDANCY                      0.8164639            1              0.8164639
 
 This shows we have a long way to go in optimizing the system.
+
+;; We used to calc it this way, and in some sense it's better than not-new-edges/tested, since it
+;; gives us a figure not dependent on the failure rate.  We're using not-new-edges/tested since we can
+;; then say eff%+redun%+fail%=1
+;;
+;; (setf (timerec-sum red) (div (float not-new-edges) (float matched)))
 
 ----------------------------------------------------------
 4/5/16
@@ -770,6 +799,8 @@ This was in hnew.lisp (moved here 4/5/16):
 ----------------------------------------------------------
 11/23/16 -- Qets: Ordered mulitsets, i.e. tuples:
 
+[5/21/23: For update, see Qets, Seqs, and Strings, oh my!]
+
 Edges in H are really tuples (lists). Most set operations work, but
 it's not very formal. Matching works well without an explicit set
 formulation, but subsetting is not really correct, and we need a good
@@ -810,6 +841,10 @@ common lower bound.
 
 
 We define the following properties:
+
+- The elements of a qet are atomic, i.e., they are nodes in the graph
+  G.  In the Lisp world that means symbols, strings, and numbers. So
+  there is no notion of a qet of qets.
 
 - Unique intersection is not defined. Looking at intersection as the
   common subset between two sets, we can say that qet intersection is
@@ -875,7 +910,22 @@ In CL, define a macro ! to represent the above:
 					local:					(f x)
 					external:				(! (g f) x)
 
-Compare to C++  x.f().g(42)    ((((x f)) g) 42)
+Compare to C++  dot syntax x.f().g(42)    ((((x f)) g) 42)
+
+11/17/22 Addendum to dot syntax matters: Implemented a symbol-based
+dot-syntax detector at the symbol level. This runs as a pass in
+hoss. Any non-number symbol with a dot in it is transformed as
+follows:
+
+		(x.y z) ==> (! (x y) z)
+
+This is cute, but doesn't nest well. You can't say eg ((x.y z).p
+q). This would reuire a mod to the Lisp system's basic read syntax,
+and does not seem to be possible with readmacros.
+
+In the end I think my favorite model for this in Lisp is ((x y) z),
+like Scheme. So I'm not going to start using this but I may leave the
+code in hoss tied off in case I want to bring back some variant later.
 
 Superclass handling:
 
@@ -983,15 +1033,20 @@ See top-obj.lisp -- all defc's inherit from it
    ...code...)
 
 |#
-----------------------------------------------------------
-9/12/22 -- Began these Hoss doc and notes, beyond the file notes above
+
+----------------------------------------------------------------------------------
+9/12/22 -- Began these Hoss doc and notes, beyond the file notes immediately above
 
 Override/"Virtual" Methods
 --------------------------
 Superclass methods maybe overridden, ala "virtual functions" but the
 call site needs to be object-invoked, i.e., (! (self f) x) rather than
 just (f x). Provide automatic way to do this, via marking the method
-"overridable"?  
+"overridable"?  Not clear there is a major benefit except the syntax
+of the call.  We already know the ! form is quite clunky, so it seems
+that trying to cure that is more appropriate. This would seem to
+entail introducing a dot-syntax notation, so we can say (x.method 1 2
+...). Needs more thought.
 
 Class constructor args
 ----------------------
@@ -1048,6 +1103,45 @@ The damped class adds in the damping coeff, and we can pass it in with all the o
 									 :unit-pulse-loc (/ msize 10)
 									 :damping-coeff 5e-5))
   (! (x run)))
+
+Nested defms
+------------
+10/17/22
+
+Fairly major basic change to hoss, where one can nest methods in a let
+scope, to allow for local state without adding to the object's
+top-level env. This is helpful e.g. in defining cache tables which may
+then just be cleared rather than recreated, textually local to where
+the tables are used.
+
+The main drawvback is that ref to the method name from outside the let
+block must be explicitly OO, e.g., via self.
+
+However the basic existing funcitonality remains the same so there is
+no drawback unless the feature is used. Even then the overhead is
+often low relative to the savings in GC, etc.
+
+(defc x nil nil
+  (let ((a 10))
+	(defm f (x)
+	  (if (= x 0)
+		  1
+		  (! (self g) x)))
+	(let ((b 2))
+	  (defm g (x)
+		(+ x b (! (self f) 0))))))
+
+[24]> (setq x (make-x))
+#<FUNCTION :LAMBDA (MNAME) (LET ((M (HGETHASH MNAME METHOD-LOOKUP-HASH))) (LAMBDA (X) (APPLY M X)))>
+[25]> (! (x f) 10)
+13
+[26]> (! (x g) 10)
+13
+[27]> 
+
+This is somewhat interesting in that each method in a class can be in
+its own closure in a tree of envs, each part of the same object. The
+method refers to the local scope and higher.
 
 ----------------------------------------------------------
 2/15/17 -- Got rid of partial-match code based on envs and cross-aux2
@@ -1159,7 +1253,6 @@ behavior under the covers, as a shortcut for building it up somehow
 with a pure H-machine model. In similar systems, arithmetic operations
 are typically the first to be moved down in this way. We resist this
 temptation, in favor a more pure approach.]
-
 
 I used Hoss throughout and that has proven valuable.
 
@@ -1367,7 +1460,6 @@ white. Red is not a great color due to color blindness.
   idea, i.e., how many times an edge is used by a rule. Something like
   a type property raises the dimension.
 
-
 ----------------------------------------------------------
 2/8/18 -- Crap
 
@@ -1375,7 +1467,6 @@ A rooted tree is clearly separable into levels
 A (rooted) DAG is a tree with identical sub-branches collapsed into one
 Therefore a DAG can be separated into levels
 Any cycle in a tree or DAG must go back one or more levels
-
 
 ----------------------------------------------------------
 2/15/18 -- Macro probably not needed, since mapcar and friends take multiple args
@@ -1393,7 +1484,7 @@ Any cycle in a tree or DAG must go back one or more levels
 ----------------------------------------------------------
 2/26/18 -- Dumped attempt to be able to retract edges in env-triggered.
 
-This never worked well, and resulted in loops. Much of the uese of it
+This never worked well, and resulted in loops. Much of the use of it
 is commented-out anyway, so this is cleanup. See h.2.26.18.lisp.
 
 It leaves the question of how we deal with already-triggered
@@ -1502,19 +1593,6 @@ ran and produced new edges. So if a rule ran 10 times producing new
 edges, and some edge was needed 5 times, and no other edge was needed
 more than 5 times, then the dimension of the rule is 5. If no edge is
 needed more than once, then the rule has a dimension of one.
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1701,3 +1779,426 @@ On 9/20/22:
 
 Should have the goal of referencing all this stuff to github at some
 point -- when I get to updating the paper(s).
+
+----------------------------------------------------------
+11/29/22 -- Updates to rule pools and their denotation in rules
+
+Tag "global-change"
+
+Removed exposure at the H level of the global rule pool. However, the
+global pool still exists, and is important esp. as a development
+vehicle. The idea is that the global rule pool should normally be
+small or empty, e.g., one might set a rule to global to find some bug
+in propagation. And of course during initial development some set of
+rules may be all global.
+
+We retain the local rule pool, however, and its exposure, since it's a
+convenient way to find rules that can then be passed around, modified,
+etc. Note it's possible to do something similar entirely within H, but
+it's a lot easier built-in, at least at this stage of H development.
+
+To support this, the exposure of a rule is now specifiable in three
+orthogonal ways:
+
+   (rule
+	(local)						Put on local rule pool (exposed in H as local-rule-pool-node)
+	(global)					Put on global rule pool (not exposed in H)
+	(attach-to x)				Attach to x
+		...)
+
+If a rule is devoid of any of these designators, then global is
+assumed. Otherwise just the stated indicators take effecvt.
+
+An empty nested rule is by default attached only at the point of
+definition, e.g.,
+
+	(add
+		(?x rule (rule (...))))
+
+attaches the nested rule onnly to ?x.
+
+The rule can also be declared local or global or attached within its
+definition.
+
+As part of this, made other basic changes in h.lisp, flagged at the
+time with the "global-change" marker:
+
+- Calls into question some basics like addraw, add, and
+  define-obj. The notion of an "object" may not need to be formalized
+  in the kernel. Needs more work.
+
+- Changed primary scan loop to do global too by default:
+  execute-global-all-objs-loop (&key (queue-rule-mode :local-global) 
+							         (scan-rule-mode :local-global #| :local-only |#))
+
+- has-rules (node) used to check for attached rules and whether the node
+  had a global-rule-pool pointer. Now just returns t.
+
+- Fixed major issues with matching:
+		- Ability to match clauses like (?x next ?x)
+		- Matching when two vars bind to the same value
+		- Not bailing in matching on root-vars, as one can match then fail later.
+	These changes overall caused the "-sing" ("-singular") versions of
+	fft-comb-rule-next and copy-array-struct-next to be unnecessary.
+
+5/16/23 Status update: fixing code marked with the tag and removing
+the tag, or moving the tag and comment here for later consideration.
+
+	 - Remove add of lrp to global-node in objgraph/init, and put in
+       an init rule instead?
+
+	  (defm addraw (n a v)				;; global-change: Since this just calls add-edge perhaps change to add-triplet
+
+
+	  (defm add (node-or-edge &optional a v)		;; global-change: This is used by some tests to inject edges and
+													;; queue them. Perhaps define as an ACE adjunct.
+
+----------------------------------------------------------
+2/3/23 -- Revelations on rule determinism
+
+Deterministic: D or det
+Non-deterministic: ND or non-det
+
+A deterministic rule is one which matches only one subgraph. This can
+be so -- and normally is -- when attached to a given node, i.e., we
+bind the root var and thus collapse the numnber of vars in the rule.
+
+A non-deterministic rule matches many subgraphs, thus causing many
+instantiations and possibly creating many new edges in one shot. But
+such a rule may also then be redundant, and edges may keep matching or
+being found during the match process, thus contributing to explosive
+behavior.
+
+A det rule may be optimized by various means:
+
+	- When done, it may be detached from a node. A non-det rule can't,
+	  since you don't know in general whether it will be needed
+	  again. Note we *do* detach many non-det rules, e.g. in the rule
+	  generators; this is ok since we know they won't be needed
+	  again. But with a det rule we can potentially do it
+	  automatically.
+
+	- A subst match from the right root will find each matching edge
+      in a context-free manner, using efficient (qet) lookup.
+
+	- Intuitively, other optimizations seem possible, e.g.if we can
+      crawl the rule edges detly and context-freely we may able to
+      "compile" them down to something more primitive.
+
+	- Non-det rules are still useful, esp. in building rules and other
+      structures needed downstream. Let those rules "burn hot" to
+      establish the more optimized structures, which will run "cool".
+
+	- A rule *may* have same-property edges on a node and be det, but
+	  if all props are unique then it *must* be det (assuming it's
+	  var-connected). I.e., we can find a prop-unique path from some
+	  root to all other nodes.
+
+----------------------------------------------------------
+4/16/23 -- Subst-match
+
+Uses qet system to control the search for a match, thus greatly
+reducing the computational complexity. Chains not needed anymore.
+
+Settled on a basic algorithm that essentially walks one var at a
+time. We make passes on a set of pred "rows", into which are
+substituted values from matching edges filled in via qets. The basic
+loop will cycle through all possible edge combinations, thus
+producing all matches.
+
+Key in selecting the next variable to bind and subst is selecting the
+pred which has in a given pass the least number of edges retrieved by
+get-edges-from-subqet. This results in huge search savings. For
+instance we can go after a rule in a rule pool by a given name, and
+this method will automatically select a binding via the name first,
+thus whittling down typcially to one the number of further edges to be
+considered to lookup the rule.
+
+Also, we pass a pred-info data structure which records whether a node
+in a pred is "data" or "var". A var can become data when it is the
+value of a binding which comes infrom a match. E.g., a valid binding
+is (?x ?y). The all-matches-aux algorithm handles this automatically,
+but subst-match needs special handing.
+
+*********
+The loop consists of:
+
+	Check that the set of preds is all-consts, and if so if all those
+	edges exist. This then is a solution and the associated env is pushed
+	on the solution list. 
+	
+	Else, if not all-consts, match on the set of preds. The match
+	scans the preds and looks up qets by spltting out the vars and
+	looking up each const sequence, if that sequence is of length 2 or
+	more. First it just looks up the lengths (which can be optimized
+	by caching or keeping running counts). It selects the pred with
+	the min number of edges, and then matches the pred against these
+	edges and emerges with a set of envs, each env consisting of one
+	binding; all of these are for the same var.
+	
+	We then do a subst for each of these envs and recursively call the
+	loop. The call passes env chains and at bottom, when
+	all-consts/edges-exist, each chain is there ready to be stored in
+	the solution table.
+	
+	When all the loops have ended, we convert the solution table to a list
+	of envs and return that.
+
+*********
+
+This algorithm was develpoed with much effort. The qet system should
+offer excellent indexing, with bounded access times. We'll have to see
+where to take it next.
+
+The one-var-at-a-time model could model possibly be made better, but
+won't fool with it now.
+
+The fact that all combos are found exhaustively means we need to
+control the search. So we limit to length 2 or great qet size for
+lookups, since size one is essentiall get-edges, which can really
+explode. Similarly we restrict the model only to root-vars which are
+actual vars, not nodes, so we alsways have an initial binding to
+reduce explosion. Matches on a non-var root are done with the old
+model.
+
+Changes to the qet system induced by the new rule format have an
+impact on subst-match. Before, we just removed vars from a pred, and
+that formed the qet.  Now, since the qets purely represent subseqs, we
+need to remove the vars and return multiple qets, the possibly
+noncontiguous set of subseqs. Each of these is then looked up for
+edges, and the result unioned. Thus finding the "minimal number of
+edges" may not be easy, though we can do a sum as an approx which is
+probably ok.
+
+----------------------------------------------------------
+4/16/23 -- New Rule Format
+
+Tag new-rule-format
+
+This was a great breakthrough. I was able to eliminate the entire
+"_elem" encoding for rules, adopting instead a much simpler system
+based on edges of different sizes and use of prefixes.
+
+This also resulted in the qet system becoming purely based on
+sequences and sub-sequences, which is n^2 storage, rather than 2^n as
+in the set-based qet system. In this respect it resembles more an
+*oriented* abstract simplicial complex. The storage therefore with
+this model is more readily bounded, while retaining generality.
+
+Another result -- and what started it all I think -- is the
+realization that the NN new-node system had issues. This showed up in
+the rule copying tests. The new rule format eliminates the need to
+allocate all sorts of new nodes for rules and nested rules. So now all
+new nodes are done with the "scoped" new-node pred. (Just) one is
+added for each nested rule. In this manner rules with new-node aspects
+can be copied. This failed with NN.
+
+Essentially, the new rule encoding is simply a set of expanded edges
+in a rule, e.g.:
+
+(rule
+ (name r1)
+ (pred
+  (?x a ?y)
+  (?y b 57))
+ (add
+  (?y c 42)))
+
+translates to the following edges, with a new node n1:
+
+	(n1 name r1)
+	(n1 pred ?x a ?y)
+	(n1 pred ?y b 57)
+	(n1 add ?y c 42)
+
+So to decode the rule in the kernel, we simply take the clause
+indicator and the rest of the list after that as its rule-edge.
+
+The main nice thing here is that it nests. So a rule-generating rule
+may simply say something like:
+
+	(r add new-r pred ?x a ?y)
+
+where r is the generating rule. So this add edge under r will add the
+pred clause (?x a ?y) to new-r.
+
+This nests by just adding more rule info on the left. The is similar
+to how a protocol is "wrapped" in a new layer in networking, i.e., by
+adding another "header" to the data packet.
+
+But, to do copy-rule, we need to add a "rest var", since the encoding
+of rules now uses variable-length edges. A rest-var is denoted ?*<x>
+and when it appears in a pred means that it matches the remainder of
+the list, assuming the vars and edges preceding it match. So it's
+implicitly at the end of a pred and more than one rest var in a pred
+is an error but operationally means nothing in the pred after that is
+matched.
+
+A rest var is the only type of var that may be bound to a
+list. Multiple rest vars may appear in an add.  Their values are
+spliced into the resulting edge.
+
+With this, we can match a rule pred of arbitrary size, e.g.:
+
+	(?r pred ?x next ?y)
+
+This will match a rule with a pred specifying a next relation. For
+instance we might get bindings:
+
+	((?r n42)(?x ?a)(?y ?b))
+
+For rules like rule copiers, we match on any pred a rule with:
+
+	(?r pred ?*pred-rest)
+
+Similarly for an add:
+
+	(?r add ?*add-rest)
+
+etc.
+
+As an aside, we considered a "quoting" model, to specify in a pred
+that we're searching for a literal var. But I deemed it not necessary,
+and is certainly desirable to avoid it if possible. It appears that
+being able to match against vars is sufficient to pick up whatever
+patterns in rules we need.
+
+----------------------------------------------------------
+5/10/23 -- Eliminated hhash-tables
+
+Clisp as it turns out has a way to define a test and hash fcn to pass
+to a hash table. So not we're using CL hash tables, with specific
+tests and hashes as needed. Look for uses of the macro
+define-hash-table-test. See clisp doc, impnotes.html.
+
+It's a marco, and function names are required, not functions
+themselves. This makes it clumsier than it should be, but we live with
+it.
+
+The file hashtab.lisp was eliminated, and general CL hash table utils
+moved to utils.lisp.
+
+----------------------------------------------------------
+5/16/23 -- Dumped log-value package
+
+Not only did it use packages, which I don't like, but it wasn't really
+all that useful. Having to grab a symvbol to get a value was too
+tedious, and did not allow seeing issues at-a-glance very well. Better
+is to hack with the *print dynamic vars.
+
+----------------------------------------------------------
+5/16/18 -- Supporting rule preds which are all vars (all-var-mod)
+
+The tag all-var-mod is in the code and the needed changes are marked
+and tests retained. But right now it's disabled.
+
+The idea is that the subgraohs we need to match on are omcpletly
+local, i.e., we have a small max degree of any node, sort of a
+"manifold" constraint.  Then, markers for which we'd normally use
+constant symbols, like attribute names, become local graph patterns,
+Using all vars is a way to spec such a skeleton.
+
+Things obviously get tougher computationally, since we now need a lot
+more nodes, and ideally massive parallelism. A serial system would
+need much better indexing than the subqet system.
+
+But, this model is distinctly more "molecular" than one with
+constants. Rule copying coupled with this makes a good purely local
+model. This might be worth pursuing sometime.
+
+----------------------------------------------------------
+5/21/23 -- Qets, Sets, Seqs, and Strings, oh my!
+
+It turns out there are conficting defintions of various orderings in
+math and cs.
+
+Sets: a well-known standard definition, unorderd, unduplicated objects.
+
+Sequences: Tuples.
+
+Subsequence: Any subset of a sequence which retains the sequence order
+	(like the original subqets). So (1 2) ia a subseq of (a 1 b 2 c)
+	CL and some other languages get this wrong, with subseq operations
+	only applying to contiguous subseqs.
+
+Strings: Tuples.
+
+Substrings: Contiguous subseqs.
+
+Hypergraph: Unordered edges.
+
+Ordered hypergraph: Most modern deefinition seems to be the edge-bipartite form. 
+
+Oriented hypergraph: Standard seems to be +-1 weighted edges in the
+	bipartite rep of the hypergraph.  But people like Bill Kay say
+	it's edges ordered as tuples (like lists). Not clear if/how dups
+	are permitted in these cases.
+
+Clearly sets are the most general, and holding all subsets provides
+the classic abstract simplicial complex (ASC).
+
+The next level of specificity is to consider the sets ordered, but
+without necessarily allowing dups. We then take all subseqs (in the
+math sense above, like the original subqets), which is still 2^n such
+subseqs. But we don't realy have asn ASC. A further extension is to
+allow dups.
+
+Next we can go to strings, i.e., to form the ASC-like structure we use
+substrings, contiguous subseqs. This is on the order n^2 so we save a
+lot this way.  This is where the qet system is now and it appears to
+work well. So a qet will be a "string".
+
+Once we go beyond sets, set operations must give way to operations
+more appropriate to srtings (qets). Operations like intersection and union 
+require more elaborate counterparts, and have limited use. Similarly, tuple operations like concat, splicing, etc. are not 
+useful in the H context. The one property used is containment, i.e., is one string a substring of another? This is all we need.
+
+
+
+
+
+---------------
+Bill Kay
+Ph.D. Mathematics. M.S. in Computer Science.
+Ryerson University & The Fields Institute.
+https://math.ryerson.ca/~bkay/index.html
+
+https://math.ryerson.ca/~bkay/gist_propo.pdf,  "Hey Bill, what’s the
+		deal with The minimum number of edges in uniform hypergraphs
+		with Property O?":
+
+			"...Given a graph G, an orientation of G is a graph
+			obtained by taking each edge and putting an order on it
+			(that is, turning the edges which are sets into
+			2-tuples). Similarly, one can take a kuniform hypergraph
+			(that is, and graph whose edges are k-sets) and orient it
+			by turning the edges into k-tuples. Any graph obtained
+			this way is an oriented k-graph. ..."
+---------------
+k-uniform HGs -- with ordered edges? Does not seem that way a
+	"k-tuple" in this paper appearts to be just a set of size k.
+Called "independence sets" in the lit.
+  ~/ErdosSetsOfIndependentEdgesOfAHypergraph1976-42.pdf
+	~/Bollobas.pdf
+---------------
+~/ExtremalProblemsOrderedHypergraphs.pdf
+
+https://par.nsf.gov/servlets/purl/10341330#:~:text=An%20ordered%20hypergraph%20is%20a,of%20problems%20in%20combinatorial%20geometry.
+
+Extremal problems for convex geometric
+hypergraphs and ordered hypergraphs
+Zoltán Füredi, Tao Jiang, Alexandr Kostochka, Dhruv Mubayi, and
+Jacques Verstraëte
+
+Abstract. An ordered hypergraph is a hypergraph whose vertex set is
+linearly ordered, and a convex geometric hypergraph is a hypergraph
+whose vertex set is cyclically ordered. Extremal problems for ordered
+and convex geometric graphs have a rich history with applications to a
+variety of problems in combinatorial geometry. In this paper, we
+consider analogous extremal problems for uniform hypergraphs, and
+determine the order of magnitude of the extremal function for various
+ordered and convex geometric paths and matchings. Our results
+generalize earlier works of Braß–Károlyi– Valtr, Capoyleas–Pach, and
+Aronov–Dujmovic–Morin–Ooms-da Silveira. We also provide a new ˇ
+variation of the Erdos-Ko-Rado theorem in the ordered setting.
+---------------
