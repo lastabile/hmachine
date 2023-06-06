@@ -4210,114 +4210,114 @@
 ;; Also see edge-exists in the class graph. is-edge really means "is
 ;; in edge form" so must be used with care.
 
-										(defun is-edge (x)
-(listp x))
+(defun is-edge (x)
+  (listp x))
 
-										(defun is-sigma-edge (x)
-(and (is-edge x)
-(eq (second x) 'sigma)))
+(defun is-sigma-edge (x)
+  (and (is-edge x)
+	   (eq (second x) 'sigma)))
 
-										(defun is-sigma-node (x)
-(and (is-node x)
-(integerp x)
-(>= x 0)))
+(defun is-sigma-node (x)
+  (and (is-node x)
+	   (integerp x)
+	   (>= x 0)))
 
-										(defun is-scoped-new-pool-node (node)
-(and (symbolp node)
-(let ((name (symbol-name node)))
-(and (eq (aref name 0) #\S)
-(eq (aref name 1) #\N)))))
+(defun is-scoped-new-pool-node (node)
+  (and (symbolp node)
+	   (let ((name (symbol-name node)))
+		 (and (eq (aref name 0) #\S)
+			  (eq (aref name 1) #\N)))))
 
-										(defun env-lookup (node env &key (idempotent t))
-(block el
-(dolist (binding env)
-(when (equal node (first binding))
-(return-from el (second binding))))
-(if idempotent ;; was nil -- need node due to orig-match algorithm
-node
-nil)))
+(defun env-lookup (node env &key (idempotent t))
+  (block el
+	(dolist (binding env)
+	  (when (equal node (first binding))
+		(return-from el (second binding))))
+	(if idempotent ;; was nil -- need node due to orig-match algorithm
+		node
+		nil)))
 
 ;; The new one below discards the dummy '(t t) entries in assessing equality. This came up with the new subst-match
 ;; work. For that it also was needed for testing that new-node nodes be discarded when assessing equality. So that has
 ;; its own env-equal, just for testing. The old one worked ok for kernel operations, so let's keep it here for now.
 
-										(defun env-equal (env1 env2)
-(block ee
-(if (not (= (length env1) (length env2)))
-nil
-(let ()
-(dolist (b1 env1)
-  (let ((v1 (second b1)))
-	(let ((v2 (env-lookup (first b1) env2 :idempotent nil)))
-	  (when (not (equal v1 v2))
-		(return-from ee nil)))))
-t))))
+(defun env-equal (env1 env2)
+  (block ee
+	(if (not (= (length env1) (length env2)))
+		nil
+		(let ()
+		  (dolist (b1 env1)
+			(let ((v1 (second b1)))
+			  (let ((v2 (env-lookup (first b1) env2 :idempotent nil)))
+				(when (not (equal v1 v2))
+				  (return-from ee nil)))))
+		  t))))
 
 ;; Slow!!!!!!!!!!
 
-										(defun new-env-equal (env1 env2)
-(block b
-(let ((h (make-sur-map)))
-(dolist (b env1)
-(when (not (equal b '(t t)))
-  (! (h insert-one) b b)))
-(dolist (b env2)
-(when (not (equal b '(t t)))
-  (if (! (h lookup-one) b)
-	  (! (h remove) b)
-	  (return-from b nil))))
-(if (= (! (h count)) 0)
-t
-nil))))
+(defun new-env-equal (env1 env2)
+  (block b
+	(let ((h (make-sur-map)))
+	  (dolist (b env1)
+		(when (not (equal b '(t t)))
+		  (! (h insert-one) b b)))
+	  (dolist (b env2)
+		(when (not (equal b '(t t)))
+		  (if (! (h lookup-one) b)
+			  (! (h remove) b)
+			  (return-from b nil))))
+	  (if (= (! (h count)) 0)
+		  t
+		  nil))))
 
 ;; For testing only, specifically subst-match.
 ;; Each pair of elements from the sets need to be env-equal.
 ;; Tough to make an optimized version -- this version should only be used for testing.
 ;; Also need special env-equal which would not fly in the kernel.
 
-										(defun envs-equal (envs1 envs2)
-(defr
-(defl env-equal (env1 env2)
-(block b
-(let ((h (make-sur-map)))
-  (dolist (b env1)
-	(when (and (not (equal b '(t t)))
-			   (not (is-scoped-new-pool-node (second b)))
-			   (is-var-name (first b)))
-	  (! (h insert-one) b b)))
-  (dolist (b env2)
-	(when (and (not (equal b '(t t)))
-			   (not (is-scoped-new-pool-node (second b)))
-			   (is-var-name (first b)))
-	  (if (! (h lookup-one) b)
-		  (! (h remove) b)
-		  (return-from b nil))))
-  (if (= (! (h count)) 0)
-	  t
-	  nil))))
-(defl memb (env envs)
-(block b
-(dolist (env1 envs)
-  (when (env-equal env env1)
-	(return-from b t)))
-nil))
-(if (not (= (length envs1) (length envs2)))
-nil
-(block b
-(dolist (env1 envs1)
-  (when (not (memb env1 envs2))
-	(return-from b nil)))
-t))))
+(defun envs-equal (envs1 envs2)
+  (defr
+	(defl env-equal (env1 env2)
+	  (block b
+		(let ((h (make-sur-map)))
+		  (dolist (b env1)
+			(when (and (not (equal b '(t t)))
+					   (not (is-scoped-new-pool-node (second b)))
+					   (is-var-name (first b)))
+			  (! (h insert-one) b b)))
+		  (dolist (b env2)
+			(when (and (not (equal b '(t t)))
+					   (not (is-scoped-new-pool-node (second b)))
+					   (is-var-name (first b)))
+			  (if (! (h lookup-one) b)
+				  (! (h remove) b)
+				  (return-from b nil))))
+		  (if (= (! (h count)) 0)
+			  t
+			  nil))))
+	(defl memb (env envs)
+	  (block b
+		(dolist (env1 envs)
+		  (when (env-equal env env1)
+			(return-from b t)))
+		nil))
+	(if (not (= (length envs1) (length envs2)))
+		nil
+		(block b
+		  (dolist (env1 envs1)
+			(when (not (memb env1 envs2))
+			  (return-from b nil)))
+		  t))))
 
 ;; Remove all bindings from env which contain a member of varlist on the variable side of the binding
 ;; Retain binding order of remaining entries.
 
-										(defun env-prune (env varlist)
-(mapcan (lambda (b)
-(if (memq (first b) varlist)
-nil
-(list b)))
-env))
+(defun env-prune (env varlist)
+  (mapcan (lambda (b)
+			(if (memq (first b) varlist)
+				nil
+				(list b)))
+		  env))
 
 ;; Take a list of env lists (list of envs envs-list), each env list is
 ;; the set of envs from matching one pat against a list of obj-edges.
@@ -4326,92 +4326,92 @@ env))
 ;; conflicts at each step, and toss those envs in conflict, so they
 ;; are not further expanded.
 
-										(defun cross-aux2-info (info))
+(defun cross-aux2-info (info))
 
-										(defun cross-aux2 (envs-list &key (record-lengths nil) rule-trace-info)
-(timer 'cross-aux2
-(lambda ()
-(let ((lengths (and record-lengths
-					(list (length envs-list) (mapcar (lambda (x) (length x)) envs-list)))))
-(defr
-  (defl cross-aux2-aux (envs-list)
-	(let ((env-list-out '(()))
-		  (r1 nil))
-	  (dolist (envs envs-list)
-		(dolist (p env-list-out)
-		  (dolist (env envs)
-			(let ((new-env (env-no-conflict-dedup (append env p))))
-			  (when new-env
-				(setq r1 (cons new-env r1))))))
-		(setq env-list-out r1)
-		(setq r1 nil))
-	  env-list-out))
-  (let ((r (cross-aux2-aux envs-list)))
-	(when record-lengths
-	  (cross-aux2-info (cons (length r) lengths)))
-	(when rule-trace-info
-	  (let ((rule-node (first rule-trace-info)))
-		(let ((rule-name (second rule-trace-info)))
-		  (print `(rule-trace cross-aux2 rule ,rule-node ,rule-name envs-list-in ,envs-list envs-list-result ,r)))))
-	r))))))
+(defun cross-aux2 (envs-list &key (record-lengths nil) rule-trace-info)
+  (timer 'cross-aux2
+	(lambda ()
+	  (let ((lengths (and record-lengths
+						  (list (length envs-list) (mapcar (lambda (x) (length x)) envs-list)))))
+		(defr
+		  (defl cross-aux2-aux (envs-list)
+			(let ((env-list-out '(()))
+				  (r1 nil))
+			  (dolist (envs envs-list)
+				(dolist (p env-list-out)
+				  (dolist (env envs)
+					(let ((new-env (env-no-conflict-dedup (append env p))))
+					  (when new-env
+						(setq r1 (cons new-env r1))))))
+				(setq env-list-out r1)
+				(setq r1 nil))
+			  env-list-out))
+		  (let ((r (cross-aux2-aux envs-list)))
+			(when record-lengths
+			  (cross-aux2-info (cons (length r) lengths)))
+			(when rule-trace-info
+			  (let ((rule-node (first rule-trace-info)))
+				(let ((rule-name (second rule-trace-info)))
+				  (print `(rule-trace cross-aux2 rule ,rule-node ,rule-name envs-list-in ,envs-list envs-list-result ,r)))))
+			r))))))
 
 ;; Experiment -- should be more efficient sorted, but does not work
 ;; correctly and not clear why. The std fft run with n=3 works
 ;; properly, but a large rule-30 rule-dep exec fails with explosion issues.
 
-										(let ((h (make-hash-table :test #'equal)))
-(defun new-cross-aux2 (envs-list &key (record-lengths t))
-(timer 'cross-aux2
-(lambda ()
-(let ((envs-list (sort envs-list (lambda (x y) (< (length x) (length y))))))
-  (let ((lengths (and record-lengths
-					  (list (length envs-list) (mapcar (lambda (x) (length x)) envs-list)))))
-	(defr
-	  (defl cross-aux2-aux (envs-list)
-		(let ((env-list-out '(()))
-			  (r1 nil))
-		  (dolist (envs envs-list)
-			(dolist (p env-list-out)
-			  (dolist (env envs)
-				(let ((new-env (env-no-conflict-dedup (append env p))))
-				  (when new-env
-					(setq r1 (cons new-env r1))))))
-			(setq env-list-out r1)
-			(setq r1 nil))
-		  env-list-out))
-	  (let ((r (gethash envs-list h)))
-		(or r
-			(let ((r (cross-aux2-aux envs-list)))
-			  (setf (gethash envs-list h) r)
-			  (when record-lengths
-				(cross-aux2-info (cons (length r) lengths)))
-			  r))))))))))
+(let ((h (make-hash-table :test #'equal)))
+  (defun new-cross-aux2 (envs-list &key (record-lengths t))
+	(timer 'cross-aux2
+	  (lambda ()
+		(let ((envs-list (sort envs-list (lambda (x y) (< (length x) (length y))))))
+		  (let ((lengths (and record-lengths
+							  (list (length envs-list) (mapcar (lambda (x) (length x)) envs-list)))))
+			(defr
+			  (defl cross-aux2-aux (envs-list)
+				(let ((env-list-out '(()))
+					  (r1 nil))
+				  (dolist (envs envs-list)
+					(dolist (p env-list-out)
+					  (dolist (env envs)
+						(let ((new-env (env-no-conflict-dedup (append env p))))
+						  (when new-env
+							(setq r1 (cons new-env r1))))))
+					(setq env-list-out r1)
+					(setq r1 nil))
+				  env-list-out))
+			  (let ((r (gethash envs-list h)))
+				(or r
+					(let ((r (cross-aux2-aux envs-list)))
+					  (setf (gethash envs-list h) r)
+					  (when record-lengths
+						(cross-aux2-info (cons (length r) lengths)))
+					  r))))))))))
 
 ;; See notes in previous src file versions about tests of versions of
 ;; this function. In sum, this style, with no hash caches or other
 ;; tricks, is best.
 
-										(defun env-no-conflict-dedup (env)
-(timer 'env-no-conflict-dedup
-(lambda ()
-(block b
-(let ((renv nil))
-  (dolist (binding env)
-	(let ((var (first binding))
-		  (val (second binding)))
-	  (let ((rval (env-lookup var renv :idempotent nil)))
-		(when (null rval)
-		  (setq renv (cons binding renv))
-		  (setq rval val))
-		(when (not (equal val rval))
-		  (return-from b nil)))))
-  renv)))))
+(defun env-no-conflict-dedup (env)
+  (timer 'env-no-conflict-dedup
+	(lambda ()
+	  (block b
+		(let ((renv nil))
+		  (dolist (binding env)
+			(let ((var (first binding))
+				  (val (second binding)))
+			  (let ((rval (env-lookup var renv :idempotent nil)))
+				(when (null rval)
+				  (setq renv (cons binding renv))
+				  (setq rval val))
+				(when (not (equal val rval))
+				  (return-from b nil)))))
+		  renv)))))
 
-										(defun concat-envs (envlist)
-(if (null envlist)
-nil
-(append (first envlist)
-(concat-envs (rest envlist)))))
+(defun concat-envs (envlist)
+  (if (null envlist)
+	  nil
+	  (append (first envlist)
+			  (concat-envs (rest envlist)))))
 
 ;; Given a list of envs, finds the set with the smallest number of
 ;; different bound pairs, e.g., (x y) is a diff, (x x) is not.
@@ -4420,66 +4420,66 @@ nil
 ;; [9/26/15: Only useful for iso method, since otherwise we do not
 ;; include constant-to-constant matches in the bindings]
 
-										(defun min-diff-env (envlist)
-(defun ndiffs (env)
-(let ((n 0))
-(dolist (binding env)
-(when (not (equal (first binding) (second binding)))
-  (setq n (+ n 1))))
-n))
-(let ((n 1e30)
-(r nil))
-(dolist (env envlist)
-(let ((d (ndiffs env)))
-(cond
- ((< d n)
-  (setq n d)
-  (setq r (list env)))
- ((= d n)
-  (setq r (append r (list env))))
- (t nil))))
-r))
+(defun min-diff-env (envlist)
+  (defun ndiffs (env)
+	(let ((n 0))
+	  (dolist (binding env)
+		(when (not (equal (first binding) (second binding)))
+		  (setq n (+ n 1))))
+	  n))
+  (let ((n 1e30)
+		(r nil))
+	(dolist (env envlist)
+	  (let ((d (ndiffs env)))
+		(cond
+		 ((< d n)
+		  (setq n d)
+		  (setq r (list env)))
+		 ((= d n)
+		  (setq r (append r (list env))))
+		 (t nil))))
+	r))
 
 ;; Splits l at vars and returns a list of subseqs at those var boundaries
 ;; E.g. (filter-vars-to-qets '(1 2 ?x 3 4 ?y 5 6 ?z) => ((1 2) (3 4) (5 6))
 
-										(defun filter-vars-to-qets (l)
-(defr
-(defl doloop (l c r)
-(if (null l)
-(append r (when c (list c)))
-(if (is-var-name (first l))
-	(doloop (rest l) nil (append r (list c)))
-	(doloop (rest l) (append c (list (first l))) r))))
-(doloop l nil nil)))
+(defun filter-vars-to-qets (l)
+  (defr
+	(defl doloop (l c r)
+	  (if (null l)
+		  (append r (when c (list c)))
+		  (if (is-var-name (first l))
+			  (doloop (rest l) nil (append r (list c)))
+			  (doloop (rest l) (append c (list (first l))) r))))
+	(doloop l nil nil)))
 
-										(defun filter-vars (l)
-(let ((r nil))
-(dolist (x l)
-(when (not (is-var-name x))
-(setq r (nconc r (list x)))))
-r))
+(defun filter-vars (l)
+  (let ((r nil))
+	(dolist (x l)
+	  (when (not (is-var-name x))
+		(setq r (nconc r (list x)))))
+	r))
 
-										(defun filter-in-vars (l)
-(let ((r nil))
-(dolist (x l)
-(when (is-var-name x)
-(setq r (nconc r (list x)))))
-r))
+(defun filter-in-vars (l)
+  (let ((r nil))
+	(dolist (x l)
+	  (when (is-var-name x)
+		(setq r (nconc r (list x)))))
+	r))
 
-										(defun filter-out (list test)
-(let ((r nil))
-(dolist (x list)
-(when (not (funcall test x))
-(setq r (cons x r))))
-r))
+(defun filter-out (list test)
+  (let ((r nil))
+	(dolist (x list)
+	  (when (not (funcall test x))
+		(setq r (cons x r))))
+	r))
 
-										(defun filter-in (list test)
-(let ((r nil))
-(dolist (x list)
-(when (funcall test x)
-(setq r (cons x r))))
-r))
+(defun filter-in (list test)
+  (let ((r nil))
+	(dolist (x list)
+	  (when (funcall test x)
+		(setq r (cons x r))))
+	r))
 
 ;; s1 and s2 are each sets of sets. Each set from s1 is intersected
 ;; with each set from s2. If the result is non-empty, then s1 and s2
@@ -4487,159 +4487,160 @@ r))
 ;;
 ;; Note this differs from traditional def!!!!!!!!!!!! Is this why it's "x"?
 
-										(defun xcross-intersect (sets1 sets2)
-(let ((r nil))
-(dolist (s1 sets1)
-(dolist (s2 sets2)
-(when (intersect s1 s2)
-  (setq r (hunion r (list s1)))
-  (setq r (hunion r (list s2))))))
-r))
+(defun xcross-intersect (sets1 sets2)
+  (let ((r nil))
+	(dolist (s1 sets1)
+	  (dolist (s2 sets2)
+		(when (intersect s1 s2)
+		  (setq r (hunion r (list s1)))
+		  (setq r (hunion r (list s2))))))
+	r))
 
 ;; (cross '(a b c) '(d e f) '(g h i))
 
-										(defun cross (&rest sets)
-(cross-aux sets))
+(defun cross (&rest sets)
+  (cross-aux sets))
 
-										(defun cross-aux (sets)
-(timer 'cross-aux
-(lambda ()
-(let ((r '(()))
-	  (r1 nil))
-(dolist (set sets)
-  (dolist (p r)
-	(dolist (s set)
-	  (setq r1 (cons (append p (list s)) r1))))
-  (setq r r1)
-  (setq r1 nil))
-r))))
+(defun cross-aux (sets)
+  (timer 'cross-aux
+	(lambda ()
+	  (let ((r '(()))
+			(r1 nil))
+		(dolist (set sets)
+		  (dolist (p r)
+			(dolist (s set)
+			  (setq r1 (cons (append p (list s)) r1))))
+		  (setq r r1)
+		  (setq r1 nil))
+		r))))
 
-										(defun old-cross-aux (sets)
-(let ((r '(()))
-(r1 nil))
-(dolist (set sets)
-(dolist (p r)
-(dolist (s set)
-  (setq r1 (cons (cons s p) r1))))
-(setq r r1)
-(setq r1 nil))
-r))
+(defun old-cross-aux (sets)
+  (let ((r '(()))
+		(r1 nil))
+	(dolist (set sets)
+	  (dolist (p r)
+		(dolist (s set)
+		  (setq r1 (cons (cons s p) r1))))
+	  (setq r r1)
+	  (setq r1 nil))
+	r))
 
 ;; Thu Dec  1 17:14:42 EST 2016
 
-										(let ((day-names '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
-(month-names '("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec")))
-(defun date-time ()
-(multiple-value-bind
-(second minute hour date month year day-of-week dst-p tz)
-(get-decoded-time)
-(let ((pm (>= hour 12)))
-(let ((hour (if pm (- hour 12) hour)))
-  (let ((s (format nil "~a ~a ~d ~d:~2,'0d:~2,'0d ~a (gmt~a~a) ~a"
-				   (nth day-of-week day-names)
-				   (nth (- month 1) month-names)
-				   date
-				   hour
-				   minute
-				   second
-				   (if pm "pm" "am")
-				   (if (>= tz 0) "-" "+")
-				   tz
-				   year)))
-	s))))))
+(let ((day-names '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
+	  (month-names '("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec")))
+  (defun date-time ()
+	(multiple-value-bind
+		(second minute hour date month year day-of-week dst-p tz)
+		(get-decoded-time)
+	  (let ((pm (>= hour 12)))
+		(let ((hour (if pm (- hour 12) hour)))
+		  (let ((s (format nil "~a ~a ~d ~d:~2,'0d:~2,'0d ~a (gmt~a~a) ~a"
+						   (nth day-of-week day-names)
+						   (nth (- month 1) month-names)
+						   date
+						   hour
+						   minute
+						   second
+						   (if pm "pm" "am")
+						   (if (>= tz 0) "-" "+")
+						   tz
+						   year)))
+			s))))))
 
 ;; Global trace "info" section
 
-										(defun match-and-execute-info (info))
+(defun match-and-execute-info (info))
 
-										(defun match-and-execute-env-info (info))
+(defun match-and-execute-env-info (info))
 
-										(defun match-pat-obj-edge-lists-info (info))
+(defun match-pat-obj-edge-lists-info (info))
 
-										(defc base-graph objgraph nil
+(defc base-graph objgraph nil
+
 (let ()
-(defm add-natural-number-edges (n)
-(dotimes (i n)
-(add-edge `(,i sigma ,(+ i 1)))
-))
-(defm defg (rules)
-(dolist (rule rules)
-(define-rule rule))
-nil)
-(defm init ()
-(objgraph-init))))
+  (defm add-natural-number-edges (n)
+	(dotimes (i n)
+	  (add-edge `(,i sigma ,(+ i 1)))
+	  ))
+  (defm defg (rules)
+	(dolist (rule rules)
+	  (define-rule rule))
+	nil)
+  (defm init ()
+	(objgraph-init))))
 
-										(defc foundation base-graph nil
-(let ()
-(defm init ()
-(base-graph-init)
-(add-natural-number-edges 20)
-(read-rule-file "foundation.lisp"))))
+(defc foundation base-graph nil
+  (let ()
+	(defm init ()
+	  (base-graph-init)
+	  (add-natural-number-edges 20)
+	  (read-rule-file "foundation.lisp"))))
 
-										(defc rule-30-test foundation nil
-(let ()
-(defm init ()
-(clear-counters)
-(clear-perf-stats)
-(foundation-init)
-(read-rule-file "rule30.lisp")
-)
-(defm run (levels)
-(add-natural-number-edges levels)
-(define-rule `(rule
-			   (name init)
-			   (attach-to global-node)
-			   (pred
-				(global-node rule ?r)
-				(?r name init)
-				(?r1 name add-inverse-is-member-of)
-				(?r2 name add-inverse-is-elem-of)
-				(is rule ?r3)
-				(?r3 name is-0-param)
-				(is rule ?r4)
-				(?r4 name is-1-param))
-			   (add
-				(print init)
-				(r level ,levels)
-				(r rule-30-top)
-				(r local-rule-pool local-rule-pool-node)
-				(r global-rule-pool global-rule-pool-node)) ;; Remove?
-			   (del
-				(global-rule-pool-node grp-rule ?r1)
-				(global-rule-pool-node grp-rule ?r2)
-				(is rule ?r3)
-				(is rule ?r4)
-				(global-node rule ?this-rule))))
-(timer 'main
-(lambda ()
-  (execute-global-all-objs-loop))))))
+(defc rule-30-test foundation nil
+  (let ()
+	(defm init ()
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (foundation-init)
+	  (read-rule-file "rule30.lisp")
+	  )
+	(defm run (levels)
+	  (add-natural-number-edges levels)
+	  (define-rule `(rule
+					 (name init)
+					 (attach-to global-node)
+					 (pred
+					  (global-node rule ?r)
+					  (?r name init)
+					  (?r1 name add-inverse-is-member-of)
+					  (?r2 name add-inverse-is-elem-of)
+					  (is rule ?r3)
+					  (?r3 name is-0-param)
+					  (is rule ?r4)
+					  (?r4 name is-1-param))
+					 (add
+					  (print init)
+					  (r level ,levels)
+					  (r rule-30-top)
+					  (r local-rule-pool local-rule-pool-node)
+					  (r global-rule-pool global-rule-pool-node)) ;; Remove?
+					 (del
+					  (global-rule-pool-node grp-rule ?r1)
+					  (global-rule-pool-node grp-rule ?r2)
+					  (is rule ?r3)
+					  (is rule ?r4)
+					  (global-node rule ?this-rule))))
+	  (timer 'main
+		(lambda ()
+		  (execute-global-all-objs-loop))))))
 
-										(defc the-graph foundation nil
-(let ()
+(defc the-graph foundation nil
+  (let ()
 
-(defm init ()
-(foundation-init)
-(clear-perf-stats) ;; Note the perf stats are global
-(read-rule-file "fft.lisp")
-;; (read-rule-file "new-fft.lisp")
-(read-rule-file "tree.lisp") ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
-;; (read-rule-file "globaltree.lisp")
-(read-rule-file "rule30.lisp")
-(read-rule-file "fft-delta.lisp")
+	(defm init ()
+	  (foundation-init)
+	  (clear-perf-stats) ;; Note the perf stats are global
+	  (read-rule-file "fft.lisp")
+	  ;; (read-rule-file "new-fft.lisp")
+	  (read-rule-file "tree.lisp") ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
+	  ;; (read-rule-file "globaltree.lisp")
+	  (read-rule-file "rule30.lisp")
+	  (read-rule-file "fft-delta.lisp")
 
-(read-rule-file "fe.lisp")
-(read-rule-file "copy-rule.lisp")
+	  (read-rule-file "fe.lisp")
+	  (read-rule-file "copy-rule.lisp")
 	  
-;; (read-rule-file "display-rules.lisp")
-;; (read-rule-file "fft-display-rules.lisp")
+	  ;; (read-rule-file "display-rules.lisp")
+	  ;; (read-rule-file "fft-display-rules.lisp")
 
-;; (read-rule-file "gettysburg-address.lisp")
+	  ;; (read-rule-file "gettysburg-address.lisp")
 
-;; (read-rule-file "fe-no-copy.lisp")
-;; (read-rule-file "rule-dep.lisp")
-)
+	  ;; (read-rule-file "fe-no-copy.lisp")
+	  ;; (read-rule-file "rule-dep.lisp")
+	  )
 
-))
+	))
 
 ;; Local Variables:
 ;; eval: (put 'execute-obj 'lisp-indent-function 'defun)
