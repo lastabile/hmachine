@@ -52,15 +52,12 @@
 						(x rule ,(! (g query) '((?x name fft-rule)) '?x))
 
 						(x local-rule-pool local-rule-pool-node)
-						(x global-rule-pool global-rule-pool-node)  ;; global-change: remove!
-						(xfft local-rule-pool local-rule-pool-node) ;; global-change:
-						(xfft global-rule-pool global-rule-pool-node) ;; global-change:
 						(r local-rule-pool local-rule-pool-node)
-						(r global-rule-pool global-rule-pool-node))
+						)
 					   (del
 						(global-node rule ?this-rule))))
 
-  ;; (! (g trace-rule) 'the-other-copy-array-struct-next)
+  ;; (! (g trace-rule) 'copy-array-struct-new-x)
   (time
    (timer 'main
 	 (lambda ()
@@ -114,11 +111,8 @@
 							  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
 
 							  (x local-rule-pool local-rule-pool-node)
-							  (x global-rule-pool global-rule-pool-node)
-							  (xfft local-rule-pool local-rule-pool-node) ;; global-change:
-							  (xfft global-rule-pool global-rule-pool-node) ;; global-change:
-							  (r local-rule-pool local-rule-pool-node)
-							  (r global-rule-pool global-rule-pool-node))
+							  (xfft local-rule-pool local-rule-pool-node)
+							  (r local-rule-pool local-rule-pool-node))
 							 (del
 							  (global-node rule ?this-rule))))
 
@@ -163,9 +157,7 @@
 						(x level ,n)
 						(x rule ,(! (g query) '((?x name fft-rule)) '?x))
 						(x local-rule-pool local-rule-pool-node)
-						(x global-rule-pool global-rule-pool-node)
-						(xfft local-rule-pool local-rule-pool-node) ;; global-change:
-						(xfft global-rule-pool global-rule-pool-node) ;; global-change:
+						(xfft local-rule-pool local-rule-pool-node)
 						)
 					   (del
 						(global-node rule ?this-rule))))
@@ -223,6 +215,7 @@
 ;; Standard full trace file
 
 (with-open-file (s "xxxet" :direction :output)
+  (format s "********** edge-to-trace~%")
   (let ((et (! ((! (g get-edge-to-trace)) as-list))))
 	(dolist (e et)
 	  (let ((edge (first e)))
@@ -230,6 +223,7 @@
 		  (print-object (list edge r) s)
 		  (terpri s))))
 	nil)
+  (format s "********** edge-to-pred~%")
   (let ((et (! ((! (g get-edge-to-pred)) as-list))))
 	(dolist (e et)
 	  (let ((edge (first e)))
@@ -237,6 +231,7 @@
 		  (print-object (list edge r) s)
 		  (terpri s))))
 	nil)
+  (format s "********** edge-to-add~%")
   (let ((et (! ((! (g get-edge-to-add)) as-list))))
 	(dolist (e et)
 	  (let ((edge (first e)))
@@ -574,7 +569,7 @@
 	(! (d set-graph) g)
 	(! (d dump-gv-edges) "xfft.gv" :omit-unmatched-rules nil :rules nil :emit-labels t :emit-legend nil 
 	   :omitted-attrs
-	   '(in-node-color color shape two-input-op local-rule-pool global-rule-pool  rule is-two-input-op)
+	   '(in-node-color color shape two-input-op local-rule-pool rule is-two-input-op)
 	   :attrs
 	   `(
 		    zero ;; ga-word value rule-30-weave-next   ;;	top level max  zero is-elem-of 
@@ -1268,9 +1263,7 @@ egrep "defc|defm" *.lisp
 							  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
 
 							  (x local-rule-pool local-rule-pool-node)
-							  (x global-rule-pool global-rule-pool-node)
-							  (r local-rule-pool local-rule-pool-node)
-							  (r global-rule-pool global-rule-pool-node))
+							  (r local-rule-pool local-rule-pool-node))
 							 (del
 							  (global-node rule ?this-rule))))
 		;; (! (g trace-rule) 'fft-comb-rule-next-sing-delta)
@@ -1327,7 +1320,7 @@ egrep "defc|defm" *.lisp
 							  elem10 elem11 elem12 elem13 elem14 elem15 elem16 elem17 elem18 elem19
 							  elem pred add del rule add-main
 							  instantiated success name tested new-edges not-new-edges
-							  global-rule-pool-node global-rule-pool local-rule-pool-node local-rule-pool))))
+							  local-rule-pool-node local-rule-pool))))
 
 (dolist (x '(N2188 FROM-IS-RULE N714 RULE N701)) (print (! (g path) 'n2189 x)))
 
@@ -1702,9 +1695,7 @@ Gerry S
 						  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
 
 						  (x local-rule-pool local-rule-pool-node)
-						  (x global-rule-pool global-rule-pool-node)
-						  (r local-rule-pool local-rule-pool-node)
-						  (r global-rule-pool global-rule-pool-node))
+						  (r local-rule-pool local-rule-pool-node))
 						 (del
 						  (global-node rule ?this-rule))))
 	;; (! (g trace-rule) 'fft-comb-rule-next-sing-delta)
@@ -1793,7 +1784,7 @@ Gerry S
 	(print (list 'e e))
 	(when (and (= (length e) 1)
 			   (intersect '(fft-comb is-elem-of zero local-rule-pool lrp-rule name fft-comb-rule-next fft-comb-rule-next-sing
-									 local-rule-pool-node global-node global-rule-pool-ref global-rule-pool-node fft-comb-rule-zero)
+									 local-rule-pool-node global-node fft-comb-rule-zero)
 						  e))
 	  (print (list 'd e))
 	  (! (x2 rem-edge) e)))
@@ -1899,7 +1890,7 @@ Gerry S
 	  (setq g (make-rule-30-test))
 	  (time (! (g run) 200)))))
 
-(let ((n 3))
+(let ((n 5))	;; 3
   (setq g (make-rule-30-test))
   (time (! (g run) n)))
 
@@ -2131,31 +2122,88 @@ color-color
 ;; "Generic" edge trace graph run, assumes g set
 
 (let ()
-  (setq x (! (g edge-trace-graph) 
-			 :make-new-graph t
-			 :rules-fcn (lambda (r) (memq r '(
-											  fft-rule-opt-rule-names
-											  fft-rule-opt
-											  copy-array-struct-new-gen
-											  ev-init-gen
-											  rule-30-zero-rule-gen     
-											  rule-30-max-rule-gen      
-											  rule-30-next-rule-gen     
-											  rule-30-next-rule-opt     
-
-											  fft-comb-rule-zero
-											  fft-comb-rule-next
-											  ;; even-next
-											  ;; odd-next
-											  ;; even-new
-											  ;; odd-new
-											  fft-rule
-											  ))
-						  ;; t
-						  )
-			 :except-rules-fcn (lambda (r) (memq r '(
-													 #|
-													 |#
+  (time
+   (setq x (! (g edge-trace-graph) 
+			  :make-new-graph t
+			  :rules-fcn (lambda (r) (memq r '(
+											   ;; add-inverse-is-elem-of 
+											   ;; add-inverse-is-member-of 
+											   rule-30-max-rule-0-1 
+											   rule-30-max-rule-1-1 
+											   rule-30-zero-rule-1-1 
+											   rule-30-zero-prune 
+											   ;; ev-init 
+											   init 
+											   fft-rule-opt 
+											   fft-rule-opt-rule-names 
+											   ;; fft-rule-delta6
+											   ;; fft-rule-delta5
+											   ;; fft-rule-delta4
+											   ;; fft-rule-delta3
+											   ;; fft-rule-delta2
+											   ;; fft-delta-init
+											   ;; rule-30-data 
+											   ;; rule-30-top 
+											   ;; rule-30-center-loop 
+											   ;; rule-30-center 
+											   ;; rule-30-max-prune 
+											   ;; rule-30-max-rule-gen 
+											   ;; rule-30-zero-prune-gen 
+											   ;; rule-30-zero-rule-gen 
+											   ;; rule-30-next-rule-opt 
+											   ;; rule-30-next-rule-gen 
+											   ;; rule-30-center-obj-rule 
+											   ;; treeobj-rule 
+											   tree-top-rule 
+											   tree-rule-opt 
+											   ;; tree-leaf-rule 
+											   tree-rule 
+											   ;; tree-max-rule 
+											   ;; tree-zero-rule 
+											   ;; tree-elem-zero-rule 
+											   ;; tree-elem-rule 
+											   ;; tree-top-propagate-rule 
+											   ;; tree-top-order-rule 
+											   ;; tree-loop-rule 
+											   tree-next-rule 
+											   ;; tree-next-zero-rule 
+											   fft-top-rule 
+											   fft-rule 
+											   fft-rule-zero 
+											   fft-comb-rule-zero 
+											   fft-comb-rule-next 
+											   copy-array-struct-new-gen 
+											   opt-copy-array-struct-zero-and-not-zero 
+											   copy-array-struct-not-zero 
+											   copy-array-struct-zero 
+											   copy-array-struct-next 
+											   install-copy-array-struct-next 
+											   ;; weave-next-rule
+											   ;; odd-even-weave
+											   ;; odd-tree-zero
+											   ;; even-tree-max 
+											   ;; even-new-rule-propagate 
+											   ;; odd-new-rule-propagate 
+											   ;; odd-zero 
+											   ;; even-zero 
+											   ;; odd-next 
+											   ;; odd-new 
+											   ;; even-next 
+											   ;; even-new 
+											   ;; ev-od-obj-rule
+											   ev-od-opt 
+											   ev-next 
+											   od-next 
+											   ev-init-gen 
+											   inverse-data 
+											   gen-inverse 
+											   ;; basic-display-data
+											   ))
+						  ;; t			;
+						   )
+			  :except-rules-fcn (lambda (r) (memq r '(
+													  #| ;
+													  |#
 													 )))
 			 :nodes-fcn (lambda (e) (intersect e '(
 												   ;; fft-hb
@@ -2167,8 +2215,8 @@ color-color
 						  t
 						  )
 			 :except-nodes-fcn (lambda (e) (intersect e '(lrp-rule is-element-of local-rule-pool-node local-rule-pool)))
-			 :trim-dangling-adds-and-preds t
-			 ))
+			 :trim-dangling-adds-and-preds nil
+			 )))
   (! (x read-rule-file) "edge-trace-trim-rules.lisp")
   (time (with-redirected-stdout "y2"
 								(lambda (std)
@@ -2183,9 +2231,9 @@ color-color
 	(! (d dump-gv-edges) "z.gv"
 	   :rules nil 
 	   :emit-legend nil
-	   :gv-graph-props "rankdir=LR;"  ;; "ranksep=5.0;"
+	   :gv-graph-props "rankdir=LR;"
 	   :attrs '(ae ar pe pr am d #| p d r an pn q e rn |#))
-	(time (! (d gv-to-svg) "z" :edit-svg t)))
+	(time (! (d gv-to-svg) "z" :edit-svg nil)))
   )
 
 (let ((d (make-dumper))) (! (d set-graph) x)(! (d dump-gv-edges) "y1.gv" :rules nil :attrs '(a p r e)))
@@ -2689,13 +2737,13 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 	   (print r1 ?x ?y ?r)
 	   (done ?x ?y)
 #|
-													 (?y rule ?r)
-													 (?r type rule)
-													 (?r name r3)
-													 (?r pred ?z c ?t)
-													 (?r add print r3 ?z ?t)
-													 (?r add ?z d 86)
-													 |#
+													  (?y rule ?r)
+													  (?r type rule)
+													  (?r name r3)
+													  (?r pred ?z c ?t)
+													  (?r add print r3 ?z ?t)
+													  (?r add ?z d 86)
+													  |#
 	   (?y rule 
 		   (rule
 			(name r2)
@@ -2863,13 +2911,13 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 ;; end better-root-var
 
 #|
-													 (a f d)
-													 (a d b)
-													 (b d c)
-													 (d c e)
-													 (c e a)
-													 (f e a)
-													 |#
+													  (a f d)
+													  (a d b)
+													  (b d c)
+													  (d c e)
+													  (c e a)
+													  (f e a)
+													  |#
 
 (let ()
   (let ((edges 

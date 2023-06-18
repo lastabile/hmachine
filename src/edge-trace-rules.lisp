@@ -169,6 +169,30 @@
   (?e style filled)))
 
 (rule
+ (name edge-trace-graph-pred-node-rule)
+ (local)
+ (attach-to pred-node)
+ (pred
+  (?e type pred-node))
+ (add
+  (print edge-trace-graph-obj-rule ?e)
+  (?e shape ellipse)
+  (?e color plum)
+  (?e style filled)))
+
+(rule
+ (name edge-trace-graph-add-node-rule)
+ (local)
+ (attach-to add-node)
+ (pred
+  (?e type add-node))
+ (add
+  (print edge-trace-graph-obj-rule ?e)
+  (?e shape ellipse)
+  (?e color peachpuff)
+  (?e style filled)))
+
+(rule
  (name rule-30-next-color-rule-info)
  (attach-to global-node)
  (pred

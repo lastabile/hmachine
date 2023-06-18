@@ -2153,10 +2153,6 @@ more appropriate to srtings (qets). Operations like intersection and union
 require more elaborate counterparts, and have limited use. Similarly, tuple operations like concat, splicing, etc. are not 
 useful in the H context. The one property used is containment, i.e., is one string a substring of another? This is all we need.
 
-
-
-
-
 ---------------
 Bill Kay
 Ph.D. Mathematics. M.S. in Computer Science.
@@ -2202,3 +2198,30 @@ generalize earlier works of Braß–Károlyi– Valtr, Capoyleas–Pach, and
 Aronov–Dujmovic–Morin–Ooms-da Silveira. We also provide a new ˇ
 variation of the Erdos-Ko-Rado theorem in the ordered setting.
 ---------------
+
+----------------------------------------------------------
+6/16/23 -- Tensor representation of hypergraphs
+
+Found some pretty recent papers on this:
+
+~/OuvrardAdjacencyAndTensorRepresentationInGeneralHypergraphs.pdf
+
+This is a good overview of the various reps, and in particular
+develops the vairous forms of the adjacency tensor, i.e., Tijk = 1 iff
+nodes ni, nj, and nk form an edge.
+
+There are various ways to get it to behave properly for hypergraphs
+not k-uniform, e.g. in Banerjee they define all perms using dups of
+some of the elements. 
+
+Banerjee2017SpectraOfGeneralHypergraphs.pdf
+
+Ankit Sharma
+https://scholar.google.com/citations?user=8CsyV4MAAAAJ&hl=en
+Sharma2020JointSymmetricTensorDecompositionForHypergraphEmbeddings.pdf
+
+This paper uses a 2D matrix of incidences of nodes and edges. But they
+also define a node-node tensor.
+
+Feng2019Hypergraph_Neural_Networks.pdf
+

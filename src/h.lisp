@@ -3,6 +3,7 @@
 ;;  global-change -- Getting rid of the exposed global rule pool.
 ;;					 5/18/23 -- This is pretty much done, and the tag discharged. A couple of tags left below, and in
 ;;								test.lisp.
+;;					 6/11/23 -- Further cleanup of global pool refs
 ;;
 ;;  reflexive-match-fix -- Matching say (?x next ?x) against (n1 next n1).
 ;;						   5/18/23 -- Discharged.
@@ -1013,11 +1014,6 @@
 					(when local-rule-pool
 					  (let ((local-rule-pool-rules (dedup-rules (hget-all local-rule-pool 'lrp-rule))))
 						(dolist (rule local-rule-pool-rules)
-						  (m-and-e rule node)))))
-				  (let ((global-rule-pool (hget node 'global-rule-pool)))		;; global-change: Should we ever try to get the grp out of a node?
-					(when global-rule-pool
-					  (let ((global-rule-pool-rules (dedup-rules (hget-all global-rule-pool 'grp-rule))))
-						(dolist (rule global-rule-pool-rules)
 						  (m-and-e rule node))))))
 				 ((or (eq rule-mode :local-only)
 					  (eq rule-mode :local-global))
@@ -1036,8 +1032,6 @@
 									  (return-from b t)
 									  )))
 								nil)))))
-
-					;; global-change: This used to get the grp out of the node executed, but we no longer put the pool refs on each node
 
 					(when (not (eq rule-mode :local-only))
 					  (when global-rule-pool
@@ -2471,10 +2465,12 @@
 			  (defl pushe (edge)
 				(setq edge-list (cons edge edge-list)))
 
+			  ;; Doing this for refs in a rule is not right! Commented-out.
 			  (defl xform-std-vars (edge) ;; Use new-pool level to scope the std vars (?this-obj, etc.)
-				(mapcar (lambda (x)
-						  (! (std-vars var-base-to-var) x new-pool))
-						edge))
+				($comment (mapcar (lambda (x)
+									(! (std-vars var-base-to-var) x new-pool))
+								  edge))
+				edge)
 
 			  (defl new-var ()
 				(let ((r (intern (format nil "?_X-~a-~a" new-pool new-var-cnt))))
@@ -3219,6 +3215,7 @@
 										(let ((edge-node (format nil "~a" edge)))
 										  (let ((pred-node-name (format nil "~a" pred)))
 											(let ((pred-node (format nil "~a--~a--~a" pred-node-name rule-name seqno)))
+											  (! (g add-edge) (list pred-node 'type 'pred-node))
 											  (! (g add-edge) (list pred-node 'label pred-node-name))
 											  (! (g add-edge) (list edge-node 'pe pred-node))
 											  (! (g add-edge) (list pred-node 'pr rule-node)))))))))))))))))))
@@ -3243,6 +3240,7 @@
 										(let ((edge-node (format nil "~a" edge)))
 										  (let ((add-node-name (format nil "~a" add)))
 											(let ((add-node (format nil "~a--~a--~a" add-node-name rule-name seqno)))
+											  (! (g add-edge) (list add-node 'type 'add-node))
 											  (! (g add-edge) (list add-node 'label add-node-name))
 											  (! (g add-edge) (list add-node 'ae edge-node))
 											  (! (g add-edge) (list rule-node 'ar add-node)))))))))))))))))))
@@ -4592,24 +4590,13 @@
 					 (attach-to global-node)
 					 (pred
 					  (global-node rule ?r)
-					  (?r name init)
-					  (?r1 name add-inverse-is-member-of)
-					  (?r2 name add-inverse-is-elem-of)
-					  (is rule ?r3)
-					  (?r3 name is-0-param)
-					  (is rule ?r4)
-					  (?r4 name is-1-param))
+					  (?r name init))
 					 (add
 					  (print init)
 					  (r level ,levels)
 					  (r rule-30-top)
-					  (r local-rule-pool local-rule-pool-node)
-					  (r global-rule-pool global-rule-pool-node)) ;; Remove?
+					  (r local-rule-pool local-rule-pool-node))
 					 (del
-					  (global-rule-pool-node grp-rule ?r1)
-					  (global-rule-pool-node grp-rule ?r2)
-					  (is rule ?r3)
-					  (is rule ?r4)
 					  (global-node rule ?this-rule))))
 	  (timer 'main
 		(lambda ()

@@ -36,7 +36,7 @@
   (?e0 next ?e1)
   (?e0 ev))
  (add
-  (print od-next ?e1 ?root-var)
+  (print od-next ?this-obj ?this-rule ?root-var ?e0 ?e1 ?a)
   (?e1 od))
  (del
   (?this-obj rule ?this-rule)
@@ -108,10 +108,12 @@
   (?p lrp-rule ?odd-zero)
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
+  (?p lrp-rule ?copy-array-struct-new)
   (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
-  (?even-next name even-next))
+  (?even-next name even-next)
+  (?copy-array-struct-new name copy-array-struct-new))
  (add
   (print even-new ?this-obj ?a ?e0 ?nn1)
   (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
@@ -129,6 +131,7 @@
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
+  (?nn1 rule ?copy-array-struct-new)
   )
  (del
   (?this-obj rule ?this-rule)
@@ -170,10 +173,12 @@
   (?p lrp-rule ?odd-zero)
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
+  (?p lrp-rule ?copy-array-struct-new)
   (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
-  (?even-next name even-next))
+  (?even-next name even-next)
+  (?copy-array-struct-new name copy-array-struct-new))
  (add
   (print odd-new ?a ?e0 ?nn1)
   (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
@@ -191,6 +196,7 @@
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
+  (?nn1 rule ?copy-array-struct-new)
   )
  (del
   (?this-obj rule ?this-rule)
@@ -431,6 +437,7 @@
  (del
   (?this-obj rule ?this-rule)))
 
+(comment
 (rule
  (name copy-array-struct-new-gen)
  (attach-to copy-array-struct)
@@ -471,6 +478,47 @@
 	   (del
 		;; (?this-obj-1 rule ?this-rule-1) ;; !!!!!!
 		)))))
+)
+
+(rule
+ (name copy-array-struct-new-gen)
+ (attach-to global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?copy-array-struct-zero)
+  (?copy-array-struct-zero name copy-array-struct-zero)
+  (?p lrp-rule ?copy-array-struct-not-zero)
+  (?copy-array-struct-not-zero name copy-array-struct-not-zero)
+  (?p lrp-rule ?copy-array-struct-next)
+  (?copy-array-struct-next name copy-array-struct-next)
+  )
+ (add
+  (print copy-array-struct-new-gen)
+  (local-rule-pool-node lrp-rule
+						(rule
+						 (name copy-array-struct-new)
+						 ;; (root-var ?e0)	;; This is desired -- should be auto 
+						 (pred
+						  (?e0 is-elem-of ?a)
+						  (?a copy-array-struct ?a1)
+						  (?a level ?l)
+						  (?nn1 new-node sn1))
+						 (add
+						  (print copy-array-struct-new ?this-obj ?this-rule ?this-obj-1 ?this-rule-1 ?a ?a1 ?e0 ?nn1)
+						  (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
+						  (?a1 elem ?nn1)
+						  (?nn1 ref ?e0)
+						  (?a1 level ?l)
+						  (?nn1 local-rule-pool ?p)
+						  (?nn1 casn-ref ?e0)
+						  (?nn1 rule ?copy-array-struct-zero)
+						  (?nn1 rule ?copy-array-struct-not-zero)
+						  (?e0 rule ?copy-array-struct-next)
+						  )
+						 (del
+						  (?this-obj-1 rule ?this-rule-1)))))
+ (del
+  (?this-obj rule ?this-rule)))
 
 ;; We used to need a a root-var here, but not bailing from root-var loop fixed it.
 
