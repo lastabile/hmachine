@@ -104,7 +104,7 @@
   (?v new-node sn1)
   (?x local-rule-pool ?p))
  (add
-  (print tree-elem ?this-obj ?t ?x)
+  (print tree-elem-rule ?this-obj ?t ?x)
   (?t elem ?x)
   (?x value ?v)
   ;; (?x is-not treeobj)		;; Commented-out because it appears to work (at least for small trees)
@@ -188,14 +188,10 @@
  (add
   (print tree-rule ?this-obj ?x ?nn1 ?nn2 ?l)
   (?nn1 aup ?x)
-  (?x adn ?nn1)
-  (?x dl ?nn1)	;; dl = down-left
   (?nn1 ul ?x)	;; ul = up-left
   (?nn1 l ?l1)
   (?nn1 is treeobj)
   (?nn2 aup ?x)
-  (?x adn ?nn2)
-  (?x dr ?nn2)	;; dr = down-right
   (?nn2 ur ?x)	;; ur = up-right
   (?nn2 l ?l1)
   (?nn2 is treeobj)
@@ -208,8 +204,6 @@
   (?x l 0))
  (add
   (print tree-leaf-rule ?x)))
-
-
 
 (rule
  (name tree-rule-opt)

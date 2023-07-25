@@ -130,7 +130,7 @@
 		;; provide much info.  So disable for now.
 		;;
 		(defun log-stat (name value)
-		  ($nocomment		;; The logging can be a little expensive so enable/disable as needed
+		  ($comment		;; The logging can be a little expensive so enable/disable as needed
 		   (let ()
 			 (setq log-stat-list (cons (make-logrec :name name :seqno seqno :value value) log-stat-list))
 			 (setq seqno (+ seqno 1)))))
@@ -663,6 +663,30 @@
 	(maphash (lambda (k v)
 			   (setq r (cons v r)))
 			 h)
+	r))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Gather
+;;
+;; (gather <list> <fcn>)
+;;
+;; <fcn> == (lambda (x) ...) => key, x element-of <list>
+;;
+;; <fcn> takes an element of <list> and returns a key represnting some common attribute of a subset of the elements of
+;; <list>. It returns a list of pairs (<key> (x1 ... xn)), where xi is an element of <list>.
+;;
+;; Example: (gather '((a 1) (b 2) (a 2) (c 3) (b 4)) (lambda (x) (first x))) =>
+;;						((a ((a 2) (a 1))) (b ((b 4) (b 2))) (c ((c 3))))
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun gather (l f)
+  (let ((r nil))
+	(let ((h (make-hash-table :test #'equal)))
+	  (dolist (x l)
+		(setf (gethash (funcall f x) h) (cons x (gethash (funcall f x) h))))
+	  (maphash (lambda (k v)
+				 (setq r (cons (list k v) r)))
+			   h)) 
 	r))
 
 ;; Shell commands. It's maddening working around the crlf crap. The igncr bash arg lets script files work by ignoring

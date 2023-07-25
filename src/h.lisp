@@ -63,6 +63,9 @@
 ;;				   5/21/23 -- Discharged. qet-utils class is gone. is-subqet now just used CL search, and is a graph method.
 ;;
 ;; dump-sn -- Remove the old "sn" new-node model. Can be simpler now, say, e.g., just (?nn1 new-node).
+;;
+;; check-rule-trace -- Change explicit rule-trae check with a method; allows options like break; the method's name is
+;;					   check-rule-trace, so a change to that name qualifies as a tag.
 
 (defc graph nil nil
   (let ((size 63)) ;; 1021 !!!!!!!!!!!!!!!!!!!!!!!
@@ -990,6 +993,13 @@
 				  (let ((r (funcall thunk)))
 					(when r
 					  (while thunk))))
+				(defl exec-obj-stat (match-status)
+				  (gstat 'eo-tested (lambda (x y) (+ x y)) (lambda () 1))
+				  (cond
+				   ((eq match-status :new-edges)
+					(gstat 'eo-new-edges (lambda (x y) (+ x y)) (lambda () 1)))
+				   ((eq match-status :no-new-edges)
+					(gstat 'eo-no-new-edges (lambda (x y) (+ x y)) (lambda () 1)))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
 										  (lambda (m s p d)
@@ -1037,8 +1047,8 @@
 					  (when global-rule-pool
 						(let ((global-rules (dedup-rules (hget-all global-rule-pool 'grp-rule))))
 						  (dolist (rule global-rules)
-							(m-and-e rule node)))))))))
-
+							(m-and-e rule node))))))))
+				(exec-obj-stat match-status))
 			  (funcall cont r match-status matched-edges)))))
 
 	  (defm execute-all-objs (&key (rule-mode :local-global))
@@ -1356,54 +1366,22 @@
 	  ;; This has the simple effect of keeping <copied-rule-node> on the queue. In get-rule-neighborhood, then, we just
 	  ;; look for rule^-1 for any node of type rule we encounter.
 
-	  (let ((enable-get-rule-neighborhood t))
-		(defm enable-get-rule-neighborhood (v)
-		  (setq enable-get-rule-neighborhood v))
-		(defm get-rule-neighborhood (edges)
-		  (block b
-			(when (not enable-get-rule-neighborhood)
-			  (return-from b nil))
-			(let ((nodes (nodes edges)))
-			  (let ((r nil))
-				(dolist (node nodes)
-				  (when (eq (hget node 'type) 'rule)
-					(setq r (append (hget-inverse-all node 'rule) r))))
-				(return-from b r)))))
+	  ;; 10/23/22 -- Comment from the old way
+	  ;;
+	  ;; A path from a node up to an object with a rule property is constrained to be due to an _elem edge being added. Hence we look for
+	  ;; that pattern and only if we find it do we get the path.
+	  ;;
+	  ;; Note this may not be adequate for some cases, where we might have a race condition relative to rule modification, i.e., we may
+	  ;; need to sense adds, preds, and rule props too. I had that active in the first version of the edge-based fcn, but it really
+	  ;; returns a lot of nodes and slows things down considerably. So we'll use just this low-level trigger for now.
+
+	  (defm get-rule-neighborhood (nodes)
+		(let ((r nil))
+		  (dolist (node nodes)
+			(when (eq (hget node 'type) 'rule)
+			  (setq r (append (hget-inverse-all node 'rule) r))))
+		  r))
 		
-		;; 10/23/22 -- Comment from the old way
-		;;
-		;; A path from a node up to an object with a rule property is constrained to be due to an _elem edge being added. Hence we look for
-		;; that pattern and only if we find it do we get the path.
-		;;
-		;; Note this may not be adequate for some cases, where we might have a race condition relative to rule modification, i.e., we may
-		;; need to sense adds, preds, and rule props too. I had that active in the first version of the edge-based fcn, but it really
-		;; returns a lot of nodes and slows things down considerably. So we'll use just this low-level trigger for now.
-
-		(defm old-get-rule-neighborhood (edges)
-		  (timer 'get-rule-neighborhood
-			(lambda ()
-			  (block b
-				(when (not enable-get-rule-neighborhood)
-				  (return-from b nil))
-				(let ((rule-pats '((?x _elem ?n ?y)))) ;; '((?x rule ?y)(?x pred ?y)(?x add ?y)(?x _elem ?n ?y))))
-				  (dolist (rule-pat rule-pats)
-					(dolist (edge edges)
-					  (when (match-one-edge rule-pat edge nil nil nil)
-						(let ((nodes (nodes edges)))
-						  (let ((elem-nodes
-								 (dedup-list (mapcar (lambda (edge) (first edge))
-													 (mapcan (lambda (node)
-															   (get-edges-from-subqet (list '_elem node)))
-															 nodes)))))
-							(let ((r (hunion
-									  (hget-all-list elem-nodes '((inv pred) (inv rule)))
-									  (hget-all-list elem-nodes '((inv add) (inv rule))))))
-							  #|
-							  (when r
-							  (print (list edges r)))
-							  |#
-							(return-from b r)))))))))))))
-
  	  ;; Calls (cont <edge-creation-status> <matched-edges-list> <deleted-edges> <matched-and-new-edges-per-env>)
 	  ;; <edge-creation-status> == t if any new edges were created, else nil
 	  ;; <matched-edges-list> == edges matched, of form (edges ...), one set of edges for each env 
@@ -1433,6 +1411,7 @@
 					;; Returns a list of deleted edges (which only exist as lists, not edges)
 					(defl del-consequent-edges (edges not-edges envlist)
 					  (let ((r nil))
+						(check-rule-trace (hget rule-node 'name) (list 'del-consequent-edges edges not-edges envlist))
 						(dolist (env envlist)
 						  (block b
 							(dolist (edge not-edges)
@@ -1448,6 +1427,7 @@
 											   (env-lookup node env))
 											 edge)))
 								(when del-edge
+								  (check-rule-trace (hget rule-node 'name) (list 'del-edge del-edge))
 								  (rem-edge del-edge)
 								  (setq r (cons del-edge r)))
 								(! (env-triggered-table removed-edge) del-edge)))))
@@ -1464,6 +1444,44 @@
 						  (when (not (eq (first edge) 'print))
 							(return-from b nil)))
 						t))
+					(defl get-nodes-to-queue (new-edges new-node-hash all-node-hash)
+					  (let ((all-nodes (hash-table-value-to-list all-node-hash)))
+						(let ((new-nodes (hash-table-value-to-list new-node-hash)))
+						  (let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
+							(let ((nodes-with-rules (mapcad (lambda (node)
+															  (when (hget node 'rule)
+																node))
+															all-nodes)))
+							  ;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
+							  (let ((nodes (hunion
+											all-nodes
+											(hunion
+											 nil ;; new-nodes
+											 (hunion
+											  rule-neighborhood-nodes
+											  (hunion
+											   nil ;; nodes-with-rules
+											   nil))))))
+								nodes))))))
+					(defl old-get-nodes-to-queue (new-edges new-node-hash all-node-hash)
+					  (let ((all-nodes (hash-table-value-to-list all-node-hash)))
+						(let ((new-nodes (hash-table-value-to-list new-node-hash)))
+						  (let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
+							(let ((nodes-with-rules (mapcad (lambda (new-edge)
+															  (when (and (= (length new-edge) 3)
+																		 (eq (second new-edge) 'rule))
+																(first new-edge)))
+															new-edges)))
+							  (let ((nodes (hunion
+											all-nodes
+											(hunion
+											 nil ;; new-nodes
+											 (hunion
+											  rule-neighborhood-nodes
+											  (hunion
+											   nil ;; nodes-with-rules
+											   nil))))))
+								nodes))))))
 					(let ((r nil)
 						  (first-edge nil)
 						  (rule-name (hget rule-node 'name))
@@ -1482,8 +1500,7 @@
 								(let ()
 								  (if (! (env-triggered-table rule-has-been-triggered) rule-node env)
 									  (let ()
-										(when (edge-exists `(rule-trace ,rule-name))
-										  (print `(rule-trace add-consequent-edges already-triggered rule ,rule-node ,rule-name obj ,obj-node)))
+										(check-rule-trace rule-name `(add-consequent-edges already-triggered rule ,rule-node ,rule-name obj ,obj-node))
 										(gstat 'already-env-triggered-rules (lambda (x y) (+ x y)) (lambda () 1))
 										;; (when (= (length envlist) 1)
 										;;   (rem-edge `(,obj-node rule ,rule-node)))
@@ -1556,8 +1573,7 @@
 													(! (env-new-edges insert) new-edge new-edge))))))
 										  ;; (print new-node-hash)
 										  )))))
-							  (when (edge-exists `(rule-trace ,rule-name))
-								(print `(rule-trace add-consequent-edges edge-scan-done rule ,rule-node ,rule-name obj ,obj-node ,(hash-table-count all-node-hash))))
+							  (check-rule-trace rule-name `(add-consequent-edges edge-scan-done rule ,rule-node ,rule-name obj ,obj-node ,(hash-table-count all-node-hash)))
 							  ;;
 							  ;; 11/10/22 Trying this to fix the empty-add print problem. 
 							  ;;
@@ -1589,28 +1605,23 @@
 								  (cerror "Good luck!" (format nil "Rule-break ~a" rule-name)))
 								;; (add-consequent-edges-info (list env (hash-table-to-list all-node-hash)))
 								)
-							  (let ((nodes nil))
-								(maphash (lambda (k v)
-										   (let ((node v))
-											 (setq nodes (cons node nodes))))
-										 all-node-hash)
-								(let ((nodes (hunion (! (self get-rule-neighborhood) (! (env-new-edges results))) nodes)))
-								  ($comment
-								   (when nodes 
-									 (print (list 'ace2 nodes))))
-								  (dolist (node nodes)
-									(when (has-rules node)
-									  (if t ;; !!!!!!!!!!!!!!!!!!!
-										  (queue-node node :only-if-not-queued t)
-										  (queue-node (let ((count 0))
-														(lambda ()
-														  (let ((r (execute-obj node)))
-															;; (print (list node count r))
-															(if (not r) ;; (>= count 4)          ;; (or r (>= count 2))
-																:done
-																(let ()
-																  (setq count (+ count 1))
-																  :requeue)))))))))))))))
+							  (let ((nodes (get-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
+								($comment
+								 (when nodes 
+								   (print (list 'ace2 nodes))))
+								(dolist (node nodes)
+								  (when (has-rules node)
+									(if t ;; !!!!!!!!!!!!!!!!!!!
+										(queue-node node :only-if-not-queued t)
+										(queue-node (let ((count 0))
+													  (lambda ()
+														(let ((r (execute-obj node)))
+														  ;; (print (list node count r))
+														  (if (not r) ;; (>= count 4)          ;; (or r (>= count 2))
+															  :done
+															  (let ()
+																(setq count (+ count 1))
+																:requeue))))))))))))))
 					  (when nil ;; r
 						(print (list 'a (hget rule-node 'name) matched-and-new-edges-per-env)))
 					  ;; (print (list 'ace3 (! (new-edges as-list)) matched-edges))
@@ -1622,11 +1633,36 @@
 	  (defm untrace-rule (rule-name)
 		(rem-edge `(rule-trace ,rule-name)))
 
-	  (defm break-rule (rule-name)
-		(add-edge `(rule-break ,rule-name)))
+	  (defm break-rule (rule-name &optional (key t))
+		(add-edge `(rule-trace ,rule-name))
+		(add-edge `(rule-break ,rule-name ,key)))
 
 	  (defm unbreak-rule (rule-name)
 		(rem-edge `(rule-break ,rule-name)))
+#|
+:u
+:u
+:u
+:u
+:u
+:u
+:u
+:u
+:u
+|#
+	  (defm check-rule-trace (rule-name &optional l)
+		(let ((r (edge-exists `(rule-trace ,rule-name))))
+		  (when r
+			(let ((b (hget 'rule-break rule-name)))
+			  (if b
+				  (when 
+					  (or (eq b t)
+						  (eq b (first l)))
+					(let ((msg (format nil "rule-break ~a ~a ~a" rule-name b l)))
+					  (cerror "xxx" msg)))
+				  (when l
+					(print `(rule-trace ,@l))))))
+		  r))
 
 	  (defm rule-stats (&optional (sort-colno 1))
 		(! (rule-stats rule-stats) sort-colno))
@@ -1674,9 +1710,11 @@
 				  (deleted-edges nil))
 			  (when (not (edge-exists `(,rule-node disabled)))
 				(let ((rule-name (hget rule-node 'name)))
-				  (when (or am-traced
-							(edge-exists `(rule-trace ,rule-name)))
-					(print `(rule-trace match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node)))
+				  ($comment		;; check-rule-trace: why is this commented-out?
+				   (when (or am-traced
+							 (edge-exists `(rule-trace ,rule-name)))
+					 (print `(rule-trace match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node))))
+				  (check-rule-trace rule-name `(match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node))
 				  (let ((envlist (all-matches rule-node obj-node)))
 					(update-tested rule-node)
 					(if envlist
@@ -1686,8 +1724,7 @@
 								(add-list (! (rule-comps adds)))
 								(not-list (! (rule-comps nots))))
 							(update-matched rule-node)
-							(when (edge-exists `(rule-trace ,rule-name))
-							  (print `(rule-trace match-and-execute-rule matched rule ,rule-node ,rule-name envlist ,envlist)))
+							(check-rule-trace rule-name `(match-and-execute-rule matched rule ,rule-node ,rule-name envlist ,envlist))
 							;; Edges to be deleted are so deleted in add-consequent-edges. All dels are done before adds.
 							(add-consequent-edges obj-node pred-list add-list not-list del-list rule-node envlist :cont
 							  (lambda (m x-matched-edges-list x-deleted-edges matched-and-new-edges-per-env)
@@ -1785,23 +1822,22 @@
 			(defr
 			  (defl xvar-match-filter-edges (x y z) y)
 			  (let ((rule-node (! (rule-graph rule-node))))
-				(let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
-				  (let ((obj-edges-result nil))
-					(do ((rule-edge-list 
-						  (bipartite-breadth-rule-walk-seq rule-graph root-var) ;;;;;;;;;      !!!!!!!!!!!!!!! ;
-						  (rest rule-edge-list))
-						 (obj-edges
-						  (expand-edges `((,obj-node)) rule-nodepos root-var rule-node)
-						  (expand-edges (var-match-filter-edges (first rule-edge-list) obj-edges rule-node) rule-nodepos root-var rule-node)))
-						((null rule-edge-list) nil)
-						(setq obj-edges-result (hunion obj-edges-result (var-match-filter-edges (first rule-edge-list) obj-edges rule-node)))
-						(when traced
-						  (let ((*print-length* nil)) ;; 3
-							(print `(rule-trace expand-rule-obj-edges rule ,rule-node ,(hget rule-node 'name)
-												rule-edges ,(first rule-edge-list) obj-edges ,obj-edges-result)))))
-					(update-last-expand-len rule-node (length obj-edges-result))
-					obj-edges-result)))))))
+				(let ((obj-edges-result nil))
+				  (do ((rule-edge-list 
+						(bipartite-breadth-rule-walk-seq rule-graph root-var) ;;;;;;;;;      !!!!!!!!!!!!!!! ;
+						(rest rule-edge-list))
+					   (obj-edges
+						(expand-edges `((,obj-node)) rule-nodepos root-var rule-node)
+						(expand-edges (var-match-filter-edges (first rule-edge-list) obj-edges rule-node) rule-nodepos root-var rule-node)))
+					  ((null rule-edge-list) nil)
+					  (setq obj-edges-result (hunion obj-edges-result (var-match-filter-edges (first rule-edge-list) obj-edges rule-node)))
+					  (check-rule-trace (hget rule-node 'name) `(expand-rule-obj-edges rule ,rule-node ,(hget rule-node 'name)
+																					   rule-edges ,(first rule-edge-list) obj-edges ,obj-edges-result)))
+				  (update-last-expand-len rule-node (length obj-edges-result))
+				  obj-edges-result))))))
 
+	  ;; Is there a reason to keep this? (check-rule-trace)
+	  
 	  (defm old-expand-rule-obj-edges (rule-graph obj-node rule-nodepos root-var)
 		(timer 'expand-rule-obj-edges
 		  (lambda ()
@@ -1844,8 +1880,7 @@
 				(maphash (lambda (k v)
 						   (setq r (cons v r)))
 						 visit-hash)
-				(when (edge-exists `(rule-trace ,(hget rule-node 'name)))
-					(print `(rule-trace expand-edges ,r)))
+				(check-rule-trace (hget rule-node 'name) `(expand-edges ,r))
 				r)))))
 
 	  (defm get-children (bnode sigma-span rule-nodepos root-var)
@@ -1901,17 +1936,18 @@
 						 (t
 						  (setq obj-edge (rest obj-edge))))))
 					t)))
-			  (let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
-				(let ((r nil))
-				  (dolist (rule-edge rule-edges)
-					(dolist (obj-edge obj-edges)
-					  (when (match-one-edge rule-edge obj-edge)
-						(setq r (cons obj-edge r)))))
-				  (let ((r (dedup-list r)))
-					(when traced
-					  (print `(rule-trace var-match-filter-edges rule ,rule-node ,(hget rule-node 'name) 
-										  obj-edges-in ,obj-edges obj-edges-out ,r)))
-					r)))))))
+			  (let ((r nil))
+				(dolist (rule-edge rule-edges)
+				  (dolist (obj-edge obj-edges)
+					(when (match-one-edge rule-edge obj-edge)
+					  (setq r (cons obj-edge r)))))
+				(let ((r (dedup-list r)))
+				  (check-rule-trace (hget rule-node 'name)
+									`(var-match-filter-edges rule ,rule-node ,(hget rule-node 'name) 
+															 obj-edges-in ,obj-edges obj-edges-out ,r))
+				  r))))))
+
+	  ;; Is there a reason to keep this?
 
 	  (defm old-var-match-filter-edges (rule-edges obj-edges rule-node)
 		(timer 'var-match-filter-edges
@@ -2106,8 +2142,8 @@
 										  (when envlist
 											($comment (print (list 'am1 (hget rule-node 'name) obj-node root-var envlist #| scan-subst-status |# )))
 											($comment 
-											 (let ((traced (edge-exists `(rule-trace ,(! (rule-graph name))))))
-											   (let ((verbose (if traced t '(s11))))
+											 (let ((rule-trace (edge-exists `(rule-trace ,(! (rule-graph name))))))
+											   (let ((verbose (if rule-trace t '(s11))))
 												 (let ((subst-match (! (rule-graph subst-match) self obj-node root-var :verbose verbose)))
 												   (when t (not (envs-equal envlist subst-match))
 														 (print (list 'am3 (hget rule-node 'name) obj-node root-var (envs-equal envlist subst-match) envlist subst-match)))))))
@@ -2161,9 +2197,8 @@
 						  (rule-nodes (nodes rule-edges)))
 					  (let ((obj-edges (expand-rule-obj-edges rule-graph obj-node rule-nodepos root-var)))
 						($nocomment
-						 (let ((traced (edge-exists `(rule-trace ,(! (rule-graph name))))))
-						   (when traced
-							 (print `(rule-trace all-matches-aux ,(! (rule-graph name)) ,root-var ,rule-edges ,obj-edges)))))
+						 (check-rule-trace (! (rule-graph name))
+										   `(all-matches-aux ,(! (rule-graph name)) ,root-var ,rule-edges ,obj-edges)))
 						(let ((obj-nodes (nodes obj-edges)))
 						  (let ((common-nodes (intersect rule-nodes obj-nodes)))
 							(if (not (check-rule-edges rule-edges common-nodes))
@@ -2214,25 +2249,25 @@
 	  (defm match-pat-obj-edge-lists (patlist objlist root-var obj-node rule-node)
 		(timer 'match-pat-obj-edge-lists
 		  (lambda ()
-			(let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
-			  (when traced
-				(print `(rule-trace match-pat-obj-edge-lists input rule ,rule-node ,(hget rule-node 'name) ,root-var ,patlist ,objlist)))
-			  (let ((patlist-info (filter-new-node-pred-edges patlist)))
-				(let ((new-node-pred-edges (first patlist-info))
-					  (patlist (second patlist-info)))
-				  (let ((new-node-env nil))
-					(dolist (new-node-pred-edge new-node-pred-edges)
-					  (setq new-node-env (cons (list (first new-node-pred-edge) (third new-node-pred-edge)) new-node-env)))
-					(let ((matches (x-match-all-pat-obj-edge-lists patlist objlist root-var obj-node rule-node)))
-					  (when matches
-						(let ((matches
-							   (if new-node-env
-								   (cons (list new-node-env) matches)
-								   matches)))
-						  (let ((envs (cross-aux2 matches :rule-trace-info (when traced (list rule-node (hget rule-node 'name))))))
-							(when traced
-							  (print `(rule-trace match-pat-obj-edge-lists result rule ,rule-node ,(hget rule-node 'name) envs ,envs)))
-							envs)))))))))))
+			(check-rule-trace (hget rule-node 'name)
+							  `(match-pat-obj-edge-lists input rule ,rule-node ,(hget rule-node 'name) ,root-var ,patlist ,objlist))
+			(let ((patlist-info (filter-new-node-pred-edges patlist)))
+			  (let ((new-node-pred-edges (first patlist-info))
+					(patlist (second patlist-info)))
+				(let ((new-node-env nil))
+				  (dolist (new-node-pred-edge new-node-pred-edges)
+					(setq new-node-env (cons (list (first new-node-pred-edge) (third new-node-pred-edge)) new-node-env)))
+				  (let ((matches (x-match-all-pat-obj-edge-lists patlist objlist root-var obj-node rule-node)))
+					(when matches
+					  (let ((matches
+							 (if new-node-env
+								 (cons (list new-node-env) matches)
+								 matches)))
+						(let ((envs (cross-aux2 matches :rule-trace-info (when (check-rule-trace (hget rule-node 'name))
+																		   (list rule-node (hget rule-node 'name))))))
+						  (check-rule-trace (hget rule-node 'name)
+											`(match-pat-obj-edge-lists result rule ,rule-node ,(hget rule-node 'name) envs ,envs))
+						  envs))))))))))
 
 	  (defm patlist-equal (patlist1 patlist2)		;; Why use set-equal here?
 		;;(set-equal patlist1 patlist2)
@@ -2316,8 +2351,8 @@
 								 (setq envs-list (cons envs envs-list)))))
 						   pat-to-edge-envs-hash)
 				  ($comment
-				   (let ((traced (edge-exists `(rule-trace ,(hget rule-node 'name)))))
-					 (when traced
+				   (let ((rule-trace (edge-exists `(rule-trace ,(hget rule-node 'name)))))
+					 (when rule-trace
 					   (print `(rule-trace x-match-pat-obj-edge-lists ,(hget rule-node 'name) ,root-var ,patlist ,objlist)))))
 				  ;;		  envs-list	
 				  edge-envs-list
@@ -2573,17 +2608,11 @@
 	  (defm bipartite-breadth-rule-walk-seq (rule-graph root-var)
 		(timer 'bipartite-breadth-rule-walk-seq
 		  (lambda ()
-			(let ((traced (edge-exists `(rule-trace ,(! (rule-graph name))))))
-			  (let ((root-node (if root-var root-var (first (first rule-edges))))) ;; !!!!!!!!! Fix: root-var heuristic
-				(let ((rule-edges-list nil))
-				  (bipartite-breadth-rule-walk rule-graph root-node :rule-traced traced :result-fcn
-											   (lambda (x)
-												 (when (is-edge (first x))
-												   (when traced
-													 #|
-										(print (list 'bipseq-result-fcn x))
-										|#
-												   )
+			(let ((root-node (if root-var root-var (first (first rule-edges))))) ;; !!!!!!!!! Fix: root-var heuristic
+			  (let ((rule-edges-list nil))
+				(bipartite-breadth-rule-walk rule-graph root-node :result-fcn
+											 (lambda (x)
+											   (when (is-edge (first x))
 												 (setq rule-edges-list (append rule-edges-list (list x))))))
 				(let ((prev nil)
 					  (r nil))
@@ -2591,15 +2620,15 @@
 					(setq r (cons (set-subtract rule-edges prev) r))
 					(setq prev rule-edges))
 				  (let ((r (reverse r)))
-					(when traced
-					  (print `(rule-trace bipseq ,r)))
-					r))))))))
+					(check-rule-trace (! (rule-graph name)) 
+									  `(bipseq ,r))
+					r)))))))
 
-	  (defm bipartite-breadth-rule-walk (rule-graph root-node &key result-fcn rule-traced)
+	  (defm bipartite-breadth-rule-walk (rule-graph root-node &key result-fcn)
 		(let ((visit-hash (make-hash-table :test #'equal)))
 		  (defr
 			(defl bwb (bnodes)
-			  (when (or am-traced rule-traced)
+			  (when am-traced
 				(print (list 'bipwalk root-node bnodes)))
 			  (when (and bnodes result-fcn)
 				(funcall result-fcn bnodes))
@@ -2714,7 +2743,7 @@
 	  ;; supersede its need anyway.
 	  ;;
 	  ;; This could be pointing out that we should be careful in
-	  ;; straying too much from the isomrophism theme.
+	  ;; straying too much from the isomorphism theme.
 
 	  (defm possible-match-fcn (rule-node obj-node)	;; all-var-mod
 		(timer 'possible-match-fcn
@@ -3587,6 +3616,124 @@
 
 	  )))
 
+(defstruct node-stats-entry
+  (tested 0)
+  (matched 0)
+  (new-edges 0)
+  (not-new-edges 0)
+  (failed 0))
+
+(defc node-stats nil (graph)
+  (let ((node-stats-table (make-sur-map))
+		(all-nodes-tested 0)
+		(all-nodes-new-edges 0))
+	(let ((x (let ((*print-level* 1))
+			   (let ((*print-length* 1))
+				 ;; (show-stack)		;; Good technique!
+				 )
+			   nil)))
+
+	  (defm get-entry (node)
+		(let ((entry (! (node-stats-table lookup-one) node)))
+		  (when (null entry)
+			(setq entry (make-node-stats-entry))
+			(! (node-stats-table insert) rule-node entry))
+		  entry))
+
+	  (defm node-stats (&optional (sort-colno 1))
+		(defr
+		  (defl symbol< (x y) (string< (symbol-name x) (symbol-name y)))
+		  (defl div (x y)
+			(if (= y 0) 0 (/ x y)))
+		  (let ((m 0))
+			(let ((info (mapcan (lambda (l) 
+								  (let ((x (env-lookup '?x l)))
+									(when t ;; (hget x 'new-edges)
+									  (setq m (max m (length (symbol-name (! (graph hget) x 'name)))))
+									  (let ((e (get-entry x)))
+										(list (list x
+													(! (graph hget) x 'name)		;; Not a general node prop but can maybe embellish for easier id purposes
+													(node-stats-entry-tested e)
+													(node-stats-entry-matched e)
+													(node-stats-entry-new-edges e)
+													(node-stats-entry-not-new-edges e)
+													(node-stats-entry-failed e)
+													(div (* (float (node-stats-entry-new-edges e)) 100) (float (node-stats-entry-tested e)))
+													(div (* (float (node-stats-entry-not-new-edges e)) 100) (float (node-stats-entry-tested e)))
+													(div (* (float (node-stats-entry-failed e)) 100) (float (node-stats-entry-tested e)))))))))
+								(! (graph query) '((?x type rule))))))
+			  (let ((info (sort info (lambda (x y)
+									   (let ((x (nth sort-colno x))
+											 (y (nth sort-colno y)))
+										 (if (and (symbolp x) (symbolp y))
+											 (symbol< x y)
+											 (> x y)))))))
+				(let ((s 10)
+					  (m (+ m 2)))
+				  (let ((args (list (+ 6 (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)) (+ m (* s 6)) (+ m 6 (* s 7)) (+ m 8 (* s 8)) (+ m 10 (* s 9)))))
+					(apply #'format t "~%0~vt1~vt2~vt3~vt4~vt5~vt6~vt7~vt8~vt9~vt10" args)
+					(apply #'format t "~%node~vtname~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtefficiency%~vtredundancy%~vtfailure%~%" args)
+					(dolist (x info)
+					  (format t "~%~a~vt|~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~,2f~vt~,2f~vt~,2f"
+							  (nth 0 x) (+ 6 (* s 0))
+							  (nth 1 x) (+ m (* s 1))
+							  (nth 2 x) (+ m (* s 2))
+							  (nth 3 x) (+ m (* s 3))
+							  (nth 4 x) (+ m (* s 4))
+							  (nth 5 x) (+ m (* s 5))
+							  (nth 6 x) (+ m (* s 6))
+							  (nth 7 x) (+ m 6 (* s 7))
+							  (nth 8 x) (+ m 8 (* s 8))
+							  (nth 9 x)))))))
+			nil)))
+
+	  (defm update-tested (node)
+		(gstat 'eo-tested (lambda (x y) (+ x y)) (lambda () 1))
+		(let ((entry (get-entry node)))
+		  (setf (node-stats-entry-tested entry) (+ (node-stats-entry-tested entry) 1)))
+		(setq all-nodes-tested (+ all-nodes-tested 1))
+		nil)
+
+	  (defm update-matched (node)
+		(gstat 'eo-matched (lambda (x y) (+ x y)) (lambda () 1))
+		(let ((entry (get-entry node)))
+		  (setf (node-stats-entry-matched entry) (+ (node-stats-entry-matched entry) 1)))
+		nil)
+
+	  (defm get-matched (node)
+		(let ((entry (get-entry node)))
+		  (node-stats-entry-matched entry)))
+
+	  (defm update-failed (node)
+		(gstat 'eo-failed (lambda (x y) (+ x y)) (lambda () 1))
+		(let ((entry (get-entry node)))
+		  (setf (node-stats-entry-failed entry) (+ (node-stats-entry-failed entry) 1)))
+		nil)
+
+	  ;; These two methods update the counts for executions which either
+	  ;; produce new edges, or not (the latter can be match failures or
+	  ;; already-matched without new edges being produced).
+	  ;;
+	  ;; The numbers can be computed from tested, matched, and new-edges
+	  ;; however these methods need to be their own calls in order to
+	  ;; drive the filter. [Filter removed 4/5/16. This comment is
+	  ;; useful rationale.]
+
+	  (defm update-new-edges (node)
+		(gstat 'eo-matched-new-edges (lambda (x y) (+ x y)) (lambda () 1))
+		(let ((entry (get-entry node)))
+		  (setf (node-stats-entry-new-edges entry) (+ (node-stats-entry-new-edges entry) 1)))
+		(setq all-nodes-new-edges (+ all-nodes-new-edges 1))
+		nil)
+
+	  (defm update-not-new-edges (node)
+		(gstat 'eo-matched-not-new-edges (lambda (x y) (+ x y)) (lambda () 1))
+		(let ((entry (get-entry node)))
+		  (setf (node-stats-entry-not-new-edges entry) (+ (node-stats-entry-not-new-edges entry) 1)))
+		nil)
+
+	  )))
+
 ;; Belongs in subst-match, moved outside for perf.
 
 (defstruct k
@@ -4347,7 +4494,7 @@
 		  (let ((r (cross-aux2-aux envs-list)))
 			(when record-lengths
 			  (cross-aux2-info (cons (length r) lengths)))
-			(when rule-trace-info
+			(when rule-trace-info		;; check-rule-trace: An outlier to using the method as it's a defun
 			  (let ((rule-node (first rule-trace-info)))
 				(let ((rule-name (second rule-trace-info)))
 				  (print `(rule-trace cross-aux2 rule ,rule-node ,rule-name envs-list-in ,envs-list envs-list-result ,r)))))

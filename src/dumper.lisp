@@ -34,22 +34,40 @@
 	;; Given a file <x>.gv, produce <x>.svg. Current wd is used unless given absolute paths
 
 	(defm gv-to-svg (file-root &key
-							   (edit-svg t)		;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
-							   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
+				   (edit-svg t)		;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
+				   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
 	  (defr
-		(defl cat (&rest x)
-		  (apply #'concatenate 'string x))
-		(let ((cmd (format nil (cat "\"c:/Program Files (x86)/Graphviz2.38/bin/dot.exe\" ~a.gv | "
-												 "\"c:/Program Files (x86)/Graphviz2.38/bin/gvpack.exe\" -m0 | "
-												 "\"c:/Program Files (x86)/Graphviz2.38/bin/neato.exe\" -s ~a -Tsvg "
-												 "~a"
-												 " > ~a.svg")
-						   file-root 
-						   (if n2 "-n2" "")
-						   (if edit-svg "| sed -e \"s/<svg.*$/\<svg/\"" "")
-						   file-root)))
-		  (let ((cmd (format nil "~a" cmd)))
-			(shell-cmd cmd)))))
+	    (defl cat (&rest x)
+	      (apply #'concatenate 'string x))
+	    (let ((cmd (format nil (cat "\"c:/Program Files (x86)/Graphviz2.38/bin/dot.exe\" ~a.gv | "
+					"\"c:/Program Files (x86)/Graphviz2.38/bin/gvpack.exe\" -m0 | "
+					"\"c:/Program Files (x86)/Graphviz2.38/bin/neato.exe\" -s ~a -Tsvg "
+					"~a"
+					" > ~a.svg")
+			       file-root 
+			       (if n2 "-n2" "")
+			       (if edit-svg "| sed -e \"s/<svg.*$/\<svg/\"" "")
+			       file-root)))
+	      (let ((cmd (format nil "~a" cmd)))
+		(shell-cmd cmd)))))
+
+	(defm laptop-gv-to-svg (file-root &key
+					  (edit-svg t) ;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
+					  (n2 t))      ;; T to do "leveled" layout; nil for circular as in Ladybug
+	  (defr
+	    (defl cat (&rest x)
+	      (apply #'concatenate 'string x))
+	    (let ((cmd (format nil (cat "\"c:/Program Files/Graphviz/bin/dot.exe\" ~a.gv | "
+					"\"c:/Program Files/Graphviz/bin/gvpack.exe\" -m0 | "
+					"\"c:/Program Files/Graphviz/bin/neato.exe\" -s ~a -Tsvg "
+					"~a"
+					" > ~a.svg")
+			       file-root 
+			       (if n2 "-n2" "")
+			       (if edit-svg "| sed -e \"s/<svg.*$/\<svg/\"" "")
+			       file-root)))
+	      (let ((cmd (format nil "~a" cmd)))
+		(shell-cmd cmd)))))
 
 	;; This svg dump assumes a rule-30 graph. See the ca-to-svg fcn below which generates fast and large rule-30 svg
 	;; files. Leave this code here since it may later prove a good basis for generating other graphs directly to
@@ -57,41 +75,41 @@
 
 	(defm dump-svg (file)
 	  (with-open-file (s file :direction :output)
-		(let ((header '("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
-						"<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\""
-						"\"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">"
-						"<svg"
-						"viewBox=\"0.00 0.00 5000.00 5000.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
-						"<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  2500.00 30.00)\">")))
-		  (defr
-			(defl emit-node (node)
-			  (let ((v (! (g hget) node 'rule30val)))
-				(when v
-				  (let ((xcoord (! (g hget) node 'xcoord)))
-					(when xcoord
-					  (let ((xcoord (if (! (g edge-exists) (list node 'neg)) (- xcoord) xcoord)))
-						(let ((ycoord (! (g hget) node 'level)))
-						  (let ((x (* xcoord 20)))
-							(let ((y (* ycoord 20)))
-							  (let ((rad 10))
-								(format s "<g id=\"~a\" class=\"node\"><title>~a</title>~%" node node)
-								($comment
-								 (format s "<ellipse fill=\"~a\" stroke=\"~a\" cx=\"~a\" cy=\"~a\" rx=\"10\" ry=\"10\"/>~%"
-										 (if (= v 0) "cyan" "magenta") (if (= v 0) "cyan" "magenta")
-										 x y))
-								(format s "<polygon fill=\"~a\" stroke=\"~a\" points=\"~a,~a ~a,~a ~a,~a ~a,~a\"/>~%"
-										(if (= v 0) "cyan" "magenta") (if (= v 0) "cyan" "magenta")
-										(- x rad) (- y rad)
-										(- x rad) (+ y rad)
-										(+ x rad) (+ y rad)
-										(+ x rad) (- y rad))
-								(format s "</g>~%")))))))))))
-			(dolist (h header)
-			  (format s "~a~%" h))
-			(dolist (node (! (g get-all-nodes)))
-			  (emit-node node))
-			(format s "</g>~%")
-			(format s "</svg>~%")))))
+	    (let ((header '("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
+			    "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\""
+			    "\"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">"
+			    "<svg"
+			    "viewBox=\"0.00 0.00 5000.00 5000.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
+			    "<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  2500.00 30.00)\">")))
+	      (defr
+		(defl emit-node (node)
+		  (let ((v (! (g hget) node 'rule30val)))
+		    (when v
+		      (let ((xcoord (! (g hget) node 'xcoord)))
+			(when xcoord
+			  (let ((xcoord (if (! (g edge-exists) (list node 'neg)) (- xcoord) xcoord)))
+			    (let ((ycoord (! (g hget) node 'level)))
+			      (let ((x (* xcoord 20)))
+				(let ((y (* ycoord 20)))
+				  (let ((rad 10))
+				    (format s "<g id=\"~a\" class=\"node\"><title>~a</title>~%" node node)
+				    ($comment
+				     (format s "<ellipse fill=\"~a\" stroke=\"~a\" cx=\"~a\" cy=\"~a\" rx=\"10\" ry=\"10\"/>~%"
+					     (if (= v 0) "cyan" "magenta") (if (= v 0) "cyan" "magenta")
+					     x y))
+				    (format s "<polygon fill=\"~a\" stroke=\"~a\" points=\"~a,~a ~a,~a ~a,~a ~a,~a\"/>~%"
+					    (if (= v 0) "cyan" "magenta") (if (= v 0) "cyan" "magenta")
+					    (- x rad) (- y rad)
+					    (- x rad) (+ y rad)
+					    (+ x rad) (+ y rad)
+					    (+ x rad) (- y rad))
+				    (format s "</g>~%")))))))))))
+		(dolist (h header)
+		  (format s "~a~%" h))
+		(dolist (node (! (g get-all-nodes)))
+		  (emit-node node))
+		(format s "</g>~%")
+		(format s "</svg>~%")))))
 
 
 	;;  "c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" x.gv | "c:\Program Files (x86)\Graphviz2.38\bin\gvpack.exe" -m0  | "c:\Program Files (x86)\Graphviz2.38\bin\neato.exe" -s  -Tsvg | sed -e "s/<svg.*$/\<svg/" > x.svg
@@ -628,8 +646,8 @@
 					  "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\""
 					  "\"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">"
 					  "<svg"
-					  "viewBox=\"0.00 0.00 40000.00 40000.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
-					  "<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  20000.00 30.00)\">")))
+					  "viewBox=\"0.00 0.00 4000.00 4000.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
+					  "<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  2000.00 30.00)\">")))
 		(dolist (h header)
 		  (format s "~a~%" h))
 		(let ((r (make-rule-array rule-no)))

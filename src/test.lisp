@@ -21,7 +21,7 @@
 
   ;; (! (g read-rule-file) "display-rules.lisp")
   ;; (! (g read-rule-file) "fft-display-rules.lisp")
-
+  
   ;; (! (g add-natural-number-edges) 50)		;; Need this if expand rule-30 to 50 (or beyond)
 
   (! (g define-rule) `(rule
@@ -57,7 +57,11 @@
 					   (del
 						(global-node rule ?this-rule))))
 
-  ;; (! (g trace-rule) 'copy-array-struct-new-x)
+  ;; (! (g trace-rule) 'od-next)
+  ;; (! (g break-rule) 'od-next 'del-consequent-edges)
+  ;; (! (g break-rule) 'od-next 'del-edge)
+  ;; (! (g break-rule) 'od-next 'add-consequent-edges)
+  ;; (! (g break-rule) 'od-next 'match-and-execute-rule)
   (time
    (timer 'main
 	 (lambda ()
@@ -163,6 +167,41 @@
 						(global-node rule ?this-rule))))
 
   ;; (! (g trace-rule) 'the-other-copy-array-struct-next)
+  (time
+   (timer 'main
+	 (lambda ()
+	   (! (g execute-global-all-objs-loop))
+	   ))))
+
+
+
+;; For fundamential testing, here we split out only the fft rule runs (i.e., no rule30 or random stuff).
+
+(let ((n 3))
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-foundation))  
+  (! (g read-rule-file) "fft.lisp")
+  (! (g read-rule-file) "tree.lisp")  ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
+  ;; (! (g read-rule-file) "display-rules.lisp")
+  ;; (! (g read-rule-file) "fft-display-rules.lisp")
+  (! (g define-rule) `(rule
+					   (name init)
+					   (attach-to global-node)
+					   (pred
+						(global-node rule ?r)
+						(?r name init))
+					   (add
+						(print init)
+						(tree-rule x ,n)
+						(x fft-top)
+						(x fft xfft)
+						(x level ,n)
+						(x rule ,(! (g query) '((?x name fft-rule)) '?x))
+						(x local-rule-pool local-rule-pool-node)
+						)
+					   (del
+						(global-node rule ?this-rule))))
   (time
    (timer 'main
 	 (lambda ()
@@ -328,7 +367,6 @@
 	  (! (g read-rule-file) "copy-rule.lisp")
 	  (! (g addraw) 0 'rule (! (g query) '((?x name fe-0-rule)) '?x))
 	  (! (g add-edge) '(0 local-rule-pool local-rule-pool-node))
-	  (! (g enable-get-rule-neighborhood) t)
 	  ;; (! (g trace-rule) 'copy-rule-rule)
 	  ;; (! (g trace-rule) 'fe-0-rule)
 	  (timer 'main
@@ -2294,7 +2332,7 @@ color-color
   (clear-counters)
   (clear-perf-stats)
   (setq g (make-foundation))
-  (! (g read-rule-file) "simple-tree.lisp")
+  (! (g read-rule-file) "tree.lisp")
   (! (g define-rule) `(rule
 					   (name init)
 					   (attach-to global-node)
@@ -2303,7 +2341,8 @@ color-color
 						(?r name init))
 					   (add
 						(print init)
-						(tree-rule x ,n))
+						(tree-rule x ,n)
+						(x local-rule-pool local-rule-pool-node))
 					   (del
 						(global-node rule ?this-rule))))
   (time

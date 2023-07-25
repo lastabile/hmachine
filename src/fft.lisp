@@ -29,7 +29,7 @@
  (name od-next)
  (local)
  (pred
-  ;; (?a elem ?e0)				;; !!!!!!!!!!!!! 9/19/20 -- in removing this the system still works, and the expansion length shrinks by a lot, but still not constant across trials
+  ;; (?a elem ?e0)			;; !!!!!!!!!!!!! 9/19/20 -- in removing this the system still works, and the expansion length shrinks by a lot, but still not constant across trials
   ;; (?a elem ?e1)
   (?e0 is-elem-of ?a)
   (?e1 is-elem-of ?a)
@@ -666,6 +666,52 @@
   (?x weave-next ?y)
   (?y oe-zero)
   (?z oe-max)))
+
+
+;; Rule optimizer (for a specific rule). Adds rule propagators.
+;; Experimental -- note this one adds more rules to a given node than needed.
+
+(rule
+ (name fft-rule-opt-rule-names)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node rule ?r)
+  (?r name fft-rule-opt-rule-names))
+ (add
+  (print fft-rule-opt-rule-names)
+  (fft-rule-opt-rule-names-data copy-array-struct-new)
+  (fft-rule-opt-rule-names-data even-new-rule-propagate)
+  (fft-rule-opt-rule-names-data odd-new-rule-propagate)
+  (fft-rule-opt-rule-names-data fft-rule-zero)
+  (fft-rule-opt-rule-names-data fft-comb-rule-zero))
+ (del
+  (global-node rule ?this-rule)))
+
+(rule
+ (name fft-rule-opt)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node local-rule-pool local-rule-pool-node)
+  (local-rule-pool-node lrp-rule ?fft-rule)
+  (?fft-rule name fft-rule)
+  (local-rule-pool-node lrp-rule ?r)
+  (?r name ?n)
+  (fft-rule-opt-rule-names-data ?n))
+ (add
+  (print fft-rule-opt ?fft-rule)
+  (local-rule-pool-node lrp-rule ?fft-rule)
+  (?fft-rule add print fft-opt-run ?fft-rule)
+  (?fft-rule add ?nn1 rule ?r)
+  (?fft-rule add ?nn2 rule ?r)
+  (?fft-rule add ?x rule ?r)
+  (?fft-rule add ?y rule ?r)
+  (?fft-rule add ?nn1 rule ?fft-rule)
+  (?fft-rule add ?nn2 rule ?fft-rule)
+  (?fft-rule opt-done))
+ (del
+  (?this-obj rule ?this-rule)))
 
 
 
