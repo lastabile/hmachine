@@ -8,7 +8,9 @@
   (?x0 tree-next ?x1))
  (add
   (print tree-next-zero-rule ?this-obj ?x0 ?x1)
-  (?x0 next ?x1))
+  (?x0 next ?x1)
+  (queue ?x1)
+  )
  (del
   (?this-obj rule ?this-rule)))
 
@@ -26,7 +28,9 @@
  (add
   (print tree-next-rule ?root-var ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?x01 tree-next ?x10)
-  (?this-obj is-not treeobj))
+  (?this-obj is-not treeobj)
+  (queue ?x10)
+  )
  (del
   (?this-obj rule ?this-rule)))		;; !!!!!!!!!!!!!
 
@@ -43,7 +47,9 @@
   (?y l 0))
  (add
   (print tree-loop-rule ?this-obj ?x ?y ?root-var)
-  (?y next ?x))
+  (?y next ?x)
+  (queue)
+  )
  (del
   (?this obj rule ?this-rule)
   ))
@@ -73,7 +79,9 @@
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
   (?x rule ?tree-top-propagate-rule)
-  (?y rule ?tree-top-propagate-rule))
+  (?y rule ?tree-top-propagate-rule)
+  (queue ?x ?y)
+  )
  (del
   (?this-obj rule ?this-rule)
   (?p rule ?tree-loop-rule)
@@ -195,7 +203,9 @@
   (?nn2 ur ?x)	;; ur = up-right
   (?nn2 l ?l1)
   (?nn2 is treeobj)
-  (?nn1 tree-next ?nn2)))
+  (?nn1 tree-next ?nn2)
+  (exec ?nn1 ?nn2)
+))
 
 (rule
  (name tree-leaf-rule)
@@ -251,6 +261,7 @@
   (?x is treeobj)
   (?x l ?l)
   (?x top)
+  (?x type array)
   (?x rule ?tree-top-order-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)))

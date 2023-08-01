@@ -53,6 +53,8 @@
 
 						(x local-rule-pool local-rule-pool-node)
 						(r local-rule-pool local-rule-pool-node)
+
+						(queue x r)
 						)
 					   (del
 						(global-node rule ?this-rule))))

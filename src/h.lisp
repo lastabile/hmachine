@@ -834,6 +834,7 @@
 		(std-vars (make-std-vars))
 		(seqno 0)
 		(rule-stats nil)
+		(node-stats nil)
 		(expand-edges-visit-hash (make-hash-table :test #'equal))
 		)
 	(let ((hget-key-rest2 (rest hget-key-rest1))
@@ -845,6 +846,7 @@
 	  (defm init ()
 		(! (env-triggered-table set-graph) self)
 		(setq rule-stats (make-rule-stats self))
+		(setq node-stats (make-node-stats self))
 		(addraw global-node 'local-rule-pool local-rule-pool)
 		nil)
 
@@ -916,12 +918,14 @@
 
 	  ;; Shouldn't pass non-null values but don't want them in the queue if passed in error
 
-	  (defm queue-node (n &key only-if-not-queued)
+	  (defm queue-node (n &key only-if-not-queued push-head)
 		(when n
 		  (if (and only-if-not-queued
 				   (node-queued n))
 			  nil
-			  (! (obj-queue push-tail) n))))
+			  (if push-head
+				  (! (obj-queue push-head) n)
+				  (! (obj-queue push-tail) n)))))
 
 	  (defm get-queue () ;; debug fcn
 		obj-queue)
@@ -994,12 +998,16 @@
 					(when r
 					  (while thunk))))
 				(defl exec-obj-stat (match-status)
-				  (gstat 'eo-tested (lambda (x y) (+ x y)) (lambda () 1))
+				  (! (node-stats update-tested) node)
+				  (when (memq match-status '(:new-edges :no-new-edges))
+					(! (node-stats update-matched) node))
 				  (cond
 				   ((eq match-status :new-edges)
-					(gstat 'eo-new-edges (lambda (x y) (+ x y)) (lambda () 1)))
+					(! (node-stats update-new-edges) node))
 				   ((eq match-status :no-new-edges)
-					(gstat 'eo-no-new-edges (lambda (x y) (+ x y)) (lambda () 1)))))
+					(! (node-stats update-not-new-edges) node))
+				   ((eq match-status :failed)
+					(! (node-stats update-failed) node))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
 										  (lambda (m s p d)
@@ -1444,25 +1452,36 @@
 						  (when (not (eq (first edge) 'print))
 							(return-from b nil)))
 						t))
+					(defl get-nodes-to-exec ()
+					  (let ((exec-edge (first (get-edges-from-subqet '(exec)))))
+						(if exec-edge
+							(let ((exec-list (rest exec-edge)))
+							  (rem-edge exec-edge)
+							  exec-list))))
 					(defl get-nodes-to-queue (new-edges new-node-hash all-node-hash)
-					  (let ((all-nodes (hash-table-value-to-list all-node-hash)))
-						(let ((new-nodes (hash-table-value-to-list new-node-hash)))
-						  (let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
-							(let ((nodes-with-rules (mapcad (lambda (node)
-															  (when (hget node 'rule)
-																node))
-															all-nodes)))
-							  ;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
-							  (let ((nodes (hunion
-											all-nodes
-											(hunion
-											 nil ;; new-nodes
-											 (hunion
-											  rule-neighborhood-nodes
-											  (hunion
-											   nil ;; nodes-with-rules
-											   nil))))))
-								nodes))))))
+					  (let ((queue-edge (first (get-edges-from-subqet '(queue)))))
+						(if queue-edge
+							(let ((queue-list (rest queue-edge)))
+							  (rem-edge queue-edge)
+							  queue-list)
+							(let ((all-nodes (hash-table-value-to-list all-node-hash)))
+							  (let ((new-nodes (hash-table-value-to-list new-node-hash)))
+								(let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
+								  (let ((nodes-with-rules (mapcad (lambda (node)
+																	(when (hget node 'rule)
+																	  node))
+																  all-nodes)))
+									;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
+									(let ((nodes (hunion
+												  all-nodes
+												  (hunion
+												   nil ;; new-nodes
+												   (hunion
+													rule-neighborhood-nodes
+													(hunion
+													 nil ;; nodes-with-rules
+													 nil))))))
+									  nodes))))))))
 					(defl old-get-nodes-to-queue (new-edges new-node-hash all-node-hash)
 					  (let ((all-nodes (hash-table-value-to-list all-node-hash)))
 						(let ((new-nodes (hash-table-value-to-list new-node-hash)))
@@ -1621,7 +1640,10 @@
 															  :done
 															  (let ()
 																(setq count (+ count 1))
-																:requeue))))))))))))))
+																:requeue))))))))))
+							  (let ((nodes (get-nodes-to-exec)))
+								(dolist (node nodes)
+								  (queue-node node :push-head t)))))))
 					  (when nil ;; r
 						(print (list 'a (hget rule-node 'name) matched-and-new-edges-per-env)))
 					  ;; (print (list 'ace3 (! (new-edges as-list)) matched-edges))
@@ -1667,21 +1689,6 @@
 	  (defm rule-stats (&optional (sort-colno 1))
 		(! (rule-stats rule-stats) sort-colno))
 
-	  (defm update-tested (rule-node)
-		(! (rule-stats update-tested) rule-node))
-
-	  (defm update-matched (rule-node)
-		(! (rule-stats update-matched) rule-node))
-
-	  (defm update-failed (rule-node)
-		(! (rule-stats update-failed) rule-node))
-
-	  (defm update-new-edges (rule-node)
-		(! (rule-stats update-new-edges) rule-node))
-
-	  (defm update-not-new-edges (rule-node)
-		(! (rule-stats update-not-new-edges) rule-node))
-
 	  (defm update-last-expand-len (rule-node len)
 		(! (rule-stats update-last-expand-len) rule-node len))
 
@@ -1690,6 +1697,9 @@
 
 	  (defm get-matched (rule-node)
 		(! (rule-stats get-matched) rule-node))
+
+	  (defm node-stats ()
+		node-stats)
 
 	  ;; Calls (cont <edge-creation-status> <match-status> <new-edges> <matched-edges> <deleted-edges>)
 	  ;; 
@@ -1716,14 +1726,14 @@
 					 (print `(rule-trace match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node))))
 				  (check-rule-trace rule-name `(match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node))
 				  (let ((envlist (all-matches rule-node obj-node)))
-					(update-tested rule-node)
+					(! (rule-stats update-tested) rule-node)
 					(if envlist
 						(let ((rule-comps (get-rule-components rule-node)))
 						  (let ((pred-list (! (rule-comps preds)))
 								(del-list (! (rule-comps dels)))
 								(add-list (! (rule-comps adds)))
 								(not-list (! (rule-comps nots))))
-							(update-matched rule-node)
+							(! (rule-stats update-matched) rule-node)
 							(check-rule-trace rule-name `(match-and-execute-rule matched rule ,rule-node ,rule-name envlist ,envlist))
 							;; Edges to be deleted are so deleted in add-consequent-edges. All dels are done before adds.
 							(add-consequent-edges obj-node pred-list add-list not-list del-list rule-node envlist :cont
@@ -1780,13 +1790,13 @@
 											 (dolist (root-var (hget-all rule-node 'used-root-var))
 											   (add-edge (list rule-node 'root-var root-var)))))))
 									  
-									  (update-new-edges rule-node)
+									  (! (rule-stats update-new-edges) rule-node)
 									  (log-stat 'new-edge-by-rule 5000)
 									  (update-new-edges-max-expand-len rule-node)
 									  (setq r t))
 									(let ()
 									  (setq match-status :no-new-edges)
-									  (update-not-new-edges rule-node)))
+									  (! (rule-stats update-not-new-edges) rule-node)))
 								(cond
 								 ((eq match-status :new-edges)
 								  (let ((rule-name (hget rule-node 'name)))
@@ -1810,7 +1820,7 @@
 								))))
 						(let ()
 						  (setq match-status :failed)
-						  (update-failed rule-node)
+						  (! (rule-stats update-failed) rule-node)
 						  (! (edge-to-trace insert) (list obj-node) (list 'tested match-status seqno rule-node rule-name obj-node))
 						  )))))
 			  (setq seqno (+ seqno 1))
@@ -3637,22 +3647,37 @@
 		(let ((entry (! (node-stats-table lookup-one) node)))
 		  (when (null entry)
 			(setq entry (make-node-stats-entry))
-			(! (node-stats-table insert) rule-node entry))
+			(! (node-stats-table insert) node entry))
 		  entry))
 
-	  (defm node-stats (&optional (sort-colno 1))
+	  (defm node-stats (&key (sort-colno 0) (nodes nil))
 		(defr
+		  (defl node-comp (x y)
+			(let ((x (nth sort-colno x))
+				  (y (nth sort-colno y)))
+			  (cond
+			   ((and (numberp x) (numberp y))
+				(> x y))
+			   ((and (symbolp x) (symbolp y))
+				(symbol< x y))
+			   ((and (stringp x) (stringp y))
+				(string< x y)))))
 		  (defl symbol< (x y) (string< (symbol-name x) (symbol-name y)))
+		  (defl node-descr (node) ;; Dig out some properties heuristically for a bit of extra info in stats		   
+			(let ((x (! (graph hget) node 'name)))
+			  (let ((x (or x (! (graph hget) node 'type))))
+				x)))
 		  (defl div (x y)
 			(if (= y 0) 0 (/ x y)))
-		  (let ((m 0))
-			(let ((info (mapcan (lambda (l) 
-								  (let ((x (env-lookup '?x l)))
-									(when t ;; (hget x 'new-edges)
-									  (setq m (max m (length (symbol-name (! (graph hget) x 'name)))))
-									  (let ((e (get-entry x)))
+		  (let ((max-col-0 0))
+			(let ((max-col-1 0))
+			  (let ((info (mapcan (lambda (x)
+									(let ((e (get-entry x)))
+									  (let ((x-descr (node-descr x)))
+										(setq max-col-0 (max max-col-0 (length (format nil "~a" x))))
+										(setq max-col-1 (max max-col-1 (length (format nil "~a" x-descr))))
 										(list (list x
-													(! (graph hget) x 'name)		;; Not a general node prop but can maybe embellish for easier id purposes
+													x-descr
 													(node-stats-entry-tested e)
 													(node-stats-entry-matched e)
 													(node-stats-entry-new-edges e)
@@ -3660,31 +3685,26 @@
 													(node-stats-entry-failed e)
 													(div (* (float (node-stats-entry-new-edges e)) 100) (float (node-stats-entry-tested e)))
 													(div (* (float (node-stats-entry-not-new-edges e)) 100) (float (node-stats-entry-tested e)))
-													(div (* (float (node-stats-entry-failed e)) 100) (float (node-stats-entry-tested e)))))))))
-								(! (graph query) '((?x type rule))))))
-			  (let ((info (sort info (lambda (x y)
-									   (let ((x (nth sort-colno x))
-											 (y (nth sort-colno y)))
-										 (if (and (symbolp x) (symbolp y))
-											 (symbol< x y)
-											 (> x y)))))))
-				(let ((s 10)
-					  (m (+ m 2)))
-				  (let ((args (list (+ 6 (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)) (+ m (* s 6)) (+ m 6 (* s 7)) (+ m 8 (* s 8)) (+ m 10 (* s 9)))))
-					(apply #'format t "~%0~vt1~vt2~vt3~vt4~vt5~vt6~vt7~vt8~vt9~vt10" args)
-					(apply #'format t "~%node~vtname~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtefficiency%~vtredundancy%~vtfailure%~%" args)
-					(dolist (x info)
-					  (format t "~%~a~vt|~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~,2f~vt~,2f~vt~,2f"
-							  (nth 0 x) (+ 6 (* s 0))
-							  (nth 1 x) (+ m (* s 1))
-							  (nth 2 x) (+ m (* s 2))
-							  (nth 3 x) (+ m (* s 3))
-							  (nth 4 x) (+ m (* s 4))
-							  (nth 5 x) (+ m (* s 5))
-							  (nth 6 x) (+ m (* s 6))
-							  (nth 7 x) (+ m 6 (* s 7))
-							  (nth 8 x) (+ m 8 (* s 8))
-							  (nth 9 x)))))))
+													(div (* (float (node-stats-entry-failed e)) 100) (float (node-stats-entry-tested e))))))))
+								  (or nodes (! (node-stats-table inputs))))))
+				(let ((info (sort info #'node-comp)))
+				  (let ((s 10))
+					(let ((m (+ max-col-0 max-col-1 2)))
+					  (let ((args (list (+ max-col-0 (* s 0)) (+ m (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)) (+ m 6 (* s 6)) (+ m 8 (* s 7)) (+ m 10 (* s 8)))))
+						(apply #'format t "~%0~vt1~vt2~vt3~vt4~vt5~vt6~vt7~vt8~vt9~vt10" args)
+						(apply #'format t "~%node~vtname~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtefficiency%~vtredundancy%~vtfailure%~%" args)
+						(dolist (x info)
+						  (format t "~%~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~,2f~vt~,2f~vt~,2f"
+								  (nth 0 x) (+ max-col-0 (* s 0))
+								  (nth 1 x) (+ m (* s 0))
+								  (nth 2 x) (+ m (* s 1))
+								  (nth 3 x) (+ m (* s 2))
+								  (nth 4 x) (+ m (* s 3))
+								  (nth 5 x) (+ m (* s 4))
+								  (nth 6 x) (+ m (* s 5))
+								  (nth 7 x) (+ m 6 (* s 6))
+								  (nth 8 x) (+ m 8 (* s 7))
+								  (nth 9 x)))))))))
 			nil)))
 
 	  (defm update-tested (node)

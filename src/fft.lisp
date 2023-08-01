@@ -587,6 +587,7 @@
  (add
   (print fft-rule-zero ?x ?y ?r)
   (?x copy-array-struct ?y)
+  (?y type array)
   (?y level 0)
   (?x d ?y)	;; display-connection
   )
@@ -618,12 +619,15 @@
   (print fft-rule ?x ?y ?l)
   (?x even ?nn1)
   (?x odd ?nn2)
+  (?nn1 type array)
+  (?nn2 type array)
   (?nn2 weave-next ?nn1)
   (?nn1 oe ?x)
   (?nn2 oe ?x)
   (?nn1 oev 0)
   (?nn2 oev 1)
   (?x copy-array-struct ?y)
+  (?y type array)
   (?nn1 fft ?nn3)
   (?nn2 fft ?nn4)
   (?nn3 ?nn4 fft-comb ?y)
@@ -638,6 +642,7 @@
   (?nn2 local-rule-pool ?p)
   (?nn3 local-rule-pool ?p)
   (?nn4 local-rule-pool ?p)
+  (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
 )
  (del
   (?this-obj rule ?this-rule)))
