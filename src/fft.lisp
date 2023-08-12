@@ -642,7 +642,8 @@
   (?nn2 local-rule-pool ?p)
   (?nn3 local-rule-pool ?p)
   (?nn4 local-rule-pool ?p)
-  (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
+  ;; (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
+  ;; (exec ?nn1 ?nn2 ?nn3 ?nn4 ?y)
 )
  (del
   (?this-obj rule ?this-rule)))

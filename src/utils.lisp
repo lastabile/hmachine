@@ -720,6 +720,29 @@
 			   h)) 
 	r))
 
+(defun rgather (l)
+  (defr
+	(defl p (prefix-tree)
+	  (let ((pt prefix-tree))
+		(when pt
+		  (print (first pt))
+		  (dolist (x (rest pt))
+			(p x)))))
+	(defl r (l)
+	  (when (not (null (mapcad (lambda (x) x) l)))
+		(let ((r nil))
+		  (let ((h (make-hash-table :test #'equal)))
+			(dolist (x l)
+			  (setf (gethash (first x) h) (cons (rest x) (gethash (first x) h))))
+			(maphash (lambda (k v)
+					   (print v)
+					   (setq r (cons (list k (r v)) r)))
+					 h)) 
+		  r)))
+	(let ((s (r l)))
+	  ;; (p s)
+	  s)))
+
 ;; Shell commands. It's maddening working around the crlf crap. The igncr bash arg lets script files work by ignoring
 ;; the \r. Also I don't completely understand why I need a separate version for script files but I'll live with it for
 ;; now.

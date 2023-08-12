@@ -1141,11 +1141,12 @@
 	  ;;						match any of them).
 	  ;;
 	  ;; vardesc is single var => value
+	  ;; vardesc is list of one var => list of bound values (flattened version of next variant)
 	  ;; vardesc is list of vars => list of bound value lists, each bound value list in the order of the given vars
 	  ;; vardesc is null => list of all envs
 	  ;; vardesc is :edges => list of all matched edges, i.e., envs resolved
 
-	  (defm query (clauses &optional vardesc &key not rule-trace)
+	  (defm query (clauses &optional vardesc &key rule-trace)
 		(let ((pred-clauses (subseq clauses 0 (or (search '(:not) clauses) (length clauses)))))
 		  (let ((not-clauses (rest (subseq clauses (or (search '(:not) clauses) (length clauses))))))
 			(let ((envs (query1 pred-clauses not-clauses rule-trace)))
@@ -1154,11 +1155,14 @@
 				  (if (eq vardesc :edges)
 					  (matched-edges-union pred-clauses envs)
 					  (if vardesc
-						  (dedup-list (mapcar (lambda (env)
-												(mapcar (lambda (var)
-														  (env-lookup var env :idempotent nil))
-														vardesc))
-											  envs))
+						  (let ((r (dedup-list (mapcar (lambda (env)
+														 (mapcar (lambda (var)
+																   (env-lookup var env :idempotent nil))
+																 vardesc))
+													   envs))))
+							(if (= (length vardesc) 1)
+								(mapcar (lambda (x) (first x)) r)
+								r))
 						  envs)))))))
 
 	  (defm query1 (clauses not-clauses rule-trace)
@@ -1452,45 +1456,15 @@
 						  (when (not (eq (first edge) 'print))
 							(return-from b nil)))
 						t))
-					(defl get-nodes-to-exec ()
-					  (let ((exec-edge (first (get-edges-from-subqet '(exec)))))
-						(if exec-edge
-							(let ((exec-list (rest exec-edge)))
-							  (rem-edge exec-edge)
-							  exec-list))))
-					(defl get-nodes-to-queue (new-edges new-node-hash all-node-hash)
-					  (let ((queue-edge (first (get-edges-from-subqet '(queue)))))
-						(if queue-edge
-							(let ((queue-list (rest queue-edge)))
-							  (rem-edge queue-edge)
-							  queue-list)
-							(let ((all-nodes (hash-table-value-to-list all-node-hash)))
-							  (let ((new-nodes (hash-table-value-to-list new-node-hash)))
-								(let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
-								  (let ((nodes-with-rules (mapcad (lambda (node)
-																	(when (hget node 'rule)
-																	  node))
-																  all-nodes)))
-									;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
-									(let ((nodes (hunion
-												  all-nodes
-												  (hunion
-												   nil ;; new-nodes
-												   (hunion
-													rule-neighborhood-nodes
-													(hunion
-													 nil ;; nodes-with-rules
-													 nil))))))
-									  nodes))))))))
-					(defl old-get-nodes-to-queue (new-edges new-node-hash all-node-hash)
+					(defl get-implicit-nodes-to-queue (new-edges new-node-hash all-node-hash)
 					  (let ((all-nodes (hash-table-value-to-list all-node-hash)))
 						(let ((new-nodes (hash-table-value-to-list new-node-hash)))
 						  (let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
-							(let ((nodes-with-rules (mapcad (lambda (new-edge)
-															  (when (and (= (length new-edge) 3)
-																		 (eq (second new-edge) 'rule))
-																(first new-edge)))
-															new-edges)))
+							(let ((nodes-with-rules (mapcad (lambda (node)
+															  (when (hget node 'rule)
+																node))
+															all-nodes)))
+							  ;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
 							  (let ((nodes (hunion
 											all-nodes
 											(hunion
@@ -1501,6 +1475,22 @@
 											   nil ;; nodes-with-rules
 											   nil))))))
 								nodes))))))
+					(defl get-explicit-nodes-to-exec ()
+					  (block b
+						;; (return-from b nil)
+						(let ((exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) (get-edges-from-subqet '(exec)))))
+						  (when (and exec-edges
+									 (= (length exec-edges) 1))
+							(let ((exec-edge (first exec-edges)))
+							  (let ((exec-list (rest exec-edge)))
+								(rem-edge exec-edge)
+								exec-list))))))
+					(defl get-explicit-nodes-to-queue ()
+					  (let ((queue-edge (first (get-edges-from-subqet '(queue)))))
+						(if queue-edge
+							(let ((queue-list (rest queue-edge)))
+							  (rem-edge queue-edge)
+							  queue-list))))
 					(let ((r nil)
 						  (first-edge nil)
 						  (rule-name (hget rule-node 'name))
@@ -1624,26 +1614,21 @@
 								  (cerror "Good luck!" (format nil "Rule-break ~a" rule-name)))
 								;; (add-consequent-edges-info (list env (hash-table-to-list all-node-hash)))
 								)
-							  (let ((nodes (get-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
-								($comment
-								 (when nodes 
-								   (print (list 'ace2 nodes))))
-								(dolist (node nodes)
-								  (when (has-rules node)
-									(if t ;; !!!!!!!!!!!!!!!!!!!
-										(queue-node node :only-if-not-queued t)
-										(queue-node (let ((count 0))
-													  (lambda ()
-														(let ((r (execute-obj node)))
-														  ;; (print (list node count r))
-														  (if (not r) ;; (>= count 4)          ;; (or r (>= count 2))
-															  :done
-															  (let ()
-																(setq count (+ count 1))
-																:requeue))))))))))
-							  (let ((nodes (get-nodes-to-exec)))
-								(dolist (node nodes)
-								  (queue-node node :push-head t)))))))
+							  (let ((explicit-nodes-to-exec (get-explicit-nodes-to-exec)))
+								(let ((explicit-nodes-to-queue (get-explicit-nodes-to-queue)))
+								  (if (or explicit-nodes-to-exec explicit-nodes-to-queue)
+									  (let ()
+										(dolist (node explicit-nodes-to-exec)
+										  (queue-node node :push-head t))
+										(dolist (node explicit-nodes-to-queue)
+										  (queue-node node :push-head nil)))
+									  (let ((nodes (get-implicit-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
+										($comment
+										 (when nodes 
+										   (print (list 'ace2 nodes))))
+										(dolist (node nodes)
+										  (when (has-rules node)
+											(queue-node node :only-if-not-queued t)))))))))))
 					  (when nil ;; r
 						(print (list 'a (hget rule-node 'name) matched-and-new-edges-per-env)))
 					  ;; (print (list 'ace3 (! (new-edges as-list)) matched-edges))
@@ -4722,18 +4707,17 @@
 (defun match-pat-obj-edge-lists-info (info))
 
 (defc base-graph objgraph nil
-
-(let ()
-  (defm add-natural-number-edges (n)
-	(dotimes (i n)
-	  (add-edge `(,i sigma ,(+ i 1)))
-	  ))
-  (defm defg (rules)
-	(dolist (rule rules)
-	  (define-rule rule))
-	nil)
-  (defm init ()
-	(objgraph-init))))
+  (let ()
+	(defm add-natural-number-edges (n)
+	  (dotimes (i n)
+		(add-edge `(,i sigma ,(+ i 1)))
+		))
+	(defm defg (rules)
+	  (dolist (rule rules)
+		(define-rule rule))
+	  nil)
+	(defm init ()
+	  (objgraph-init))))
 
 (defc foundation base-graph nil
   (let ()

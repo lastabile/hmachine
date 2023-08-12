@@ -70,6 +70,144 @@
 	   (! (g execute-global-all-objs-loop))
 	   ))))
 
+;; 8/3/23 parameterize tree-rule and fft-rule
+
+(let ((n 3))
+  (clear-counters)
+  (clear-perf-stats)
+
+  (setq g (make-foundation))  
+
+  (! (g read-rule-file) "fft.lisp")
+  ;; (! (g read-rule-file) "fft-const-rules.lisp")
+  
+  (! (g read-rule-file) "tree.lisp")  ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
+  ;; (read-rule-file "globaltree.lisp")
+  (! (g read-rule-file) "rule30.lisp")
+  (! (g read-rule-file) "fft-delta.lisp")
+
+  ;; (! (g read-rule-file) "display-rules.lisp")
+  ;; (! (g read-rule-file) "fft-display-rules.lisp")
+  
+  ;; (! (g add-natural-number-edges) 50)		;; Need this if expand rule-30 to 50 (or beyond)
+
+  (! (g define-rule) '(rule
+					   (name fft-rule)
+					   (local)
+					   (pred
+						(?x fft ?y)
+						(?x level ?l)
+						(?l1 sigma ?l)
+						(?x local-rule-pool ?p)
+						(?nn1 new-node sn1)
+						(?nn2 new-node sn2)
+						(?nn3 new-node sn3)
+						(?nn4 new-node sn4)
+						(?p lrp-rule ?fft-comb-rule-zero)
+						(?fft-comb-rule-zero name fft-comb-rule-zero)
+
+						)
+					   (add
+						(print fft-rule ?x ?y ?l)
+						(?x even ?nn1)
+						(?x odd ?nn2)
+						(?nn1 type array)
+						(?nn2 type array)
+						(?nn2 weave-next ?nn1)
+						(?nn1 oe ?x)
+						(?nn2 oe ?x)
+						(?nn1 oev 0)
+						(?nn2 oev 1)
+						(?x copy-array-struct ?y)
+						(?y type array)
+						(?nn1 fft ?nn3)
+						(?nn2 fft ?nn4)
+						(?nn3 ?nn4 fft-comb ?y)
+						(?y rule ?fft-comb-rule-zero)
+						(?nn3 rule ?fft-comb-rule-zero)
+						(?nn4 rule ?fft-comb-rule-zero)
+						(?y level ?l)
+						(?nn1 level ?l1)
+						(?nn2 level ?l1)
+
+						(?nn1 local-rule-pool ?p)
+						(?nn2 local-rule-pool ?p)
+						(?nn3 local-rule-pool ?p)
+						(?nn4 local-rule-pool ?p)
+						;; (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
+						;; (exec ?nn1 ?nn2 ?nn3 ?nn4 ?y)
+						)
+					   (del
+						(?this-obj rule ?this-rule))))
+
+  (! (g define-rule) `(rule
+					   (name init)
+					   (attach-to global-node)
+					   (pred
+						(global-node rule ?r)
+						(?r name init))
+					   (add
+						(print init)
+						(r level ,(* 1 n))
+						(r rule-30-top)
+
+						;; (x is treetopobj levels ,n)		;; Supports global-tree.lisp
+
+						;; (x is treetopobj l ,n)				;; Supports tree.lisp
+						(tree-rule x ,n)
+
+						(x fft-top)		;; An experiment in symbol-free matching, for max locality. Works, but slow. See fft-top-rule
+						;; (x n1)
+						;; (n1 n2)
+						;; (n2 n3)
+
+						(x fft xfft)
+						(x level ,n)
+						(x color navajowhite)
+						(x rand r)
+						(x rule ,(! (g query) '((?x name fft-rule)) '?x))
+
+						(x local-rule-pool local-rule-pool-node)
+						(r local-rule-pool local-rule-pool-node)
+
+						(queue x r)
+						)
+					   (del
+						(global-node rule ?this-rule))))
+
+  (! (g define-rule) `(rule
+					   (name tree-rule)
+					   (local)
+					   (pred
+						(?x l ?l)
+						(?l1 sigma ?l)
+						(?nn1 new-node sn1)
+						(?nn2 new-node sn2))
+					   (add
+						(print tree-rule from-test ?this-obj ?x ?nn1 ?nn2 ?l)
+						(?nn1 aup ?x)
+						(?nn1 ul ?x) ;; ul = up-left
+						(?nn1 l ?l1)
+						(?nn1 is treeobj)
+						(?nn2 aup ?x)
+						(?nn2 ur ?x) ;; ur = up-right
+						(?nn2 l ?l1)
+						(?nn2 is treeobj)
+						(?nn1 tree-next ?nn2)
+						;;  (exec ?nn1 ?nn2)
+						)))
+
+	 ;; (! (g trace-rule) 'od-next)
+	 ;; (! (g break-rule) 'od-next 'del-consequent-edges)
+	 ;; (! (g break-rule) 'od-next 'del-edge)
+	 ;; (! (g break-rule) 'od-next 'add-consequent-edges)
+	 ;; (! (g break-rule) 'od-next 'match-and-execute-rule)
+	 (time
+	  (timer 'main
+		(lambda ()
+		  (! (g execute-global-all-objs-loop))
+		  ))))
+
 ;; Performance loop, making a log fftperf we can scan
 ;;
 ;; I've only let it run to 2^8, since higher looked like it would take

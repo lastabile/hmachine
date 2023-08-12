@@ -9,7 +9,7 @@
  (add
   (print tree-next-zero-rule ?this-obj ?x0 ?x1)
   (?x0 next ?x1)
-  (queue ?x1)
+  ;; (queue ?x1)
   )
  (del
   (?this-obj rule ?this-rule)))
@@ -29,7 +29,7 @@
   (print tree-next-rule ?root-var ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?x01 tree-next ?x10)
   (?this-obj is-not treeobj)
-  (queue ?x10)
+  ;; (queue ?x10)
   )
  (del
   (?this-obj rule ?this-rule)))		;; !!!!!!!!!!!!!
@@ -48,7 +48,7 @@
  (add
   (print tree-loop-rule ?this-obj ?x ?y ?root-var)
   (?y next ?x)
-  (queue)
+  ;; (queue)
   )
  (del
   (?this obj rule ?this-rule)
@@ -64,6 +64,10 @@
   (?p top)
   ;; (?p p)
   (?p local-rule-pool ?rp)
+  (?rp lrp-rule ?tree-zero-rule)
+  (?tree-zero-rule name tree-zero-rule)
+  (?rp lrp-rule ?tree-max-rule)
+  (?tree-max-rule name tree-max-rule)
   (?rp lrp-rule ?tree-top-propagate-rule)
   (?tree-top-propagate-rule name tree-top-propagate-rule)
   (?rp lrp-rule ?tree-loop-rule)
@@ -76,11 +80,13 @@
   (?y top ?p)
   (?x zero)
   (?y max)
+  (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
   (?x rule ?tree-top-propagate-rule)
   (?y rule ?tree-top-propagate-rule)
-  (queue ?x ?y)
+  (?y rule ?tree-max-rule)
+  ;; (queue ?x ?y)
   )
  (del
   (?this-obj rule ?this-rule)
@@ -116,8 +122,8 @@
   (?t elem ?x)
   (?x value ?v)
   ;; (?x is-not treeobj)		;; Commented-out because it appears to work (at least for small trees)
-  ;; however failures are possible due to this rule not 
-  ;; detecting a complete array-elem object
+								;; however failures are possible due to this rule not 
+								;; detecting a complete array-elem object
   )
  )
 
@@ -144,6 +150,8 @@
   (?y aup ?p)
   (?x tree-next ?y)
   (?p zero)
+  (?p rule ?tree-zero-rule)
+  (?tree-zero-rule name tree-zero-rule)
   (?p rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
   (?p rule ?tree-elem-zero-rule)
@@ -151,9 +159,11 @@
  (add
   (print tree-zero-rule ?this-obj ?x ?y ?p)
   (?x zero)
+  (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule))
  (del
+  (?p rule ?tree-zero-rule)
   (?p rule ?tree-loop-rule)
   (?p rule ?tree-elem-zero-rule)))
 
@@ -165,10 +175,18 @@
   (?x aup ?p)
   (?y aup ?p)
   (?x tree-next ?y)
-  (?p max))
+  (?p max)
+  (?p rule ?tree-max-rule)
+  (?tree-max-rule name tree-max-rule)
+  )
  (add
   (print tree-max-rule ?this-obj ?x ?y ?p)
-  (?y max)))
+  (?y max)
+  (?y rule ?tree-max-rule)
+  )
+ (del
+  (?p rule ?tree-max-rule))
+ )
 
 ;; tree-rule and tree-leaf-rule are modified by tree-rule-opt to
 ;; install rule propagation and deletion. By doing so we cut rules off
@@ -204,7 +222,7 @@
   (?nn2 l ?l1)
   (?nn2 is treeobj)
   (?nn1 tree-next ?nn2)
-  (exec ?nn1 ?nn2)
+;;  (exec ?nn1 ?nn2)
 ))
 
 (rule
@@ -274,20 +292,22 @@
   (?p lrp-rule ?tree-next-zero-rule)
   (?p lrp-rule ?tree-next-rule)
   (?p lrp-rule ?tree-elem-rule)
-  (?p lrp-rule ?tree-zero-rule)
-  (?p lrp-rule ?tree-max-rule)
+  ;; (?p lrp-rule ?tree-zero-rule)
+  ;; (?p lrp-rule ?tree-max-rule)
   (?tree-next-zero-rule name tree-next-zero-rule)
   (?tree-next-rule name tree-next-rule)
   (?tree-elem-rule name tree-elem-rule)
-  (?tree-zero-rule name tree-zero-rule)
-  (?tree-max-rule name tree-max-rule))
+  ;; (?tree-zero-rule name tree-zero-rule)
+  ;; (?tree-max-rule name tree-max-rule)
+  )
  (add
   (print treeobj-rule)
   (treeobj xrule ?tree-next-zero-rule)
   (treeobj xrule ?tree-next-rule)
   (treeobj xrule ?tree-elem-rule)
-  (treeobj xrule ?tree-zero-rule)
-  (treeobj xrule ?tree-max-rule))
+  ;; (treeobj xrule ?tree-zero-rule)
+  ;; (treeobj xrule ?tree-max-rule)
+  )
  (del
   (global-node rule ?this-rule)))
 
