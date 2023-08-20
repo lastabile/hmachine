@@ -66,6 +66,9 @@
 ;;
 ;; check-rule-trace -- Change explicit rule-trae check with a method; allows options like break; the method's name is
 ;;					   check-rule-trace, so a change to that name qualifies as a tag.
+;;
+;; fix-set-subtract-order
+;;
 
 (defc graph nil nil
   (let ((size 63)) ;; 1021 !!!!!!!!!!!!!!!!!!!!!!!
@@ -1008,6 +1011,13 @@
 					(! (node-stats update-not-new-edges) node))
 				   ((eq match-status :failed)
 					(! (node-stats update-failed) node))))
+				(defl get-all-rules ()
+				  (let ((rules (hget-all node 'rule)))
+					(let ((rule-orders (mapcad (lambda (x) (when (equal (first x) node) (rest (rest x)))) (get-edges-from-subqet `(,node rule-order)))))
+					  (let ((unordered-rules (reverse (set-subtract rules (mapunion (lambda (x) x) rule-orders)))))		;; Using reverse because set-subtract reverses order
+						(let ((r (append (mapappend (lambda (x) x) rule-orders) unordered-rules)))
+						  ;; (print (list 'gar1 node 'ros rule-orders unordered-rules r))
+						  r)))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
 										  (lambda (m s p d)
@@ -1036,21 +1046,19 @@
 				 ((or (eq rule-mode :local-only)
 					  (eq rule-mode :local-global))
 				  (let ()
-
 					(let ((evaled-rules nil))
 					  (while
 						  (lambda ()
 							(block b
-							  (let ((rules (set-subtract (hget-all node 'rule) evaled-rules)))
+							  (let ((rules (set-subtract
+											(get-all-rules)			;; (hget-all node 'rule)
+											evaled-rules)))
 								(dolist (rule rules)
 								  (let ((r (m-and-e rule node)))
 									(setq evaled-rules (cons rule evaled-rules))
 									(when r
-									  ;; (print (list 'refresh-list node rule (hget rule 'name) rules (hget-all node 'rule)))
-									  (return-from b t)
-									  )))
+									  (return-from b t))))
 								nil)))))
-
 					(when (not (eq rule-mode :local-only))
 					  (when global-rule-pool
 						(let ((global-rules (dedup-rules (hget-all global-rule-pool 'grp-rule))))
@@ -1070,7 +1078,6 @@
 					(when m
 					  (setq r t)))))
 			  r))))
-
 
 	  ;; By default, executions both off the queue and in the full scan are local and global. See comment.
 
@@ -2548,16 +2555,17 @@
 						  (dolist (edge (rest clause))
 							(let ((edge (xform-std-vars edge)))
 							  (cond
-							   ((and (listp (third edge)) (eq (first (third edge)) 'rule))
+							   ((and (listp (first (last edge))) (eq (first (first (last edge))) 'rule))
 								(let ((rule-values (define-rule
-													 (third edge)
+													 (first (last edge))
 													 :new-pool (+ new-pool 1)
 													 :unattached t)))
 								  (let ((rule-node (first rule-values))
 										(rule-edges (second rule-values)))
 									(pushe (add-edge (list rule 'add rule 'nested-rule rule-node)))
 									(pushe (add-edge (list rule 'pred rule-node 'new-node (new-sn))))
-									(pushe (add-edge (list rule 'add (first edge) (second edge) rule-node)))
+									;; (pushe (add-edge (list rule 'add (first edge) (second edge) rule-node)))
+									(pushe (add-edge `(,rule add ,@(butlast edge) ,rule-node)))
 									(dolist (rule-edge rule-edges)
 									  (pushe (add-edge (append (list rule 'add) rule-edge)))))))
 							   (t
@@ -2567,7 +2575,6 @@
 						  (dolist (edge (rest clause))
 								(let ((edge (xform-std-vars edge)))
 								  (pushe (add-edge (append (list rule clause-type) edge))))))))))
-
 
 				  ;; We expect all rules to have a certain required set of properties, otherwise they cannot be
 				  ;; copied. Required are pred, add, del, not, root-var, type, std-var-level, name. All but name are

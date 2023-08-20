@@ -2225,3 +2225,55 @@ also define a node-node tensor.
 
 Feng2019Hypergraph_Neural_Networks.pdf
 
+----------------------------------------------------------
+8/15/23 -- New "is" rule model
+
+(rule
+ (name is)
+ (attach-to is)
+ (pred
+  (?x is ?y)
+  (?y has ?r*))
+ (add
+  (print is)
+  (?x ?*r))
+ (del
+  (?x is ?y)))
+
+Then build an obj to inherit from e.g.:
+
+(treeobj has rule n42)
+(treeobj has rule n57)
+(treeobj has type tree-node)
+
+and assert (add) (<x> is treeobj)
+
+A possible use here is encapsulating optimizations, e.g., rule order. 
+
+We might for example have
+
+(treeobj has rule n42)
+(treeobj has rule n57)
+(treeobj has rule-order n57 n42) 
+
+So any x for which (x is treeobj) would have this rule order directive, to be used by execute-obj.
+
+----------------------------------------------------------
+8/19/23 -- New rule-order relation for execute-obj
+
+(x rule-order r1 r2 ...)
+
+An object may have many rules, so when executing the object, some
+given order may be desirable. A particular use case is that a rule may
+delete another, the former's success acting as an inhibitor of the
+latter, i.e., it won't even get tested.
+
+This is a form of if-then-else. For instance we can pass a rule that
+operates on leaves down the tree, and each succuss of an
+intermediate-node rule deletes the leaf-based rule, thus forestalling
+testing.
+
+When the deleting rule fails -- because the node is not intermediate
+-- the perecuted rule gets a chance at last, and will succeed because
+now it's being applied to a leaf.
+

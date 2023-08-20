@@ -2904,25 +2904,25 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 	(! (g add-edge) e))
 
   (! (g define-rule)
-	'(rule
-	  (name r1)
-	  (root-var ?x)
-	  (pred 
-	   (?x a ?y)
-	   (?y b 42)
-	   (?r b 99)
-	   )
-	  (add
-	   (print r1 ?x ?y ?r)
-	   (done ?x ?y)
-#|
-													  (?y rule ?r)
-													  (?r type rule)
-													  (?r name r3)
-													  (?r pred ?z c ?t)
-													  (?r add print r3 ?z ?t)
-													  (?r add ?z d 86)
-													  |#
+	 '(rule
+	   (name r1)
+	   (root-var ?x)
+	   (pred 
+		(?x a ?y)
+		(?y b 42)
+		(?r b 99)
+		)
+	   (add
+		(print r1 ?x ?y ?r)
+		(done ?x ?y)
+		#|
+		(?y rule ?r)
+		(?r type rule)
+		(?r name r3)
+		(?r pred ?z c ?t)
+		(?r add print r3 ?z ?t)
+		(?r add ?z d 86)
+		|#
 	   (?y rule 
 		   (rule
 			(name r2)
@@ -3090,13 +3090,13 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 ;; end better-root-var
 
 #|
-													  (a f d)
-													  (a d b)
-													  (b d c)
-													  (d c e)
-													  (c e a)
-													  (f e a)
-													  |#
+		(a f d)
+		(a d b)
+		(b d c)
+		(d c e)
+		(c e a)
+		(f e a)
+		|#
 
 (let ()
   (let ((edges 

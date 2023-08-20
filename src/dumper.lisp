@@ -16,7 +16,7 @@
 	(defm set-graph (graph)
 	  (setq g graph)
 	  (setq elem-attrs (! (g get-elem-attrs)))
-	  (setq gv-attrs (mapcar #'first (! (g query) '((?x gv-attr)) '(?x)))))
+	  (setq gv-attrs (mapcar (lambda (x) x) (! (g query) '((?x gv-attr)) '(?x)))))
 	
 	(defm downcase (x)
 	  (cond

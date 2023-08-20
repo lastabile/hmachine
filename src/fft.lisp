@@ -86,7 +86,7 @@
   (?ev-init name ev-init))
  (add
   (print ev-od-obj-rule)
-  (ev-od-obj xrule ?ev-init)
+  (ev-od-obj has rule ?ev-init)
   )
  (del
   (global-node rule ?this-rule)))
@@ -126,7 +126,7 @@
 
   (?nn1 local-rule-pool ?p)
 
-  (?nn1 is ev-od-obj)
+  (?nn1 xis ev-od-obj)
   (?nn1 rule ?even-zero)
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
@@ -191,7 +191,7 @@
   (?nn1 oe-ref ?e0)
   (?nn1 ref ?e0)
 
-  (?nn1 is ev-od-obj)
+  (?nn1 xis ev-od-obj)
   (?nn1 rule ?even-zero)
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)

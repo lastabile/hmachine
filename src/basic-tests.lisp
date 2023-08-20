@@ -1,15 +1,17 @@
 
 #|
+[8/18/23: Looks correct, but not complete. The room obj looks like it's not used.]
+
 This test defines a simple set of related objects, a room which
-contains a light and a switch, the switch connecteing to the light.
+contains a light and a switch, the switch connected to the light.
 When we add a switch event, for either "on" or "off", the rules run
-and propagate the appropriate state to the light. Test dhere is basic
+and propagate the appropriate state to the light. Tested here is basic
 edge addition and inference via queuing, and deletion of edges as we
 keep mutable state.
 
 When the run method runs, foundation rules will run, then the switch
 tests, and the output should be like this (with perhaps a different
-node nunmber:
+node nunmber)
 
 (N297 UNDEFINED LIT) 
 (N297 LIT UNLIT) 
@@ -58,19 +60,19 @@ node nunmber:
 		   (add
 			(print basic-test-data)
 			(off light-illum-mapping unlit)
-			(on  light-illum-mapping lit)
+ 			(on  light-illum-mapping lit)
 			(occupied room-switch-mapping on)
 			(unoccupied room-switch-mapping off)
-			(?light is switch-room-obj)
+			(?light xis switch-room-obj)
 			(?light name light1)
 			(?light state undefined)
 			(?light type light)
-			(?switch is switch-room-obj)
+			(?switch xis switch-room-obj)
 			(?switch type switch)
 			(?switch name switch1)
 			(?switch state undefined)
 			(?switch connected-to ?light)
-			(?room is switch-room-obj)
+			(?room xis switch-room-obj)
 			(?room type room)
 			(?room name room1)
 			(?room contains ?switch)
@@ -175,8 +177,8 @@ node nunmber:
 			(?switch-rule name switch-rule))
 		   (add
 			(print switch-room-obj-rule)
-			(switch-room-obj rule ?room-rule)
-			(switch-room-obj rule ?switch-rule))
+			(switch-room-obj has rule ?room-rule)
+			(switch-room-obj has rule ?switch-rule))
 		   (del
 			(global-node rule ?this-rule)))
 

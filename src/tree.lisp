@@ -28,11 +28,32 @@
  (add
   (print tree-next-rule ?root-var ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?x01 tree-next ?x10)
-  (?this-obj is-not treeobj)
+  (?this-obj xis-not treeobj)
   ;; (queue ?x10)
   )
  (del
   (?this-obj rule ?this-rule)))		;; !!!!!!!!!!!!!
+
+
+#|
+
+;; Needs rethink!!!!!!!!!!
+
+(rule
+ (name tree-next-rule-mod)
+ (attach-to global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?tree-next-rule)
+  (?tree-next-rule name tree-next-rule)
+  (?p lrp-rule ?tree-elem-rule)
+  (?tree-elem-rule name tree-elem-rule))
+ (add
+  (print tree-next-rule-mod)
+  (?tree-next-rule del ?this-obj rule ?tree-elem-rule)))
+
+|#
+ 
 
 (rule
  (name tree-loop-rule)
@@ -121,9 +142,8 @@
   (print tree-elem-rule ?this-obj ?t ?x)
   (?t elem ?x)
   (?x value ?v)
-  ;; (?x is-not treeobj)		;; Commented-out because it appears to work (at least for small trees)
-								;; however failures are possible due to this rule not 
-								;; detecting a complete array-elem object
+  (?x xis-not treeobj) ;; 8/15/23 Had this commented out, since it appeared we were not detecting a complete object, in
+					  ;; essence ejecting the treeobj rules before they were all used. Brought back and looks ok.
   )
  )
 
@@ -137,7 +157,7 @@
   (?x zero))
  (add
   (print tree-elem-zero-rule ?this-obj ?t ?x)
-  (?x is ev-od-obj))
+  (?x xis ev-od-obj))
  (del
   (?this-obj rule ?this-rule)))
 
@@ -216,11 +236,11 @@
   (?nn1 aup ?x)
   (?nn1 ul ?x)	;; ul = up-left
   (?nn1 l ?l1)
-  (?nn1 is treeobj)
+  (?nn1 xis treeobj)
   (?nn2 aup ?x)
   (?nn2 ur ?x)	;; ur = up-right
   (?nn2 l ?l1)
-  (?nn2 is treeobj)
+  (?nn2 xis treeobj)
   (?nn1 tree-next ?nn2)
 ;;  (exec ?nn1 ?nn2)
 ))
@@ -276,7 +296,7 @@
   (print tree-top-rule ?x ?l)
   (?x rule ?tree-rule)
   (?x rule ?tree-leaf-rule)
-  (?x is treeobj)
+  (?x xis treeobj)
   (?x l ?l)
   (?x top)
   (?x type array)
@@ -284,61 +304,28 @@
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)))
 
-(rule
- (name treeobj-rule)
- (attach-to global-node)
- (pred
-  (global-node local-rule-pool ?p)
-  (?p lrp-rule ?tree-next-zero-rule)
-  (?p lrp-rule ?tree-next-rule)
-  (?p lrp-rule ?tree-elem-rule)
-  ;; (?p lrp-rule ?tree-zero-rule)
-  ;; (?p lrp-rule ?tree-max-rule)
-  (?tree-next-zero-rule name tree-next-zero-rule)
-  (?tree-next-rule name tree-next-rule)
-  (?tree-elem-rule name tree-elem-rule)
-  ;; (?tree-zero-rule name tree-zero-rule)
-  ;; (?tree-max-rule name tree-max-rule)
-  )
- (add
-  (print treeobj-rule)
-  (treeobj xrule ?tree-next-zero-rule)
-  (treeobj xrule ?tree-next-rule)
-  (treeobj xrule ?tree-elem-rule)
-  ;; (treeobj xrule ?tree-zero-rule)
-  ;; (treeobj xrule ?tree-max-rule)
-  )
- (del
-  (global-node rule ?this-rule)))
-
 (comment
-
-;; The old way, replaced by the chunk starting at tree-rule above.
-
 (rule
- (name tree-rule)
- (root-var ?x)
- (local)
+ (name treeobj-rule)
+ (attach-to global-node)
  (pred
-  (?x l ?l)
-  (?l1 sigma ?l)
-  (?nn1 new-node sn1)
-  (?nn2 new-node sn2))
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?tree-next-zero-rule)
+  (?p lrp-rule ?tree-next-rule)
+  (?p lrp-rule ?tree-elem-rule)
+  (?tree-next-zero-rule name tree-next-zero-rule)
+  (?tree-next-rule name tree-next-rule)
+  (?tree-elem-rule name tree-elem-rule)
+  )
  (add
-  (print tree-rule ?this-obj ?x ?nn1 ?nn2 ?l)
-  (?nn1 aup ?x)
-  (?x adn ?nn1)
-  ;; (?nn1 p)
-  (?nn1 l ?l1)
-  (?nn1 is treeobj)
-  (?nn2 aup ?x)
-  (?x adn ?nn2)
-  ;; (?nn2 p)
-  (?nn2 l ?l1)
-  (?nn2 is treeobj)
-  (?nn1 tree-next ?nn2))
+  (print treeobj-rule)
+  (treeobj xrule ?tree-next-zero-rule)
+  (treeobj xrule ?tree-next-rule)
+  (treeobj xrule ?tree-elem-rule)
+  )
  (del
-  (?x rule ?this-rule)))
+  (global-node rule ?this-rule)))
+)
 
 (rule
  (name treeobj-rule)
@@ -348,60 +335,22 @@
   (?p lrp-rule ?tree-next-zero-rule)
   (?p lrp-rule ?tree-next-rule)
   (?p lrp-rule ?tree-elem-rule)
-  (?p lrp-rule ?tree-zero-rule)
-  (?p lrp-rule ?tree-max-rule)
-  (?p lrp-rule ?tree-rule)
   (?tree-next-zero-rule name tree-next-zero-rule)
   (?tree-next-rule name tree-next-rule)
   (?tree-elem-rule name tree-elem-rule)
-  (?tree-zero-rule name tree-zero-rule)
-  (?tree-max-rule name tree-max-rule)
-  (?tree-rule name tree-rule))
+  )
  (add
   (print treeobj-rule)
-  (treeobj xrule ?tree-next-zero-rule)
-  (treeobj xrule ?tree-next-rule)
-  (treeobj xrule ?tree-elem-rule)
-  (treeobj xrule ?tree-zero-rule)
-  (treeobj xrule ?tree-max-rule)
-  (treeobj xrule ?tree-rule))
- (del
-  (global-node rule ?this-rule)))
-
-(rule
- (name treetopobj-rule)
- (attach-to global-node)
- (pred
-  (global-node local-rule-pool ?p)
-  (?p lrp-rule ?tree-top-rule)
-  (?tree-top-rule name tree-top-rule))
- (add
-  (print treetopobj-rule)
-  (treetopobj rule ?tree-top-rule))
- (del
-  (global-node rule ?this-rule)))
-
-(rule
- (name tree-top-rule)
- (local)
- (pred
-  (?x local-rule-pool ?p)
-  (?p lrp-rule ?tree-top-order-rule)
-  (?tree-top-order-rule name tree-top-order-rule)
-  (?p lrp-rule ?tree-loop-rule)
-  (?tree-loop-rule name tree-loop-rule)
-  (?p lrp-rule ?tree-elem-zero-rule)
-  (?tree-elem-zero-rule name  tree-elem-zero-rule))
- (add
-  (print tree-top-rule ?this-obj ?x)
-  ;; (?x p)
-  (?x top)
-  (?x is treeobj)
-  (?x rule ?tree-top-order-rule)
-  (?x rule ?tree-loop-rule)
-  (?x rule ?tree-elem-zero-rule)
+  (treeobj has rule ?tree-next-zero-rule)
+  (treeobj has rule ?tree-next-rule)
+  (treeobj has rule ?tree-elem-rule)
+  (treeobj has rule-order ?tree-next-rule ?tree-next-zero-rule ?tree-elem-rule)
   )
  (del
-  (?x rule ?this-rule)))
+  (global-node rule ?this-rule)))
 
-)
+
+
+;; Local Variables:
+;; fill-column: 120
+;; End:

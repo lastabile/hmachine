@@ -112,6 +112,7 @@
  (del
   (?this-obj rule ?this-rule)))
 
+(comment
 (rule
  (name is-1-param)
  (attach-to is)
@@ -154,6 +155,7 @@
   (?x rule ?r)
   ;; (?x from-is-0-param-xrule-rule ?r) ;; xxx
   ))
+)
 
 (comment
  (rule
@@ -173,6 +175,7 @@
    (?this-obj rule ?this-rule)))
 )
 
+(comment
 (rule
  (name is-not-xrule)
  (attach-to is-not)
@@ -185,6 +188,33 @@
  (del
   (?x is-not ?y)
   (?x rule ?r)))
+)
+
+
+(rule
+ (name xis)
+ (attach-to xis)
+ (pred
+  (?x xis ?y)
+  (?y has ?*r))
+ (add
+  (print xis ?x ?y ?*r)
+  (?x ?*r))
+ (del
+  (?x xis ?y)))
+
+(rule
+ (name xis-not)
+ (attach-to xis-not)
+ (pred
+  (?x xis-not ?y)
+  (?y has ?*r))
+ (add
+  (print xis-not ?x ?y ?*r))
+ (del
+  (?x xis ?y)
+  (?x xis-not ?y)
+  (?x ?*r)))
 
 (rule
  (name color-circle-data)
