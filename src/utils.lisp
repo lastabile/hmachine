@@ -423,14 +423,19 @@
 ;; on sets of edges, whereas edges themselves need order preservation
 ;; more.
 
+;; CL set-diff preserves order  ;; fix-set-subtract-order
+
 (defun set-subtract (l1 l2 &key (test #'equal))
+  (set-difference l1 l2 :test test))
+
+(defun old-set-subtract (l1 l2 &key (test #'equal))
   (let ((r nil))
 	(dolist (x l1)
 	  (when (not (member x l2 :test test))
 		(setq r (cons x r))))
 	r))
 
-(defun old-set-subtract (l1 l2 &key (test #'equal))
+(defun old-old-set-subtract (l1 l2 &key (test #'equal))
   (timer 'set-subtract
 	(lambda ()
 	  (let ((i (intersect l1 l2))

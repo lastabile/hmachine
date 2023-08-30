@@ -2277,3 +2277,21 @@ When the deleting rule fails -- because the node is not intermediate
 -- the perecuted rule gets a chance at last, and will succeed because
 now it's being applied to a leaf.
 
+----------------------------------------------------------
+8/27/23 -- Experiment with making fft-comb's separate nodes
+
+See new-fft.lisp, comment therein:
+
+"Interesting experiment, where we replaced the use of the constant
+fft-comb with a generated node, along with a name and label
+of "fft-comb".  When left as such, we get 4-var pred edges, e.g.,
+(?x0 ?x1 ?f ?y), with ($f name fft-comb). This works, but is very slow,
+taxing subst-match heavily. We fixed it using rule gen, from fft-rule,
+below.
+
+"This looks promising and points out adjustments we may need to rule
+scoping and such, e.g., there is no way to generate a rule and add it
+as a rule prop to more than one node, within the framework of nested
+rules. There seems to be a way to do this via flattening, and we
+should examine that."
+

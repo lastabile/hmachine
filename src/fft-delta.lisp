@@ -1,4 +1,5 @@
 
+;; This never runs, as we have attached the relevant rules to constants below.
 
 (rule
  (name fft-delta-init)
@@ -6,11 +7,9 @@
  (root-var global-node)
  (pred
   (global-node local-rule-pool ?p)
-  (?p lrp-rule ?fft-comb-rule-next-sing)
   (?p lrp-rule ?fft-rule)
   (?p lrp-rule ?fft-rule-delta2)
   (?p lrp-rule ?fft-rule-delta3)
-  (?fft-comb-rule-next-sing name fft-comb-rule-next-sing)
   (?fft-rule name fft-rule)
   (?fft-rule-delta2 name fft-rule-delta2)
   (?fft-rule-delta3 name fft-rule-delta3))
@@ -101,6 +100,10 @@
   (?x d-casz-casns-ref ?z)  ;; These two are eqv. e shortcut for display
   (?x e ?z)))				;; 
 
+(comment
+
+;; 8/23/23 -- Commented-out as there is a dup of these in fft.lisp
+ 
 ;; Rule optimizer (for a specific rule). Adds rule propagators.
 ;; Experimental -- note this one adds more rules to a given node than needed.
 
@@ -145,6 +148,8 @@
   (?fft-rule opt-done))
  (del
   (?this-obj rule ?this-rule)))
+
+)
 
 (comment		;; rem-add-main
 (rule

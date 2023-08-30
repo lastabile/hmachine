@@ -862,14 +862,23 @@
 	  (defm get-edge-to-trace ()
 		edge-to-trace)
 
+	  (defm get-edge-to-trace-flatlist ()
+		(let ((et (! (edge-to-trace as-list))))
+		  (let ((flatlist nil))
+			(dolist (e et)
+			  (let ((edge (first e)))
+				(dolist (r (second e))
+				  (setq flatlist (cons (list edge r) flatlist)))))
+			flatlist)))
+
 	  (defm get-elem-attrs ()
 		elem-attrs)
 
 	  (defm std-vars ()	;; For debug only
 		std-vars)
 
-	  ;; Not we no longer to anything special to an "obj" node, ed.g. adding rule pool links and such, so we can
-	  ;; probably just use new-node().
+	  ;; Note we no longer to anything special to an "obj" node, e.g. adding rule pool links and such, so we can
+	  ;; probably just name this fcn new-node().
 
 	  (defm new-obj-node ()
 		(let ((node (intern (format nil "N~a" objnodeseq))))
@@ -1013,10 +1022,10 @@
 					(! (node-stats update-failed) node))))
 				(defl get-all-rules ()
 				  (let ((rules (hget-all node 'rule)))
-					(let ((rule-orders (mapcad (lambda (x) (when (equal (first x) node) (rest (rest x)))) (get-edges-from-subqet `(,node rule-order)))))
-					  (let ((unordered-rules (reverse (set-subtract rules (mapunion (lambda (x) x) rule-orders)))))		;; Using reverse because set-subtract reverses order
+					(let ((rule-orders (mapcad (lambda (x) (when (equal (first x) node) (intersect (rest (rest x)) rules))) (get-edges-from-subqet `(,node rule-order)))))
+					  (let ((unordered-rules (set-subtract rules (mapunion (lambda (x) x) rule-orders))))	;; fix-set-subtract-order
 						(let ((r (append (mapappend (lambda (x) x) rule-orders) unordered-rules)))
-						  ;; (print (list 'gar1 node 'ros rule-orders unordered-rules r))
+						  ;; (print (list 'eo1 node 'ros rule-orders unordered-rules r))
 						  r)))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
@@ -1050,9 +1059,10 @@
 					  (while
 						  (lambda ()
 							(block b
-							  (let ((rules (set-subtract
+							  (let ((rules (set-subtract			;; fix-set-subtract-order
 											(get-all-rules)			;; (hget-all node 'rule)
 											evaled-rules)))
+								;; (print (list 'eo2 rules))
 								(dolist (rule rules)
 								  (let ((r (m-and-e rule node)))
 									(setq evaled-rules (cons rule evaled-rules))
@@ -1434,17 +1444,31 @@
 						(dolist (env envlist)
 						  (block b
 							(dolist (edge not-edges)
-							  (let ((not-edge 
-									 (mapcar (lambda (node)
-											   (env-lookup node env))
-											 edge)))
+							  (let ((not-edge
+									 (mapappend (lambda (node)
+												  (let ((node (env-lookup node env)))
+													(cond
+													 ((listp node)
+													  node)
+													 ((eq node :undefined)
+													  nil)
+													 (t
+													  (list node)))))
+												edge)))
 								(when (edge-exists not-edge)
 								  (return-from b nil))))
 							(dolist (edge edges)
-							  (let ((del-edge 
-									 (mapcar (lambda (node)
-											   (env-lookup node env))
-											 edge)))
+							  (let ((del-edge
+									 (mapappend (lambda (node)
+												  (let ((node (env-lookup node env)))
+													(cond
+													 ((listp node)
+													  node)
+													 ((eq node :undefined)
+													  nil)
+													 (t
+													  (list node)))))
+												edge)))
 								(when del-edge
 								  (check-rule-trace (hget rule-node 'name) (list 'del-edge del-edge))
 								  (rem-edge del-edge)

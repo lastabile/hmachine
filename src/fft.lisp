@@ -21,7 +21,7 @@
 						  (?e0 rule ?od-next)
 						  (?e0 local-rule-pool ?p))
 						 (del
-						  (?this-obj rule ?this-rule)))))
+						  (?this-obj-1 rule ?this-rule-1)))))
  (del
   (?this-obj rule ?this-rule)))
 
@@ -109,11 +109,14 @@
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
   (?p lrp-rule ?copy-array-struct-new)
+  (?p lrp-rule ?odd-new)
   (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
   (?even-next name even-next)
-  (?copy-array-struct-new name copy-array-struct-new))
+  (?copy-array-struct-new name copy-array-struct-new)
+  (?odd-new name odd-new)
+  )
  (add
   (print even-new ?this-obj ?a ?e0 ?nn1)
   (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
@@ -132,9 +135,12 @@
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
   (?nn1 rule ?copy-array-struct-new)
+  (?nn1 rule ?odd-new)
+  (?nn1 rule ?this-rule)
   )
  (del
   (?this-obj rule ?this-rule)
+  (?this-obj rule ?odd-new)
   ))
 
 (rule
@@ -174,11 +180,15 @@
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
   (?p lrp-rule ?copy-array-struct-new)
+  (?p lrp-rule ?even-new)
+
   (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
   (?even-next name even-next)
-  (?copy-array-struct-new name copy-array-struct-new))
+  (?copy-array-struct-new name copy-array-struct-new)
+  (?even-new name even-new)
+)
  (add
   (print odd-new ?a ?e0 ?nn1)
   (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
@@ -197,9 +207,12 @@
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
   (?nn1 rule ?copy-array-struct-new)
+  (?nn1 rule ?even-new)
+  (?nn1 rule ?this-rule)
   )
  (del
   (?this-obj rule ?this-rule)
+  (?this-obj rule ?even-new)
   ))
 
 (rule
@@ -270,7 +283,7 @@
   (?e0 rule ?odd-new))
  (del
   ;; (?this-obj rule ?this-rule)		;; Tried putting this del in and it fails
-))
+  ))
 
 (rule
  (name even-new-rule-propagate)
@@ -312,10 +325,11 @@
   (?y oe-zero)))
 
 
+;; 8/26/23 Commented out again. Speed better.
 ;; This looks to be redundant, but not sure why.
 ;; However for some reason things are faster with it in, so I'll leave it for now
 
-;; (comment
+(comment
 (rule
  (name odd-even-weave)
  (attach-to even)
@@ -336,7 +350,7 @@
  (add
   (print odd-even-weave ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?p1 weave-next ?x00)))
-;; )
+)
 
 (rule
  (name weave-next-rule)
@@ -355,25 +369,90 @@
   (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?x01 weave-next ?x10)))
 
+;; Here we are matching on properties of rules to find where we need to install another rule.
+;; Works but results in a glut of these rules.
+;; However adding the not clause boosts the efficiency quite a bit.
 
 (rule
  (name install-copy-array-struct-next)
- (attach-to local-rule-pool-node)
- (pred 
-  (local-rule-pool-node lrp-rule ?r)
+ (attach-to global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?r)
   (?r add ?x is-elem-of ?y)
   (?r name ?n)
-  (local-rule-pool-node lrp-rule ?copy-array-struct-next)
+  (?p lrp-rule ?copy-array-struct-next)
   (?copy-array-struct-next name copy-array-struct-next))
+ (not
+  (?r name copy-array-struct-new)
+  )
  (add
   (print install-copy-array-struct-next ?r ?x ?n)
   (?r add ?x rule ?copy-array-struct-next))
  (del
   (?this-obj rule ?this-rule)))
 
+
+(comment
+
+;;;;;;; New experiment -- linear "next" movement
+
+(rule
+ (name copy-array-struct-next-zero)
+ (local)
+ (root-var ?e0)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?ae0 is-elem-of ?a1)
+  (?ae1 is-elem-of ?a1)
+  (?ae0 ref ?e0)
+  (?ae1 ref ?e1)
+  (?e0 is-elem-of ?a)
+  (?e1 is-elem-of ?a)
+  (?e0 zero)
+  (?e0 next ?e1))
+ (add
+  (print copy-array-struct-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
+  (?ae0 next ?ae1))
+ (del
+  (?this-obj rule ?this-rule)
+  (?ae0 rule ?this-rule)				;; Targets of cas are not copied again
+  (?ae1 rule ?this-rule)
+  ))
+
 (rule
  (name copy-array-struct-next)
  (local)
+ (root-var ?e0)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?ae0 is-elem-of ?a1)
+  (?ae1 is-elem-of ?a1)
+  (?ae2 is-elem-of ?a1)
+  (?ae1 ref ?e1)
+  (?ae2 ref ?e2)
+  (?e1 is-elem-of ?a)
+  (?e2 is-elem-of ?a)
+  (?e1 next ?e2)
+  (?ae0 next ?ae1)
+  )
+ (add
+  (print copy-array-struct-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?ae2 ?e1 ?e2)
+  (?ae0 next ?ae1))
+ (del
+  (?this-obj rule ?this-rule)
+  (?ae0 rule ?this-rule)				;; Targets of cas are not copied again
+  (?ae1 rule ?this-rule)
+  ))
+
+)
+
+;;;;;;; 
+
+(rule
+ (name copy-array-struct-next)
+ (local)
+ (root-var ?e0)
  (pred
   (?a copy-array-struct ?a1)
   (?ae0 is-elem-of ?a1)
@@ -388,8 +467,9 @@
   (?ae0 next ?ae1))
  (del
   (?this-obj rule ?this-rule)
+  (?ae0 rule ?this-rule)				;; Targets of cas are not copied again
+  (?ae1 rule ?this-rule)
   ))
-
 
 (rule
  (name copy-array-struct-zero)
@@ -400,12 +480,13 @@
   (?ae0 ref ?e0)
   (?e0 zero))
  (add
-  (print copy-array-struct-zero ?this-obj ?a ?a1 ?ae0 ?e0)
+  (print copy-array-struct-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?e0)
   (?ae0 zero)
   (?a1 casz-ref1 ?ae0)
   (?a casz-ref ?e0))
  (del
-  (?this-obj rule ?this-rule)))
+  (?this-obj rule ?this-rule)
+  (?ae0 rule ?this-rule)))				;; Targets of cas are not copied again
 
 (rule
  (name copy-array-struct-not-zero)
@@ -417,7 +498,7 @@
  (not					;; Using not is convenient, but can probably do the same using tree-next, i.e., detect non-zero
   (?e0 zero))
  (add
-  (print copy-array-struct-not-zero ?this-obj ?a ?a1 ?ae0 ?e0))
+  (print copy-array-struct-not-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?e0))
  (del
   (?this-obj rule ?this-rule)))
 
@@ -429,56 +510,15 @@
   (?p lrp-rule ?copy-array-struct-zero)
   (?copy-array-struct-zero name copy-array-struct-zero)
   (?p lrp-rule ?copy-array-struct-not-zero)
-  (?copy-array-struct-not-zero name copy-array-struct-not-zero))
+  (?copy-array-struct-not-zero name copy-array-struct-not-zero)
+  )
  (add
   (print opt-copy-array-struct-zero-and-not-zero)
   (?copy-array-struct-zero del ?ae0 rule ?copy-array-struct-not-zero)
-  (?copy-array-struct-not-zero del ?ae0 rule ?copy-array-struct-zero))
+  (?copy-array-struct-not-zero del ?ae0 rule ?copy-array-struct-zero)
+  )
  (del
   (?this-obj rule ?this-rule)))
-
-(comment
-(rule
- (name copy-array-struct-new-gen)
- (attach-to copy-array-struct)
- (pred
-  (?a copy-array-struct ?a1)
-  (?a local-rule-pool ?p)
-  (?p lrp-rule ?copy-array-struct-zero)
-  (?copy-array-struct-zero name copy-array-struct-zero)
-  (?p lrp-rule ?copy-array-struct-not-zero)
-  (?copy-array-struct-not-zero name copy-array-struct-not-zero)
-  (?p lrp-rule ?copy-array-struct-next)
-  (?copy-array-struct-next name copy-array-struct-next)
-  )
- (add
-  (print copy-array-struct-new-gen ?a ?a1)
-  (?a rule
-	  (rule
-	   (name (copy-array-struct-new ?a))
-	   (pred
-		(?e0 is-elem-of ?a)
-		(?a level ?l)
-		(?nn1 new-node sn1))
-	   (add
-		(print copy-array-struct-new ?this-obj ?this-rule ?this-obj-1 ?this-rule-1 ?a ?a1 ?e0 ?nn1)
-		(?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-		(?a1 elem ?nn1)
-		(?nn1 ref ?e0)
-		(?a1 level ?l)
-
-		(?nn1 local-rule-pool ?p)
-
-		(?nn1 casn-ref ?e0)
-
-		(?nn1 rule ?copy-array-struct-zero)
-		(?nn1 rule ?copy-array-struct-not-zero)
-		(?e0 rule ?copy-array-struct-next)
-		)
-	   (del
-		;; (?this-obj-1 rule ?this-rule-1) ;; !!!!!!
-		)))))
-)
 
 (rule
  (name copy-array-struct-new-gen)
@@ -491,13 +531,17 @@
   (?copy-array-struct-not-zero name copy-array-struct-not-zero)
   (?p lrp-rule ?copy-array-struct-next)
   (?copy-array-struct-next name copy-array-struct-next)
+  (?p lrp-rule ?even-new)
+  (?even-new name even-new)
+  (?p lrp-rule ?odd-new)
+  (?odd-new name odd-new)
   )
  (add
   (print copy-array-struct-new-gen)
   (local-rule-pool-node lrp-rule
 						(rule
 						 (name copy-array-struct-new)
-						 ;; (root-var ?e0)	;; This is desired -- should be auto 
+						 (root-var ?e0)
 						 (pred
 						  (?e0 is-elem-of ?a)
 						  (?a copy-array-struct ?a1)
@@ -513,10 +557,37 @@
 						  (?nn1 casn-ref ?e0)
 						  (?nn1 rule ?copy-array-struct-zero)
 						  (?nn1 rule ?copy-array-struct-not-zero)
+						  (?nn1 rule-order ?copy-array-struct-not-zero ?copy-array-struct-zero)
+						  ;; (?nn1 rule ?even-new)
+						  ;; (?nn1 rule ?odd-new)
 						  (?e0 rule ?copy-array-struct-next)
+						  (?nn1 rule ?copy-array-struct-next)
 						  )
 						 (del
 						  (?this-obj-1 rule ?this-rule-1)))))
+ (del
+  (?this-obj rule ?this-rule)))
+
+(rule
+ (name tree-elem-rule-mod)
+ (attach-to global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?tree-elem-rule)						;; Note cross-module ref
+  (?tree-elem-rule name tree-elem-rule)
+  (?p lrp-rule ?copy-array-struct-new)
+  (?copy-array-struct-new name copy-array-struct-new)
+  (?p lrp-rule ?even-new)
+  (?even-new name even-new)
+  (?p lrp-rule ?odd-new)
+  (?odd-new name odd-new)
+  )
+ (add
+  (print tree-elem-rule-mod)
+  (?tree-elem-rule add ?x rule ?copy-array-struct-new)
+  (?tree-elem-rule add ?x rule ?even-new)
+  (?tree-elem-rule add ?x rule ?odd-new)
+  )
  (del
   (?this-obj rule ?this-rule)))
 
@@ -547,7 +618,13 @@
   (?ef1 rule ?this-rule)
   (?eg1 rule ?this-rule)
   ;; (?ey1 rule ?this-rule)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  (?ef1 ?eg1 fft-hb ?ey1))
+  (?ef1 ?eg1 fft-hb ?ey1)
+
+  ;; For display
+
+  (?y comb-hb ?ey1)
+  
+  )
  (del
   (?this-obj rule ?this-rule)
   ))
@@ -572,7 +649,13 @@
   ;; (?e0 rule ?fft-comb-rule-next)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   (?e1 rule ?fft-comb-rule-next)
   ;; (?ey rule ?fft-comb-rule-next)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  (?e0 ?e1 fft-hb ?ey))
+  (?e0 ?e1 fft-hb ?ey)
+
+  ;; For display
+
+  (?y comb-hb ?ey)
+  
+  )
  (del
   (?this-obj rule ?this-rule)
   ))
@@ -585,15 +668,37 @@
   (?x level 0)
   )
  (add
-  (print fft-rule-zero ?x ?y ?r)
+  (print fft-rule-zero ?x ?y)
   (?x copy-array-struct ?y)
   (?y type array)
   (?y level 0)
+  (?x level-zero)
+  (?y level-zero)
   (?x d ?y)	;; display-connection
   )
  (del
-  (?this-obj rule ?this-rule)
-  ))
+  (?this-obj rule ?this-rule)))
+
+;; This is efficient since like "is" ("xis") it breaks the connection
+;; that queued it once done. So even though it's a rule attached to a
+;; constant we don't keep testing
+
+(rule
+ (name level-zero-rule)
+ (attach-to level-zero)
+ (pred
+  (?x level-zero)
+  (?y is-elem-of ?x)
+  (?y rule ?even-new)
+  (?even-new name even-new)
+  (?y rule ?odd-new)
+  (?odd-new name odd-new))
+ (add
+  (print level-zero-rule ?x ?y))
+ (del
+  (?y rule ?odd-new)
+  (?y rule ?even-new)
+  (?x level-zero)))
 
 ;; This rule is global and bare-bones, with no rule-passing
 ;; and related optimizations. It's modified explicitly by
@@ -613,7 +718,6 @@
   (?nn4 new-node sn4)
   (?p lrp-rule ?fft-comb-rule-zero)
   (?fft-comb-rule-zero name fft-comb-rule-zero)
-
   )
  (add
   (print fft-rule ?x ?y ?l)
@@ -686,11 +790,15 @@
   (?r name fft-rule-opt-rule-names))
  (add
   (print fft-rule-opt-rule-names)
-  (fft-rule-opt-rule-names-data copy-array-struct-new)
-  (fft-rule-opt-rule-names-data even-new-rule-propagate)
-  (fft-rule-opt-rule-names-data odd-new-rule-propagate)
+
+  ;; (fft-rule-opt-rule-names-data copy-array-struct-new)
+
+  ;;;; (fft-rule-opt-rule-names-data even-new-rule-propagate)
+  ;;;; (fft-rule-opt-rule-names-data odd-new-rule-propagate)
+  
   (fft-rule-opt-rule-names-data fft-rule-zero)
-  (fft-rule-opt-rule-names-data fft-comb-rule-zero))
+  (fft-rule-opt-rule-names-data fft-comb-rule-zero)
+  )
  (del
   (global-node rule ?this-rule)))
 
@@ -704,9 +812,10 @@
   (?fft-rule name fft-rule)
   (local-rule-pool-node lrp-rule ?r)
   (?r name ?n)
-  (fft-rule-opt-rule-names-data ?n))
+  (fft-rule-opt-rule-names-data ?n)
+  )
  (add
-  (print fft-rule-opt ?fft-rule)
+  (print fft-rule-opt ?fft-rule ?r ?n)
   (local-rule-pool-node lrp-rule ?fft-rule)
   (?fft-rule add print fft-opt-run ?fft-rule)
   (?fft-rule add ?nn1 rule ?r)
@@ -719,6 +828,49 @@
  (del
   (?this-obj rule ?this-rule)))
 
+(rule
+ (name fft-rule-opt-2-rule-names)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node rule ?r)
+  (?r name fft-rule-opt-rule-names))
+ (add
+  (print fft-rule-opt-2-rule-names)
+  ;; (fft-rule-opt-2-rule-names-data copy-array-struct-new)
+  ;; (fft-rule-opt-2-rule-names-data even-new-rule-propagate)
+  ;; (fft-rule-opt-2-rule-names-data odd-new-rule-propagate)
+  ;; (fft-rule-opt-2-rule-names-data fft-rule-zero)
+  ;; (fft-rule-opt-2-rule-names-data fft-comb-rule-zero)
+  )
+ (del
+  (global-node rule ?this-rule)))
+
+(rule
+ (name fft-rule-opt-2)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node local-rule-pool local-rule-pool-node)
+  (local-rule-pool-node lrp-rule ?fft-rule)
+  (?fft-rule name fft-rule)
+  (local-rule-pool-node lrp-rule ?r)
+  (?r name ?n)
+  (fft-rule-opt-2-rule-names-data ?n)
+  )
+ (add
+  (print fft-rule-opt-2 ?fft-rule ?r ?n)
+  (local-rule-pool-node lrp-rule ?fft-rule)
+  (?fft-rule add print fft-opt-run ?fft-rule)
+  (?fft-rule add ?nn1 rule ?r)
+  (?fft-rule add ?nn2 rule ?r)
+  ;; (?fft-rule add ?x rule ?r)
+  ;; (?fft-rule add ?y rule ?r)
+  (?fft-rule add ?nn1 rule ?fft-rule)
+  (?fft-rule add ?nn2 rule ?fft-rule)
+  (?fft-rule opt-done))
+ (del
+  (?this-obj rule ?this-rule)))
 
 
 ;; These "clean" versions are just for display purposes

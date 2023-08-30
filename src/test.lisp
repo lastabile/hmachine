@@ -12,6 +12,7 @@
   (setq g (make-foundation))  
 
   (! (g read-rule-file) "fft.lisp")
+  ;; (! (g read-rule-file) "new-fft.lisp")			;; See this file for description of this experiment
   ;; (! (g read-rule-file) "fft-const-rules.lisp")
   
   (! (g read-rule-file) "tree.lisp")  ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
@@ -59,6 +60,8 @@
 					   (del
 						(global-node rule ?this-rule))))
 
+  ;; (! (g trace-rule) 'install-copy-array-struct-next)
+  ;; (! (g trace-rule) 'tree-elem-rule)
   ;; (! (g trace-rule) 'od-next)
   ;; (! (g break-rule) 'od-next 'del-consequent-edges)
   ;; (! (g break-rule) 'od-next 'del-edge)
@@ -350,28 +353,33 @@
 
 (let ((d (make-dumper)))
   (! (d set-graph) g)
-  (! (d dump-gv-edges) "xxfft.gv" :rules t :attrs
-	 '(
-	   fft-hb
-	   fft-comb
-	   odd 
-	   even
-;;	   zero
-;;     d-casz
-	   d
-;;	   center-up
-       next-color
-	   rule30val
-	   rule-30-next
-	   up
-	   delta3
-	   delta3-rand
-;;	   next
-;;       casz-ref
-;;       casz-ref1
-;;     copy-array-struct
-	   ))
-  (! (d gv-to-svg) "xxfft"))
+  (! (d dump-gv-edges) "xxfft.gv" :rules t :attrs-fcn
+	 (lambda (e)
+	   (or (intersect e '(
+						  fft-hb
+						  fft-comb
+						  odd 
+						  even
+						  ;; zero
+						  ;; d-casz
+						  d
+						  ;; center-up
+						  next-color
+						  rule30val
+						  rule-30-next
+						  up
+						  delta3
+						  delta3-rand
+						  ;; next
+						  ;; casz-ref
+						  ;; casz-ref1
+						  ;; copy-array-struct
+						  ))
+		   (and (third e)
+				(! (g edge-exists) (list (third e) 'two-input-op))))))
+  ;; (! (d gv-to-svg) "xxfft")
+  (! (d laptop-gv-to-svg) "xxfft")
+  )
  
 (let ((d (make-dumper)))
   (! (d set-graph) g)
@@ -443,8 +451,42 @@
 								(< (if (eq (first (second x)) 'tested) (third (second x)) (second (second x)))
 								   (if (eq (first (second y)) 'tested) (third (second y)) (second (second y))))))))
 		  (dolist (x flatlist)
-			(print x s))))
-	  nil)))
+			(print x s)))
+		flatlist))))
+
+;; True if a given node has always failed testing under a given rule
+
+(defun failed (g node rule-name)
+  (let ((rule (first (! (g hget-inverse-all) rule-name 'name))))
+	(when rule
+	  (when (! (g superqets) (list node))
+		(let ((trace (! (g get-edge-to-trace-flatlist))))
+		  (block b
+			(let ((failed nil))
+			  (dolist (y trace)
+				(let ((x (second y)))
+				  (let ((op (first x)))
+					(cond
+					 ((eq op 'pred)
+					  (let ((pred-obj (fifth x)))
+						(let ((pred-rule (third x)))
+						  (when (and (equal node pred-obj)
+									 (equal rule pred-rule))
+							(return-from b nil)))))
+					 ((eq op 'tested)
+					  (let ((tested-obj (sixth x)))
+						(let ((tested-rule (fourth x)))
+						  (when (and (equal node tested-obj)
+									 (equal rule tested-rule))
+							(let ((status (second x)))
+							  (when (eq status :no-new-edges)
+								(return-from b nil))
+							  (when (eq status :failed)
+								(setq failed t)))))))))))
+			  failed)))))))
+
+
+(dolist (n (! (g get-all-nodes))) (when (failed g n 'ev-init) (! (g add-edge) (list n 'color 'green))))
 
 ;; dfft is just the dataflow part, no butterflies. That's quite
 ;; simple and we don't need the tree, odd-even, or rule30.
