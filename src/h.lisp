@@ -60,15 +60,25 @@
 ;;				  comments.
 ;;
 ;; qets-to-seqs -- Conversion of qets to seqs, e.g., optimize/dump qet-utils class.
-;;				   5/21/23 -- Discharged. qet-utils class is gone. is-subqet now just used CL search, and is a graph method.
+;;				   5/21/23 -- Discharged. qet-utils class is gone. is-subqet now just uses CL search, and is a graph method.
 ;;
 ;; dump-sn -- Remove the old "sn" new-node model. Can be simpler now, say, e.g., just (?nn1 new-node).
 ;;
 ;; check-rule-trace -- Change explicit rule-trae check with a method; allows options like break; the method's name is
 ;;					   check-rule-trace, so a change to that name qualifies as a tag.
+;;					   9/7/23 -- Yes, still at it, see new-check-rule-trace as it looks like a promising direction.
 ;;
 ;; fix-set-subtract-order
 ;;
+;; dump-all-edges -- Absurd quest to be sure. How do we graph all the edges?  What concepts are required? Can we draw
+;;					 down on "all" some and still show meaningful stuff? See test.lisp.
+;;
+;; exec-queue -- Whether and how to implement new control strategies. Doing an explicit queue or exec has been disabled as of 9/3/23.
+;;				 See comment in rule30.lisp with heading "9/5/23 Regarding is/is-not rules".
+;;
+;; del-on-rematch -- In ace, we do the dels even though we've matched before and not added new edges. The idea is that
+;;					 for example we probably still want to delete rules at the end of a propagation of rules around a
+;;					 chain. As of 9/4/23 looks like it's working ok.
 
 (defc graph nil nil
   (let ((size 63)) ;; 1021 !!!!!!!!!!!!!!!!!!!!!!!
@@ -829,9 +839,12 @@
 		(local-rule-pool 'local-rule-pool-node)
 		(hget-key-rest1 (list nil nil))
 		(hget-sup-rest1 (list nil nil))
-		(edge-to-pred (make-sur-map))					 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		(edge-to-add (make-sur-map))					 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		(edge-to-trace (make-sur-map))					 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		(edge-to-pred (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		(edge-to-add (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		(edge-to-trace (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		;; (edge-to-pred (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		;; (edge-to-add (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		;; (edge-to-trace (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
 		(local-pool-add-node nil)
 		(global-pool-add-node nil)
 		(std-vars (make-std-vars))
@@ -930,8 +943,10 @@
 
 	  ;; Shouldn't pass non-null values but don't want them in the queue if passed in error
 
-	  (defm queue-node (n &key only-if-not-queued push-head)
+	  (defm queue-node (n &key only-if-not-queued push-head print-tags)
 		(when n
+		  (when (memq 'queue-node print-tags)
+			(print (list 'queue-node n)))
 		  (if (and only-if-not-queued
 				   (node-queued n))
 			  nil
@@ -945,40 +960,44 @@
 	  (defm clear-queue ()
 		(setq obj-queue (make-queue)))
 
-	  (defm execute-queue (&key once (rule-mode :local-global))
-		  (block exq
-			(loop
-			 ;; Interesting experiment, i.e., executing as a stack instead
-			 ;; of a queue.  FFT worked, even a bit faster. Number of
-			 ;; exec-all passes 2 instead of three. However seemed to be
-			 ;; more dup of rule execs.
-			 ;; (let ((obj (! (obj-queue pop-tail))))
-			 (let ((obj (! (obj-queue pop-head))))
+	  (defm execute-queue (&key once (rule-mode :local-global) print-tags)
+		(block exq
+		  (loop
+		   ;; Interesting experiment, i.e., executing as a stack instead
+		   ;; of a queue.  FFT worked, even a bit faster. Number of
+		   ;; exec-all passes 2 instead of three. However seemed to be
+		   ;; more dup of rule execs.
+		   ;; (let ((obj (! (obj-queue pop-tail))))
+		   (let ((obj (! (obj-queue pop-head))))
+			 
+			 (when (and obj
+						(memq 'pop-head print-tags))
+			   (print (list 'pop-head obj)))
 
-			   ;; Experiment -- see queue-len-graph.gnuplot. Plotted the
-			   ;; queue length, then edited to produce a queue size
-			   ;; printed with each rule test, with a spike to 1000 for
-			   ;; each success. So you can see the pattern of areas
-			   ;; with a high success rate, followed by stretches of
-			   ;; failures. Worth formalizing better at some point.
-			   ;;
-			   ;; (print (list 'qlen (length (! (obj-queue as-list)))))
+			 ;; Experiment -- see queue-len-graph.gnuplot. Plotted the
+			 ;; queue length, then edited to produce a queue size
+			 ;; printed with each rule test, with a spike to 1000 for
+			 ;; each success. So you can see the pattern of areas
+			 ;; with a high success rate, followed by stretches of
+			 ;; failures. Worth formalizing better at some point.
+			 ;;
+			 ;; (print (list 'qlen (length (! (obj-queue as-list)))))
 
-			   (if obj
-				   (if (functionp obj)
-					   (let ((r (funcall obj)))
-						 (cond
-						  ((or (null r) (eq r :done))
-						   nil)
-						  ((eq r :requeue)
-						   (queue-node obj))))
-					   (execute-obj obj :rule-mode rule-mode :cont
-						 (lambda (m s p)
-						   (when once
-							 (return-from exq nil))
-						   (when m
-							 (queue-node obj)))))
-				   (return-from exq nil))))))
+			 (if obj
+				 (if (functionp obj)
+					 (let ((r (funcall obj)))
+					   (cond
+						((or (null r) (eq r :done))
+						 nil)
+						((eq r :requeue)
+						 (queue-node obj))))
+					 (execute-obj obj :rule-mode rule-mode :print-tags print-tags :cont
+					   (lambda (m s p)
+						 (when once
+						   (return-from exq nil))
+						 (when m
+						   (queue-node obj)))))
+				 (return-from exq nil))))))
 
 	  ;; An enum "type"
 	  (defm match-status ()
@@ -998,7 +1017,10 @@
 	  ;; <match-status> == (match-status)
 	  ;; <matched-edges> == union of all matches (not split out by env)
 
-	  (defm execute-obj (node &key (rule-mode :local-global) (cont (lambda (m s e p) (list m s))))
+	  (defm execute-obj (node &key 
+							  (rule-mode :local-global)
+							  print-tags
+							  (cont (lambda (m s p) (list m s))))
 		(timer 'execute-obj
 		  (lambda ()
 			(let ((r nil)
@@ -1028,7 +1050,7 @@
 						  ;; (print (list 'eo1 node 'ros rule-orders unordered-rules r))
 						  r)))))
 				(defl m-and-e (rule node)
-				  (match-and-execute-rule rule node :cont
+				  (match-and-execute-rule rule node :print-tags print-tags :cont
 										  (lambda (m s p d)
 											(setq matched-edges (hunion matched-edges (mapunion (lambda (edges) edges) p)))
 											(when (or (and (not (eq match-status :new-edges))
@@ -1090,8 +1112,91 @@
 			  r))))
 
 	  ;; By default, executions both off the queue and in the full scan are local and global. See comment.
+	  ;;
+	  ;; Below, we run the different kinds of evaluators in order in a loop, global-node, queue, exec-all. We stop when
+	  ;; a sequence of any three has produced no new edges.
 
 	  (defm execute-global-all-objs-loop (&key (queue-rule-mode :local-global) 
+											   (print-tags nil) ;; List of any of '(me4)
+											   (scan-rule-mode :local-global))  ;; Note this was local-only, but the
+																				;; global rule pool should mostly be
+																				;; small or empty, so we cover all the
+																				;; ground by checking them both, and
+																				;; doing that for each mode. Ideally
+																				;; these modes go away or just stay for
+																				;; debugging.
+		(let ((i 0)
+			  (no-new-edges-cnt 0))
+		  (defr
+			;; Note!! Can't use the fcn name "log" because it is silently
+			;; overridden by the built-in log (logarithm) fcn.
+			(defl log1 (name thunk)
+			  (format t "~%***~a~30t~a~35t~a" `(start ,name) i (date-time))
+			  (funcall thunk)
+			  (format t "~%***~a~30t~a~35t~a" `(end ,name) i (date-time))
+			  (setq i (+ i 1)))
+			(defl exec-until-no-new-edges (thunk)
+			  (block b
+				(let ((nedges 0)
+					  (prev-nedges 0))
+				  (loop
+				   (setq nedges (length (get-all-edges)))
+				   (when (= prev-nedges nedges)
+					 (return-from b nil))
+				   (setq prev-nedges nedges)
+				   (funcall thunk))
+				  nil)))
+			(defl exec-and-check-no-new-edges (thunk)
+			  (let ((nedges (length (get-all-edges))))
+				(funcall thunk)
+				(let ((new-nedges (length (get-all-edges))))
+				  (= nedges new-nedges))))
+			(defl exec-all-objs-and-queue (rule-mode)
+			  (timer 'exec-all-objs-and-queue 
+				(lambda ()
+				  (let ((nodes (get-all-nodes)))
+					(dolist (node nodes)
+					  (execute-obj node :rule-mode rule-mode :print-tags print-tags :cont (lambda (m s p) nil))
+					  (timer 'exec-all-objs-and-queue-exec-queue
+						(lambda ()
+						  (execute-queue :rule-mode queue-rule-mode :print-tags print-tags))))))))
+			(let ()
+			  (block b
+				(loop 
+				 (exec-until-no-new-edges
+					 (lambda ()
+					   (log1 'global-node
+							 (lambda ()
+							   (execute-obj 'global-node :rule-mode :local-global :print-tags print-tags :cont (lambda (m s p) nil))))))
+				 (setq no-new-edges-cnt (+ no-new-edges-cnt  1))
+				 (when (= no-new-edges-cnt 3) 
+				   (return-from b nil))
+				 (let ((no-new-edges
+						(exec-and-check-no-new-edges 
+						 (lambda ()
+						   (log1 'queue
+								 (lambda ()
+								   (execute-queue :rule-mode queue-rule-mode :print-tags print-tags)))))))
+				   (setq no-new-edges-cnt (if no-new-edges (+ no-new-edges-cnt 1) 0))
+				   (when (= no-new-edges-cnt 3)
+					 (return-from b nil)))
+				 (let ((no-new-edges
+						(exec-and-check-no-new-edges 
+						 (lambda ()
+						   (log1 'exec-all
+								 (lambda ()
+								   ;; (execute-all-objs :rule-mode scan-rule-mode)				;; !!!!!!!! Running the queue per-obj here
+								   (exec-all-objs-and-queue scan-rule-mode)
+								   ))))))
+				   (setq no-new-edges-cnt (if no-new-edges (+ no-new-edges-cnt 1) 0))
+				   (when (= no-new-edges-cnt 3)
+					 (return-from b nil)))))
+			  ($nocomment
+			   (log-stat 'entropy (edge-asc-entropy))
+			   (log-stat 'dist (edge-asc-dimension-dist)))))))
+
+
+	  (defm old-execute-global-all-objs-loop (&key (queue-rule-mode :local-global) 
 											   (scan-rule-mode :local-global))  ;; Note this was local-only, but the
 																				;; global rule pool should mostly be
 																				;; small or empty, so we cover all the
@@ -1419,10 +1524,10 @@
 	  ;;
 	  ;; new-rule-format: Do any sets of lists say preds/edges need to track in order anymore?
 
-	  (defm add-consequent-edges (obj-node pred-edges add-edges not-edges del-edges rule-node envlist &key cont)
+	  (defm add-consequent-edges (obj-node pred-edges add-edges not-edges del-edges rule-node envlist &key print-tags cont)
 		(timer 'add-consequent-edges					;; !!!!!! If use cps, timer will include more than this call
 		  (lambda ()
-			(! (self do-add-consequent-edges) obj-node pred-edges add-edges not-edges del-edges rule-node envlist cont))))
+			(! (self do-add-consequent-edges) obj-node pred-edges add-edges not-edges del-edges rule-node envlist print-tags cont))))
 
 	  (let ((env-new-edges (make-sur-map)))	
 		(let ((new-or-dup-edge-list nil))			;; should be new or dup or print
@@ -1433,7 +1538,7 @@
 				  (hash-table-to-list match-count-hash))
 				(defm get-match-count-hash ()
 				  match-count-hash)
-				(defm do-add-consequent-edges (obj-node pred-edges add-edges not-edges del-edges rule-node envlist cont)
+				(defm do-add-consequent-edges (obj-node pred-edges add-edges not-edges del-edges rule-node envlist print-tags cont)
 				  (defr
 					;; Delete edges after evaluating their elements as vars. 
 					;; First evaluates not-edges and for each env if any not-edge exists, then bail from that env
@@ -1471,6 +1576,8 @@
 												edge)))
 								(when del-edge
 								  (check-rule-trace (hget rule-node 'name) (list 'del-edge del-edge))
+								  (when (memq 'ace4 print-tags)
+									(print (list 'ace4 'del del-edge)))
 								  (rem-edge del-edge)
 								  (setq r (cons del-edge r)))
 								(! (env-triggered-table removed-edge) del-edge)))))
@@ -1506,7 +1613,26 @@
 											   nil ;; nodes-with-rules
 											   nil))))))
 								nodes))))))
+					;;
+					;; This gets a little hokey, but worth a try. (exec <node>) will be considered transient, and so
+					;; that edge should be deleted. (<node> exec) will be left in. We presume here that we'll not have a
+					;; huge nunmber of these right now.
+					;;
+
+					;; !!!! Disabled !!!!
+
 					(defl get-explicit-nodes-to-exec ()
+					  (block b
+						(return-from b nil)
+						(let ((exec-edges (get-edges-from-subqet '(exec))))
+						  (let ((prefix-exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) exec-edges)))
+							(let ((suffix-exec-edges (mapcad (lambda (e) (when (and (= (length e) 2) (eq (second e) 'exec)) e)) exec-edges)))
+							  (let ((nodes-to-exec (set-subtract (hunion (nodes prefix-exec-edges) (nodes suffix-exec-edges)) '(exec))))
+								(dolist (edge prefix-exec-edges)
+								  (rem-edge edge))
+								nodes-to-exec))))))
+
+					(defl old-get-explicit-nodes-to-exec ()
 					  (block b
 						;; (return-from b nil)
 						(let ((exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) (get-edges-from-subqet '(exec)))))
@@ -1516,12 +1642,17 @@
 							  (let ((exec-list (rest exec-edge)))
 								(rem-edge exec-edge)
 								exec-list))))))
+
+					;; !!!! Disabled !!!!
+
 					(defl get-explicit-nodes-to-queue ()
-					  (let ((queue-edge (first (get-edges-from-subqet '(queue)))))
-						(if queue-edge
-							(let ((queue-list (rest queue-edge)))
-							  (rem-edge queue-edge)
-							  queue-list))))
+					  (block b
+						(return-from b nil)
+						(let ((queue-edge (first (get-edges-from-subqet '(queue)))))
+						  (if queue-edge
+							  (let ((queue-list (rest queue-edge)))
+								(rem-edge queue-edge)
+								queue-list)))))
 					(let ((r nil)
 						  (first-edge nil)
 						  (rule-name (hget rule-node 'name))
@@ -1610,6 +1741,8 @@
 													(dolist (new-node new-edge)
 													  (setf (gethash new-node all-node-hash) new-node))
 													(add-edge new-edge)
+													(when (memq 'ace4 print-tags)
+													  (print (list 'ace4 'add new-edge)))
 													(! (env-new-edges insert) new-edge new-edge))))))
 										  ;; (print new-node-hash)
 										  )))))
@@ -1628,6 +1761,17 @@
 								  (setf (gethash rule-name match-count-hash)
 										(max (or (gethash rule-name match-count-hash) 0) (gethash (list seqno rule-name) match-count-hash)))
 								  ($nocomment (print (list seqno (get-log-seqno) p)))))		;; Perf test taking out prints shows no speed diff
+
+							  ;; del-on-rematch
+							  ;;
+							  ;; Here, we do the dels even though we've matched before and not added new edges. The idea
+							  ;; is that we probably still want to delete rules at the end of a propagation of rules
+							  ;; around a chain.
+
+							  ($nocomment												;; Still problems with this?
+							   (when (= (hash-table-count all-node-hash) 0)
+								 (del-consequent-edges del-edges not-edges envlist)))
+
 							  (when (not (= (hash-table-count all-node-hash) 0))
 								(dolist (p print-list)
 								  (setf (gethash (list seqno rule-name) match-count-hash)
@@ -1641,8 +1785,6 @@
 								  (setq matched-edges (cons me matched-edges))
 								  ;; Note use of ordered list of potentially redundant edges for tracing. Print edges are also included. 
 								  (setq matched-and-new-edges-per-env (cons (list me new-or-dup-edge-list #|(! (env-new-edges results))|# ) matched-and-new-edges-per-env)))
-								(when (edge-exists `(rule-break ,rule-name))
-								  (cerror "Good luck!" (format nil "Rule-break ~a" rule-name)))
 								;; (add-consequent-edges-info (list env (hash-table-to-list all-node-hash)))
 								)
 							  (let ((explicit-nodes-to-exec (get-explicit-nodes-to-exec)))
@@ -1650,19 +1792,21 @@
 								  (if (or explicit-nodes-to-exec explicit-nodes-to-queue)
 									  (let ()
 										(dolist (node explicit-nodes-to-exec)
-										  (queue-node node :push-head t))
+										  (queue-node node :push-head t :print-tags print-tags))
 										(dolist (node explicit-nodes-to-queue)
-										  (queue-node node :push-head nil)))
+										  (queue-node node :push-head nil :print-tags print-tags)))
 									  (let ((nodes (get-implicit-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
 										($comment
 										 (when nodes 
 										   (print (list 'ace2 nodes))))
 										(dolist (node nodes)
 										  (when (has-rules node)
-											(queue-node node :only-if-not-queued t)))))))))))
+											(queue-node node :only-if-not-queued t :print-tags print-tags)))))))))))
 					  (when nil ;; r
 						(print (list 'a (hget rule-node 'name) matched-and-new-edges-per-env)))
 					  ;; (print (list 'ace3 (! (new-edges as-list)) matched-edges))
+					  (when r
+						(check-rule-trace rule-name `(ace-new-edges rule ,rule-node ,rule-name obj ,obj-node)))
 					  (funcall cont r matched-edges deleted-edges matched-and-new-edges-per-env)))))))))
 	
 	  (defm trace-rule (rule-name)
@@ -1671,24 +1815,50 @@
 	  (defm untrace-rule (rule-name)
 		(rem-edge `(rule-trace ,rule-name)))
 
-	  (defm break-rule (rule-name &optional (key t))
+	  (defm break-rule (rule-name &optional (key t) (thunk nil))
 		(add-edge `(rule-trace ,rule-name))
-		(add-edge `(rule-break ,rule-name ,key)))
+		(add-edge `(rule-break ,rule-name))
+		(add-edge `(rule-break-info ,rule-name ,key ,thunk)))
 
 	  (defm unbreak-rule (rule-name)
 		(rem-edge `(rule-break ,rule-name)))
-#|
-:u
-:u
-:u
-:u
-:u
-:u
-:u
-:u
-:u
-|#
+
+	  ;;
+	  ;; This gets called from the kernel to ascertain whether we should do any tracing or breaking action. 
+	  ;; 
+	  ;; Edges calling for such action are added similarly to qets, where we include subqets. In this case an edge of
+	  ;; the form (rule-trace <rule-name>) is always added, and it is very fast to check for a fixed edge. So we check
+	  ;; for this first and only go further if this edge is found.
+	  ;;
+	  ;; Then look for an edge of the form (rule-break <rule-name>). If this is found we will then look for another edge
+	  ;; whose prefix is (rule-break <rule-name>). The rest of that edge is then a set of directives, options, and info
+	  ;; for controlling the break.
+	  ;;
+	  ;; We only do an actual trace if the break form is not present; i.e., break take priority. And at this point we
+	  ;; have no further options for trace.
+	  ;;
+
 	  (defm check-rule-trace (rule-name &optional l)
+		(let ((r (edge-exists `(rule-trace ,rule-name))))
+		  (when r
+			(let ((b (edge-exists `(rule-break ,rule-name))))
+			  (if b
+				  (let ((break-info (rest (rest (first (get-edges-from-subqet `(rule-break-info ,rule-name)))))))
+					(let ((key (first break-info)))
+					  (let ((thunk (second break-info)))
+						(cond
+						 ((and (not (null thunk))
+							   (or (eq key t)
+								   (eq key (first l))))
+						  (funcall thunk))
+						 ((or (eq key t)
+							  (eq key (first l)))
+						  (let ((msg (format nil "rule-break ~a ~a ~a" rule-name b l)))
+							(cerror "xxx" msg)))))))
+				  (when l
+					(print `(rule-trace ,@l))))))))
+
+	  (defm old-check-rule-trace (rule-name &optional l)
 		(let ((r (edge-exists `(rule-trace ,rule-name))))
 		  (when r
 			(let ((b (hget 'rule-break rule-name)))
@@ -1725,18 +1895,22 @@
 	  ;; <matched-edges> == of form (edges ...), one set of edges per env
 	  ;; <deleted-edges> == t if any edges were deleted, else nil
 
-	  (defm match-and-execute-rule (rule-node obj-node &key (cont (lambda (r match-status new-edges matched-edges deleted-edges)
-																	(list r match-status new-edges matched-edges deleted-edges))))
+	  (defm match-and-execute-rule (rule-node obj-node
+											  &key
+											  (cont (lambda (r match-status new-edges matched-edges deleted-edges)
+													  (list r match-status new-edges matched-edges deleted-edges)))
+											  print-tags
+											  )
 		(bool-timer 'match-and-execute-rule-true 'match-and-execute-rule-false 
 		  (lambda ()
-			(let ((r nil)
-				  (match-status nil)
-				  (new-edges nil)
-				  (matched-edges-list nil)
-				  (deleted-edges nil))
-			  (when (not (edge-exists `(,rule-node disabled)))
-				(let ((rule-name (hget rule-node 'name)))
-				  ($comment		;; check-rule-trace: why is this commented-out?
+			(let ((rule-name (hget rule-node 'name)))
+			  (let ((r nil)
+					(match-status nil)
+					(new-edges nil)
+					(matched-edges-list nil)
+					(deleted-edges nil))
+				(when (not (edge-exists `(,rule-node disabled)))
+				  ($comment ;; check-rule-trace: why is this commented-out?
 				   (when (or am-traced
 							 (edge-exists `(rule-trace ,rule-name)))
 					 (print `(rule-trace match-and-execute-rule tested rule ,rule-node ,rule-name obj ,obj-node))))
@@ -1752,7 +1926,7 @@
 							(! (rule-stats update-matched) rule-node)
 							(check-rule-trace rule-name `(match-and-execute-rule matched rule ,rule-node ,rule-name envlist ,envlist))
 							;; Edges to be deleted are so deleted in add-consequent-edges. All dels are done before adds.
-							(add-consequent-edges obj-node pred-list add-list not-list del-list rule-node envlist :cont
+							(add-consequent-edges obj-node pred-list add-list not-list del-list rule-node envlist :print-tags print-tags :cont
 							  (lambda (m x-matched-edges-list x-deleted-edges matched-and-new-edges-per-env)
 								(when m
 								  ;; (print (list 'me1 rule-name x-matched-edges-list x-deleted-edges matched-and-new-edges-per-env))
@@ -1792,7 +1966,7 @@
 										 (when (not (edge-exists (list rule-node 'used-root-var-processed)))
 										   (dolist (env envlist)
 											 (let ((root-var (env-lookup '?root-var env :idempotent nil)))
-											   ($comment		;; Some are nil because they're the nested form, e.g., ?root-var-1
+											   ($comment ;; Some are nil because they're the nested form, e.g., ?root-var-1
 												(when (null root-var)
 												  (print (list 'me1 rule-node rule-name env))))
 											   (when root-var
@@ -1838,9 +2012,11 @@
 						  (setq match-status :failed)
 						  (! (rule-stats update-failed) rule-node)
 						  (! (edge-to-trace insert) (list obj-node) (list 'tested match-status seqno rule-node rule-name obj-node))
-						  )))))
-			  (setq seqno (+ seqno 1))
-			  (funcall cont r match-status matched-edges-list deleted-edges)))))
+						  ))))
+				(setq seqno (+ seqno 1))
+				(when (memq 'me4 print-tags)
+				  (print (list 'me4 obj-node rule-name rule-node r match-status))) ;; This gives us a good addition to the basic output sequence since it shows each rule test
+				(funcall cont r match-status matched-edges-list deleted-edges))))))
 
 	  (defm expand-rule-obj-edges (rule-graph obj-node rule-nodepos root-var)
 		(timer 'expand-rule-obj-edges
@@ -2506,130 +2682,134 @@
 	  ;;
 
 	  (defm define-rule (rule-expr &key (new-pool 0) (unattached nil))
-		(when (not (eq (first rule-expr) 'comment))
-		  (remove-named-rule rule-expr)
-		  (let ((edge-list nil)
-				(add-to-nodes nil)
-				(add-to-lrp nil)
-				(add-to-grp nil)
-				(new-var-cnt 0)
-				(new-sn-cnt 0)
-				(clause-types-added nil))
-			(defr
+		(! (self define-rule-aux) rule-expr :new-pool new-pool :unattached unattached))
 
-			  ;; Shadowing add-edge -- we dont't want to add an edge if the rule is nested
-			  (defl add-edge (edge)
-				(if (= new-pool 0)
-					(! (self add-edge) edge)
-					edge))
+	  (let ((new-var-cnt 0)
+			(new-sn-cnt 0))
+		(defm define-rule-aux (rule-expr &key (new-pool 0) (unattached nil))
+		  (when (not (eq (first rule-expr) 'comment))
+			(remove-named-rule rule-expr)
+			(let ((edge-list nil)
+				  (add-to-nodes nil)
+				  (add-to-lrp nil)
+				  (add-to-grp nil)
+				  (clause-types-added nil))
+			  (defr
 
-			  (defl pushe (edge)
-				(setq edge-list (cons edge edge-list)))
+				;; Shadowing add-edge -- we dont't want to add an edge if the rule is nested
+				(defl add-edge (edge)
+				  (if (= new-pool 0)
+					  (! (self add-edge) edge)
+					  edge))
 
-			  ;; Doing this for refs in a rule is not right! Commented-out.
-			  (defl xform-std-vars (edge) ;; Use new-pool level to scope the std vars (?this-obj, etc.)
-				($comment (mapcar (lambda (x)
-									(! (std-vars var-base-to-var) x new-pool))
-								  edge))
-				edge)
+				(defl pushe (edge)
+				  (setq edge-list (cons edge edge-list)))
 
-			  (defl new-var ()
-				(let ((r (intern (format nil "?_X-~a-~a" new-pool new-var-cnt))))
-				  (setq new-var-cnt (+ new-var-cnt 1))
-				  r))
+				;; Doing this for refs in a rule is not right! Commented-out.
+				(defl xform-std-vars (edge) ;; Use new-pool level to scope the std vars (?this-obj, etc.)
+				  ($comment (mapcar (lambda (x)
+									  (! (std-vars var-base-to-var) x new-pool))
+									edge))
+				  edge)
 
-			  (defl new-sn ()
-				(let ((r (intern (format nil "SN-~a-~a" new-pool (+ new-sn-cnt 100)))))
-				  (setq new-sn-cnt (+ new-sn-cnt 1))
-				  r))
+				(defl new-var ()
+				  (let ((r (intern (format nil "?_X-~a-~a" new-pool new-var-cnt))))
+					(setq new-var-cnt (+ new-var-cnt 1))
+					r))
 
-			  (defl new-rule-node ()
-				(if (= new-pool 0)
-					(new-obj-node)
-					(new-var)))
+				(defl new-sn ()
+				  (let ((r (intern (format nil "SN-~a-~a" new-pool (+ new-sn-cnt 100)))))
+					(setq new-sn-cnt (+ new-sn-cnt 1))
+					r))
 
-			  (let ((rule (new-rule-node)))
-				(let ()
-				  (let ((rule-expr rule-expr))
-					(dolist (clause (rest rule-expr))
-					  (let ((clause-type (first clause)))
-						(cond
-						 ((eq clause-type 'name)
-						  (let ((rule-name (second clause)))
-							(if (not (listp rule-name))
-								(pushe (add-edge (list  rule 'name rule-name)))
-								(pushe (add-edge `(name-attr ,rule ,@rule-name))))))
-						 ((eq clause-type 'root-var)
-						  (let ((root-var (second clause)))
-							(pushe (add-edge (list rule 'root-var root-var)))))
-						 ((eq clause-type 'no-triggered)
-						  (pushe (add-edge `(,rule no-triggered))))
-						 ((eq clause-type 'local)
-						  (setq add-to-lrp t)
-						  (pushe (add-edge `(,rule local))))
-						 ((eq clause-type 'global)
-						  (setq add-to-grp t))
-						 ((eq clause-type 'disabled)
-						  (pushe (add-edge `(,rule disabled))))
-						 ((eq clause-type 'attach-to)
-						  (dolist (node (rest clause))
-							(setq add-to-nodes (cons node add-to-nodes))
-							(pushe (add-edge `(,rule attach-to ,node)))))
-						 ((member clause-type '(add) :test #'eq)
-						  (dolist (edge (rest clause))
-							(let ((edge (xform-std-vars edge)))
-							  (cond
-							   ((and (listp (first (last edge))) (eq (first (first (last edge))) 'rule))
-								(let ((rule-values (define-rule
-													 (first (last edge))
-													 :new-pool (+ new-pool 1)
-													 :unattached t)))
-								  (let ((rule-node (first rule-values))
-										(rule-edges (second rule-values)))
-									(pushe (add-edge (list rule 'add rule 'nested-rule rule-node)))
-									(pushe (add-edge (list rule 'pred rule-node 'new-node (new-sn))))
-									;; (pushe (add-edge (list rule 'add (first edge) (second edge) rule-node)))
-									(pushe (add-edge `(,rule add ,@(butlast edge) ,rule-node)))
-									(dolist (rule-edge rule-edges)
-									  (pushe (add-edge (append (list rule 'add) rule-edge)))))))
-							   (t
-								(pushe (add-edge (append (list rule clause-type) edge))))))))
-						 ((member clause-type '(pred del not) :test #'eq)
-						  (setq clause-types-added (cons clause-type clause-types-added))
-						  (dolist (edge (rest clause))
-								(let ((edge (xform-std-vars edge)))
-								  (pushe (add-edge (append (list rule clause-type) edge))))))))))
+				(defl new-rule-node ()
+				  (if (= new-pool 0)
+					  (new-obj-node)
+					  (new-var)))
 
-				  ;; We expect all rules to have a certain required set of properties, otherwise they cannot be
-				  ;; copied. Required are pred, add, del, not, root-var, type, std-var-level, name. All but name are
-				  ;; filled in by define-rule with defaults if not specified. So nameless rules cannot be
-				  ;; copied. Properties of rule attachment (local, ...) given in a rule def do not copy; the rule
-				  ;; invoking the copy is responsible for putting it where needed.
+				(let ((rule (new-rule-node)))
+				  (let ()
+					(let ((rule-expr rule-expr))
+					  (dolist (clause (rest rule-expr))
+						(let ((clause-type (first clause)))
+						  (cond
+						   ((eq clause-type 'name)
+							(let ((rule-name (second clause)))
+							  (if (not (listp rule-name))
+								  (pushe (add-edge (list  rule 'name rule-name)))
+								  (pushe (add-edge `(name-attr ,rule ,@rule-name))))))
+						   ((eq clause-type 'root-var)
+							(let ((root-var (second clause)))
+							  (pushe (add-edge (list rule 'root-var root-var)))))
+						   ((eq clause-type 'no-triggered)
+							(pushe (add-edge `(,rule no-triggered))))
+						   ((eq clause-type 'local)
+							(setq add-to-lrp t)
+							(pushe (add-edge `(,rule local))))
+						   ((eq clause-type 'global)
+							(setq add-to-grp t))
+						   ((eq clause-type 'disabled)
+							(pushe (add-edge `(,rule disabled))))
+						   ((eq clause-type 'attach-to)
+							(dolist (node (rest clause))
+							  (setq add-to-nodes (cons node add-to-nodes))
+							  (pushe (add-edge `(,rule attach-to ,node)))))
+						   ((member clause-type '(add) :test #'eq)
+							(dolist (edge (rest clause))
+							  (let ((edge (xform-std-vars edge)))
+								(cond
+								 ((and (listp (first (last edge))) (eq (first (first (last edge))) 'rule))
+								  (let ((rule-values (define-rule
+													   (first (last edge))
+													   :new-pool (+ new-pool 1)
+													   :unattached t)))
+									(let ((rule-node (first rule-values))
+										  (rule-edges (second rule-values)))
+									  (pushe (add-edge (list rule 'add rule 'nested-rule rule-node)))
+									  (pushe (add-edge (list rule 'pred rule-node 'new-node (new-sn))))
+									  ;; (pushe (add-edge (list rule 'add (first edge) (second edge) rule-node)))
+									  (pushe (add-edge `(,rule add ,@(butlast edge) ,rule-node)))
+									  (dolist (rule-edge rule-edges)
+										(pushe (add-edge (append (list rule 'add) rule-edge)))))))
+								 (t
+								  (pushe (add-edge (append (list rule clause-type) edge))))))))
+						   ((member clause-type '(pred del not) :test #'eq)
+							(setq clause-types-added (cons clause-type clause-types-added))
+							(dolist (edge (rest clause))
+							  (let ((edge (xform-std-vars edge)))
+								(pushe (add-edge (append (list rule clause-type) edge))))))))))
 
-				  (when (not (memq 'del clause-types-added))
-					(pushe (add-edge (list rule 'del))))
-				  (when (not (memq 'not clause-types-added))
-					(pushe (add-edge (list rule 'not))))
+					;; We expect all rules to have a certain required set of properties, otherwise they cannot be
+					;; copied. Required are pred, add, del, not, root-var, type, std-var-level, name. All but name are
+					;; filled in by define-rule with defaults if not specified. So nameless rules cannot be
+					;; copied. Properties of rule attachment (local, ...) given in a rule def do not copy; the rule
+					;; invoking the copy is responsible for putting it where needed.
 
-				  (when (null (hget rule 'root-var))
-					(pushe (add-edge (list rule 'root-var :undefined))))
+					(when (not (memq 'del clause-types-added))
+					  (pushe (add-edge (list rule 'del))))
+					(when (not (memq 'not clause-types-added))
+					  (pushe (add-edge (list rule 'not))))
 
-				  (pushe (add-edge (list rule 'type 'rule)))
-				  (pushe (add-edge (list rule 'std-var-level new-pool)))
+					(when (null (hget rule 'root-var))
+					  (pushe (add-edge (list rule 'root-var :undefined))))
 
-				  (when (not unattached)
-					(when add-to-nodes
-					  (dolist (n add-to-nodes)
-						(add-edge (list n 'rule rule))))
-					(when add-to-lrp
-					  (add-edge (list local-rule-pool 'lrp-rule rule)))
-					(setq add-to-grp (or add-to-grp
-										 (and (null add-to-nodes)
-											  (not add-to-lrp))))
-					(when add-to-grp
-					  (add-edge (list global-rule-pool 'grp-rule rule))))
+					(pushe (add-edge (list rule 'type 'rule)))
+					(pushe (add-edge (list rule 'std-var-level new-pool)))
+					(pushe (add-edge (list rule 'separate-display-node t)))
 
-				  (list rule edge-list)))))))
+					(when (not unattached)
+					  (when add-to-nodes
+						(dolist (n add-to-nodes)
+						  (add-edge (list n 'rule rule))))
+					  (when add-to-lrp
+						(add-edge (list local-rule-pool 'lrp-rule rule)))
+					  (setq add-to-grp (or add-to-grp
+										   (and (null add-to-nodes)
+												(not add-to-lrp))))
+					  (when add-to-grp
+						(add-edge (list global-rule-pool 'grp-rule rule))))
+
+					(list rule edge-list))))))))
 
 	  (defm bipartite-breadth-rule-walk-seq (rule-graph root-var)
 		(timer 'bipartite-breadth-rule-walk-seq
@@ -4765,7 +4945,7 @@
 	  (foundation-init)
 	  (read-rule-file "rule30.lisp")
 	  )
-	(defm run (levels)
+	(defm run (levels &key print-tags)
 	  (add-natural-number-edges levels)
 	  (define-rule `(rule
 					 (name init)
@@ -4782,7 +4962,7 @@
 					  (global-node rule ?this-rule))))
 	  (timer 'main
 		(lambda ()
-		  (execute-global-all-objs-loop))))))
+		  (execute-global-all-objs-loop :print-tags print-tags))))))
 
 (defc the-graph foundation nil
   (let ()

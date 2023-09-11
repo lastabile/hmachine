@@ -190,7 +190,47 @@
   (?x rule ?r)))
 )
 
+(rule
+ (name xis-gen)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node rule ?r)
+  (?r name xis-gen)
+  )
+ (add
+  (print xis-gen)
+  ;; (xis exec)
+  ;; (xis-not exec)
+  (xis rule 
+	   (rule
+		(name xis)
+		(pred
+		 (?x xis ?y)
+		 (?y has ?*r))
+		(add
+		 (print xis ?x ?y ?*r)
+		 (?x ?*r))
+		(del
+		 (?x xis ?y))))
+  (xis-not rule 
+		   (rule
+			(name xis-not)
+			(pred
+			 (?x xis-not ?y)
+			 (?y has ?*r))
+			(add
+			 (print xis-not ?x ?y ?*r))
+			(del
+			 (?x xis ?y)
+			 (?x xis-not ?y)
+			 (?x ?*r))))
+  )
+ (del
+  (?this-obj rule ?this-rule))
+)
 
+(comment
 (rule
  (name xis)
  (attach-to xis)
@@ -215,6 +255,7 @@
   (?x xis ?y)
   (?x xis-not ?y)
   (?x ?*r)))
+)
 
 (rule
  (name color-circle-data)

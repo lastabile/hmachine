@@ -51,6 +51,21 @@
 	      (let ((cmd (format nil "~a" cmd)))
 		(shell-cmd cmd)))))
 
+	(defm gv-to-jpg (file-root &key
+							   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
+	  (defr
+	    (defl cat (&rest x)
+	      (apply #'concatenate 'string x))
+	    (let ((cmd (format nil (cat "\"c:/Program Files (x86)/Graphviz2.38/bin/dot.exe\" ~a.gv | "
+					"\"c:/Program Files (x86)/Graphviz2.38/bin/gvpack.exe\" -m0 | "
+					"\"c:/Program Files (x86)/Graphviz2.38/bin/neato.exe\" -s ~a -Tjpg "
+					" > ~a.jpg")
+			       file-root 
+			       (if n2 "-n2" "")
+			       file-root)))
+	      (let ((cmd (format nil "~a" cmd)))
+		(shell-cmd cmd)))))
+
 	(defm laptop-gv-to-svg (file-root &key
 					  (edit-svg t) ;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
 					  (n2 t))      ;; T to do "leveled" layout; nil for circular as in Ladybug
@@ -121,6 +136,13 @@
 	;; attrs is a list of attrs to draw. If attrs = t, draw all
 	;; omitted-attrs is the set of attrs whose presence causes the edge not to be drawn, except if it's explicitly in the attrs list
 	;; rules is a list of rules to draw. If rules = t, draw all
+	;;
+	;; Some attributes of nodes which affect drawing:
+	;;
+	;; (<node separate-display-node {t|nil} When t, a given node, when encountered as a target, will be cloned into a
+	;;									    new node. Thus for these nodes we don't get a cluster of refs to them from
+	;;									    various other nodes. Handy for numbers, hence we have the arg below
+	;;									    separate-number-nodes. Default is nil, but we set this externally for rules.
 
 	(defm dump-gv-edges (file &key
 							  (edges nil)	;; list of edges to draw (e.g, from a query). nil means use the other filters, such as attrs. 
@@ -199,8 +221,16 @@
 						(set-gv-attr n 'color 'paleturquoise))
 					   (t
 						(set-gv-attr n 'color 'palegreen))))
+
 					(set-gv-attr n 'fontname 'arial)
 					(set-gv-attr n 'style 'filled)
+
+					(when (eq (! (g hget) n 'type) 'rule)
+					  (let ((name (! (g hget) n 'name)))
+						(set-gv-attr n 'label name)
+						(set-gv-attr n 'shape 'rectangle)
+						(set-gv-attr n 'color 'mistyrose)))
+
 					(when as-prop
 					  (set-gv-attr n 'shape 'none))
 					(dolist (gv-attr gv-attrs)
@@ -216,7 +246,10 @@
 					(let ((ne (make-node-entry)))
 					  (setf (node-entry-name ne) r)
 					  (setf (node-entry-gv-attr-map ne) (node-entry-gv-attr-map old-ne)) ;; Note we don't copy the attr map
+					  (setf (node-entry-rule-name ne) (node-entry-rule-name old-ne))
+					  ;; (setf (node-entry-do-not-emit ne) (node-entry-do-not-emit old-ne))			;; Bugs -- with this in we get incorrect behavior from the two-input-ops
 					  (! (node-map insert) r ne)
+					  ;; (print (list 'cne1 ne old-ne n r (! ((node-entry-gv-attr-map ne) as-list))))
 					  r))))
 
 			  (defl do-not-emit (n)
@@ -349,7 +382,10 @@
 							  (let ((prop (second v)))
 								(create-node-entry in-node)
 								(create-node-entry out-node)
-								(let ((out-node (if (and separate-number-nodes  (numberp out-node)) (clone-node-entry out-node) out-node)))
+								(let ((out-node (if (or (and separate-number-nodes  (numberp out-node))
+														(! (g hget) out-node 'separate-display-node))
+													(clone-node-entry out-node)
+													out-node)))
 								  (create-node-entry prop :do-not-emit t)
 								  (let ((prop-label (get-gv-attr prop 'label)))
 									(let ((edge-color (! (g hget) prop 'edge-color)))
@@ -359,9 +395,11 @@
 											(let ((n (! (g hget) r 'name)))
 											  (when (member n omitted-attrs :test #'eq)
 												(return-from b nil))
+											  #|
 											  (set-gv-attr r 'label n)
 											  (set-gv-attr r 'shape 'rectangle)
 											  (set-gv-attr r 'color 'mistyrose)
+											  |#
 											  (when (memq graph-type '(:subgraph :single-graph))
 												(let ((rule-entry-node (designated-rule-entry-node r)))
 												  (when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
@@ -467,7 +505,8 @@
 						;; (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" "rules" rule-name  "")
 						(dolist (rule-edges (list pred-edges del-edges add-edges not-edges))
 						  (when (or (eq rule-edges pred-edges)
-									(eq rule-edges add-edges))
+									(eq rule-edges add-edges)
+									(eq rule-edges del-edges))
 							(setq i (+ i 1))
 							(dolist (rule-edge rule-edges)
 							  (when (not (and (eq rule-edges add-edges)
@@ -501,7 +540,7 @@
 									(create-node-entry (first rule-edge) :rule-name p-rule-name :is-new-node-var t))
 								   ((= l 3)
 									;; (when (admit-edge (list (second rule-edge)))						;; !!!!!!!!!!!!!!!!!!!
-									(when (not (member (second rule-edge) omitted-attrs :test #'eq))
+									(when (not (member (second rule-edge) omitted-attrs :test #'eq))		;; Do we ever want to prune these out in rule displays?
 									  (create-node-entry (first rule-edge) :rule-name p-rule-name)
 									  (create-node-entry (third rule-edge) :rule-name p-rule-name)
 									  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a~a\",style=~a,fontname=arial,color=~a];~%"
@@ -700,7 +739,7 @@
 ;; plot-log takes a data subclass, e.g: 
 ;;
 ;;		(setq gp (make-gnuplot)) => #<COMPILED-FUNCTION MAKE-GNUPLOT-1>
-;;		(! (gp plot-log) (make-rule-30-perf-stats-info) get-info)
+;;		(! (gp plot-log) (make-rule-30-perf-stats-info))
 ;;
 ;; If do-grep is false, it won't scrape the log, just use the last data files made and refresh the graphics.
 ;;
@@ -742,11 +781,6 @@
 									(+ (* (+ 300 50) (floor (/ i m))) 20))
 							(format s "plot \"~a~a\" with lines title \"~a\" ~%" tmp-file-root (+ i 1) (first e))
 							(setq i (+ i 1))))))
-					($comment
-					 (let ((i 1))
-					   (dolist (e l)
-						 (format t "set terminal windows ~a close~%" i)
-						 (setq i (+ i 1)))))
 					(when do-grep
 					  (shell-script-file grep-cmd-file))
 					(shell-cmd (format nil "\"~a\" ~a -" gp-prog plot-cmd-file)))))))))))
@@ -794,7 +828,7 @@
 (defc rule-30-perf-stats-info base-perf-stats-info nil
   (let ((vars
 		 '(
-		   (rule-30-next-rule-0-0-1  3 :rules)
+		   (rule-30-next-rule-0-0-1  3 :rules)		;; The desired col is "tested"
 		   (rule-30-max-rule-0-1     3 :rules)
 		   (rule-30-zero-rule-1-1    3 :rules)
 		   (rule-30-center           3 :rules)

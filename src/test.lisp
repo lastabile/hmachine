@@ -11,7 +11,8 @@
 
   (setq g (make-foundation))  
 
-  (! (g read-rule-file) "fft.lisp")
+  (! (g read-rule-file) "fft-new-cas.lisp")
+  ;; (! (g read-rule-file) "fft.lisp")
   ;; (! (g read-rule-file) "new-fft.lisp")			;; See this file for description of this experiment
   ;; (! (g read-rule-file) "fft-const-rules.lisp")
   
@@ -60,7 +61,8 @@
 					   (del
 						(global-node rule ?this-rule))))
 
-  ;; (! (g trace-rule) 'install-copy-array-struct-next)
+  ;; (! (g break-rule) 'rule-30-center 'ace-new-edges)
+  ;; (! (g trace-rule) 'xis-gen)
   ;; (! (g trace-rule) 'tree-elem-rule)
   ;; (! (g trace-rule) 'od-next)
   ;; (! (g break-rule) 'od-next 'del-consequent-edges)
@@ -70,7 +72,7 @@
   (time
    (timer 'main
 	 (lambda ()
-	   (! (g execute-global-all-objs-loop))
+	   (! (g execute-global-all-objs-loop :print-tags nil #| '(me4 ace4 pop-head queue-node) |#))
 	   ))))
 
 ;; 8/3/23 parameterize tree-rule and fft-rule
@@ -377,8 +379,20 @@
 						  ))
 		   (and (third e)
 				(! (g edge-exists) (list (third e) 'two-input-op))))))
-  ;; (! (d gv-to-svg) "xxfft")
-  (! (d laptop-gv-to-svg) "xxfft")
+  (! (d gv-to-svg) "xxfft")
+  ;; (! (d laptop-gv-to-svg) "xxfft")
+  )
+
+(let ((d (make-dumper)))
+  (! (d set-graph) g)
+  (! (d dump-gv-edges) "x.gv" :rules t :attrs-fcn
+	 (lambda (e)
+	   (or (intersect e '(
+						  aup next zero max
+						  ))
+		   )))
+  (! (d gv-to-svg) "x")
+  ;; (! (d laptop-gv-to-svg) "x")
   )
  
 (let ((d (make-dumper)))
@@ -388,6 +402,17 @@
 	   (or (intersect edge '(center-up delta3-rand))
 		   (and (eq (second edge) 'rule30val)
 				(! (g superqets) (list (first edge) 'center-up)))))))
+
+;; dump-all-edges
+
+(let ((d (make-dumper)))
+  (! (d set-graph) g)
+  (! (d dump-gv-edges) "all-edges.gv" :rules t :attrs-fcn
+	 (lambda (e)
+	   t))
+  (! (d gv-to-svg) "all-edges")
+  ;; (! (d laptop-gv-to-svg) "all-edges")
+)
 
 (with-open-file (s "xxx" :direction :output)
   (let ((et (! ((! (g get-edge-to-trace)) as-list))))
@@ -2093,7 +2118,7 @@ Gerry S
 (with-open-file (s "rule30perf" :direction :output)
   (let ((std *standard-output*))
 	(let ((*standard-output* s))
-	  (let ((n 10))
+	  (let ((n 11))
 		(time
 		 (dotimes (i n)
 		   (setq g (make-rule-30-test))
@@ -2102,7 +2127,8 @@ Gerry S
 		   (perf-stats)
 		   (! (g rule-stats))
 		   (room t)
-		   (print (sort (mapcar (lambda (e) (if (not (memq 'print e)) (length e) 0)) (! (g get-all-edges))) (lambda (x y) (> x y))))))))))
+		   ;; (print (sort (mapcar (lambda (e) (if (not (memq 'print e)) (length e) 0)) (! (g get-all-edges))) (lambda (x y) (> x y))))
+		   ))))))
 
 (with-open-file (s "rule30test" :direction :output)
   (let ((std *standard-output*))
@@ -2111,8 +2137,35 @@ Gerry S
 	  (time (! (g run) 200)))))
 
 (let ((n 5))	;; 3
+  (clear-counters)
+  (clear-perf-stats)
   (setq g (make-rule-30-test))
-  (time (! (g run) n)))
+  (time (! (g run) n :print-tags (and nil '(me4 ace4 pop-head queue-node)))))
+
+;; Reasonably important test of "animation", where we make a series of
+;; jpg files at a set of breakpoints, in this case after each
+;; successful rule-30-center rule.  Adding more rule snapshot points
+;; looks reasonable.
+
+(let ((i 0))
+  (defun gv ()
+	(let ((d (make-dumper)))
+	  (let ((filename (format nil "~a~4,'0d" "pic" i)))
+		(let ((filename-gv (format nil "~a.gv" filename)))
+		  (setq i (+ i 1))
+		  (! (d set-graph) g)
+		  (! (d dump-gv-edges) filename-gv :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t :attrs '(rule-30-next rule30val zero max up center rule))
+		  (! (d gv-to-jpg) filename :n2 t)))))
+  (let ((n 5)) ;; 3
+	(clear-counters)
+	(clear-perf-stats)
+	(setq g (make-rule-30-test))
+	(! (g break-rule) 'xis 'ace-new-edges (lambda () (gv)))
+	;; (! (g break-rule) 'xis-not 'del-consequent-edges (lambda () (gv)))
+	(with-redirected-stdout "x"
+							(lambda (xstdout)
+							  (time (! (g run) n :print-tags (and nil '(me4 ace4 pop-head queue-node))))))))
+
 
 (ca-to-svg "y.svg" 101 30 :colorized t)
 
@@ -2285,15 +2338,17 @@ color-color
 	(time (with-redirected-stdout "y1"
 								  (lambda (std)
 									(! (g run) n)))))
-  (setq x (! (g edge-trace-rule-graph) 
-			 ))
+  (setq x (! (g edge-trace-rule-graph)))
   (let ((d (make-dumper)))
 	(! (d set-graph) x)
-	(! (d dump-gv-edges) "x.gv"
+	(! (d dump-gv-edges) "y.gv"
 	   :rules nil 
 	   :emit-legend nil
-	   :attrs '(r))
-	(! (d gv-to-svg) "x" :edit-svg t))
+	   :attrs '(r)
+	   :omitted-attrs '(xis rule-30-next-rule-1-1-1 rule-30-next-rule-1-1-0 rule-30-next-rule-1-0-1
+							rule-30-next-rule-1-0-0 rule-30-next-rule-0-1-1 rule-30-next-rule-0-1-0
+							rule-30-next-rule-0-0-1 rule-30-next-rule-0-0-0))
+	(! (d gv-to-svg) "y" :edit-svg t))
   )
 
 
@@ -3210,3 +3265,62 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 		 a b c d e f g
 		 ))
 	(! (d gv-to-svg) "z")))
+
+
+
+;; Basic test of deleting edges even though it's a reduadant match
+
+(let ()
+  (setq g (make-objgraph))
+  (! (g define-rule) '(rule
+					   (name xxx)
+					   (attach-to global-node)
+					   (pred
+						(global-node rule ?xxx)
+						(?xxx name xxx)
+						(?nn1 new-node sn1))		;; Should ignore new-node when detecting dups
+					   (add
+						(1 2 3)
+						(print xxx ?nn1))
+					   (del
+						(x y z))))
+  (! (g add-edge) '(x y z))
+  (! (g execute-obj) 'global-node :cont (lambda (m s e) (list m s e))))
+
+;; Testing cas- rules
+
+(let ()
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-foundation))
+  (! (g read-rule-file) "fft-new-cas.lisp")
+  (let ((edges '(
+				 (e0 is-elem-of x)
+				 (e1 is-elem-of x)
+				 (e2 is-elem-of x)
+				 (e3 is-elem-of x)
+				 (e0 zero)
+				 (e0 next e1)
+				 (e1 next e2)
+				 (e2 next e3)
+				 (e3 next e0)
+				 (x level 0)
+				 (x copy-array-struct y)
+				 )))
+	(dolist (e edges)
+	  (! (g add-edge) e))
+	(let ((r2 (! (g query) '((?r type rule)(?r name cas-zero)) '?r)))
+	  (! (g add-edge) (list 'e0 'rule r2)))
+	;; (! (g trace-rule) 'xis)
+	(! (g execute-global-all-objs-loop))))
+
+;;
+;; Accumulation of useful queries
+;;
+
+(! (g query) '((?r type rule)(?r name ?n)))
+
+(! (g query) '((?r type rule)(?r name rule-30-center)(?r pred ?*p)(?r add ?*a)(?r del ?*d)) :edges)
+
+(! (g query) '((?r type rule)(?r name ?n)(?r add ?x rule-30-next ?y)))
+

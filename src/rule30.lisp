@@ -30,22 +30,6 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
 |#
 
 (rule
- (name rule-30-center-obj-rule)
- (attach-to global-node)
- (pred
-  (global-node local-rule-pool ?p)
-  (?p lrp-rule ?rule-30-center)
-  (?p lrp-rule ?rule-30-center-loop)
-  (?rule-30-center name rule-30-center)
-  (?rule-30-center-loop name rule-30-center-loop))
- (add
-  (print rule-30-center-obj-rule)
-  (rule-30-center-obj has rule ?rule-30-center)
-  (rule-30-center-obj has rule ?rule-30-center-loop))
- (del
-  (global-node rule ?this-rule)))
-
-(rule
  (name rule-30-next-rule-gen)
  (attach-to global-node)
  (root-var global-node)
@@ -73,7 +57,7 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
 						  (add
 						   (print rule-30-next-rule ?this-obj newn1 ?nn1 ?x ?y ?z ?xval ?yval ?zval ?nval ?nz)
 
-						   ;; (?y is-not rule-30-next-rule-obj)
+						   ;; (?y is-not rule-30-next-rule-obj)		;; Doesn't seem to help anything
 
 						   (?z xis rule-30-next-rule-obj)
 						   (?z next-zero ?nz)
@@ -93,7 +77,8 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   (rule-30-next-rule-obj has rule ?r1)
   (?r1 name ?n1)
   (rule-30-next-rule-obj has rule ?r2)
-  (?r2 name ?n2))
+  (?r2 name ?n2)
+  )
  (add
   (print rule-30-next-rule-opt ?r1 ?n1 ?r2 ?n2)
   (?r1 del ?y rule ?r2)
@@ -128,7 +113,7 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
 						   (?nn2 new-node sn2))
 						  (add
 						   (print rule-30-zero-rule ?this-obj newn1 ?nn1 newn2 ?nn2 ?y ?z 1 1 ?ncval ?nnval)
-						   (?y is-not rule-30-zero-rule-obj)
+						   (?y xis-not rule-30-zero-rule-obj)
 						   (?z xis rule-30-next-rule-obj)
 						   (?z next-zero ?nn1)
 						   (?nn2 up ?y)
@@ -156,7 +141,7 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
 				 (?x zero))
 				(add
 				 (print rule-30-zero-prune ?x)
-				 (?x is-not rule-30-next-rule-obj))
+				 (?x xis-not rule-30-next-rule-obj))
 				(del
 				 (?this-obj-1 rule ?this-rule-1)))))
  (del
@@ -205,7 +190,8 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
 						  (?nn2 new-node sn2))
 						 (add
 						  (print rule-30-max-rule ?this-obj newn1 ?nn1 newn2 ?nn2 ?l ?x ?y ?xval 1 ?ncval ?nnval)
-						  (?y is-not rule-30-max-rule-obj)
+						  (?y xis-not rule-30-max-rule-obj)
+						  (?y xis-not rule-30-next-rule-obj)
 						  (?nz xis rule-30-zero-rule-obj)
 						  (?nn2 xis rule-30-max-rule-obj)
 						  (?nn1 up ?y)
@@ -228,28 +214,59 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   (?x max))
  (add
   (print rule-30-max-prune ?x)
-  (?x is-not rule-30-next-rule-obj))
+  ;; (?x xis-not rule-30-next-rule-obj)
+  )
+ (del
+  ;; (?this-obj rule ?this-rule)		;; Needs to be invoked more than once!
+  )
+ )
+
+(rule
+ (name rule-30-max-prune-opt-gen)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?rule-30-max-prune)
+  (?rule-30-max-prune name rule-30-max-prune))
+ (add
+  (print rule-30-max-prune-opt-gen)
+  (rule-30-next-rule-obj rule (rule
+							   (name rule-30-max-prune-opt)
+							   (pred
+								(rule-30-next-rule-obj has rule ?r))
+							   (add
+								(print rule-30-max-prune-opt)
+								(?rule-30-max-prune del ?x rule ?r))
+							   (del
+								(?this-obj-1 rule ?this-rule-1)))))
  (del
   (?this-obj rule ?this-rule)))
-
 
 (rule
  (name rule-30-center)
  (local)
+ (root-var ?x)
  (pred
   (?x center)
   (?x top ?t)
+  (?x level ?l)
+  (?l1 sigma ?l)
   (?t local-rule-pool ?p)
   (?y up ?x))
  (add
-  (print rule-30-center ?this-obj ?x ?y)
+  (print rule-30-center ?this-obj ?root-var ?x ?y)
   (?y center)
   (?y local-rule-pool ?p)
-  (?y xis rule-30-center-obj)
+  ;; (?y xis rule-30-center-obj)
   (?y center-up ?x)
-  (?y top ?t))
+  (?y top ?t)
+  ;; (?x xis-not rule-30-center-obj)
+  )
  (del
-  (?x rule ?this-rule)))
+  ;; (?x rule ?this-rule)		;; Handled by the mod rule below
+  )
+ )
 
 (rule
  (name rule-30-center-loop)
@@ -260,9 +277,61 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   (?x top ?t))
  (add
   (print rule-30-center-loop ?this-obj ?x ?t)
-  (?t center-up ?x))
+  (?t center-up ?x)
+  ;; (?x xis-not rule-30-center-obj)
+  )
  (del
   (?x rule ?this-rule)))
+
+(rule
+ (name rule-30-center-mod)
+ (attach-to global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?rule-30-center)
+  (?p lrp-rule ?rule-30-center-loop)
+  (?rule-30-center name rule-30-center)
+  (?rule-30-center-loop name rule-30-center-loop))
+ (add
+  (print rule-30-center-mod)
+  (?rule-30-center add ?y rule ?rule-30-center)
+  (?rule-30-center add ?y rule ?rule-30-center-loop)
+  (?rule-30-center del ?x rule ?rule-30-center-loop)
+  (?rule-30-center del ?x rule ?rule-30-center)
+  (?rule-30-center add ?y rule-order ?rule-30-center ?rule-30-center-loop)
+  )
+ (del
+  (global-node rule ?this-rule)))
+
+;; 9/5/23 Regarding is/is-not rules 
+;; This is disabled for now until we figure out how to make is/is-not
+;; more effective. "is" seems ok: std queuing handles it fairly
+;; efficiently, though an "exec" model is probably better. However
+;; "is-not" suffers from the queuing delay, in that needed deletions
+;; don't happen right away, thus cauing more rule testing than
+;; desired. So we need to get somwe kind of ":exec" model to work,
+;; though for now experiments in that realm havn't worked right and
+;; are currently disabled.
+;; 
+;; We'll try this using "-opt" or "-mod" modification, as we did with cas.
+
+(rule
+ (name rule-30-center-obj-rule)
+ (attach-to global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?rule-30-center)
+  (?p lrp-rule ?rule-30-center-loop)
+  (?rule-30-center name rule-30-center)
+  (?rule-30-center-loop name rule-30-center-loop))
+ (add
+  (print rule-30-center-obj-rule)
+  (rule-30-center-obj has rule ?rule-30-center)
+  (rule-30-center-obj has rule ?rule-30-center-loop)
+  ;; (rule-30-center-obj has rule-order ?rule-30-center ?rule-30-center-loop)
+  )
+ (del
+  (global-node rule ?this-rule)))
 
 (rule
  (name rule-30-top)
@@ -279,7 +348,7 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
  (add
   (print rule-30-top ?this-obj ?x ?nn1 ?nn2 ?nn3)
   (?nn2 up ?x)
-  (?nn2 xis rule-30-center-obj)
+  (?x xis rule-30-center-obj)
   (?x center)
   (?x top ?x)
   (?nn1 xis rule-30-zero-rule-obj)
@@ -295,7 +364,9 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   (?x rule30val 1)
   (?nn1 rule30val 1)
   (?nn2 rule30val 1)
-  (?nn3 rule30val 1)))
+  (?nn3 rule30val 1)
+  )
+ )
 
 (rule
  (name rule-30-data)

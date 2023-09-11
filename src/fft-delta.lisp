@@ -1,6 +1,7 @@
 
 ;; This never runs, as we have attached the relevant rules to constants below.
 
+(comment
 (rule
  (name fft-delta-init)
  (attach-to global-node)
@@ -20,6 +21,7 @@
   )
  (del
   (?this-obj rule ?this-rule)))
+)
 
 (rule
  (name fft-rule-delta2)
@@ -37,7 +39,8 @@
   (?y fcn-color ?s)
   (?y color ?t))
  (del
-  (?this-obj rule ?this-rule)))
+  ;; (?this-obj rule ?this-rule)
+  ))
 
 (rule
  (name fft-rule-delta3)
@@ -77,94 +80,4 @@
   (?y color ?s)
   (?y rand ?u)))
 
-(rule
- (name fft-rule-delta5)
- (attach-to d)
- (attach-to casz-ref)
- (pred
-  (?x d ?y)
-  (?x casz-ref ?z))
- (add
-  (print fft-rule-delta5 ?this-obj ?x ?y ?z)
-  (?x d-casz ?z)))
 
-(rule
- (name fft-rule-delta6)
- (attach-to d-casz)
- (attach-to casns-ref)
- (pred
-  (?x d-casz ?y)
-  (?y casns-ref ?z))
- (add
-  (print fft-rule-delta6 ?this-obj ?x ?y ?z)
-  (?x d-casz-casns-ref ?z)  ;; These two are eqv. e shortcut for display
-  (?x e ?z)))				;; 
-
-(comment
-
-;; 8/23/23 -- Commented-out as there is a dup of these in fft.lisp
- 
-;; Rule optimizer (for a specific rule). Adds rule propagators.
-;; Experimental -- note this one adds more rules to a given node than needed.
-
-(rule
- (name fft-rule-opt-rule-names)
- (attach-to global-node)
- (root-var global-node)
- (pred
-  (global-node rule ?r)
-  (?r name fft-rule-opt-rule-names))
- (add
-  (print fft-rule-opt-rule-names)
-  (fft-rule-opt-rule-names-data copy-array-struct-new)
-  (fft-rule-opt-rule-names-data even-new-rule-propagate)
-  (fft-rule-opt-rule-names-data odd-new-rule-propagate)
-  (fft-rule-opt-rule-names-data fft-rule-zero)
-  (fft-rule-opt-rule-names-data fft-comb-rule-zero))
- (del
-  (global-node rule ?this-rule)))
-
-(rule
- (name fft-rule-opt)
- (attach-to global-node)
- (root-var global-node)
- (pred
-  (global-node local-rule-pool local-rule-pool-node)
-  (local-rule-pool-node lrp-rule ?fft-rule)
-  (?fft-rule name fft-rule)
-  (local-rule-pool-node lrp-rule ?r)
-  (?r name ?n)
-  (fft-rule-opt-rule-names-data ?n))
- (add
-  (print fft-rule-opt ?fft-rule)
-  (local-rule-pool-node lrp-rule ?fft-rule)
-  (?fft-rule add print fft-opt-run ?fft-rule)
-  (?fft-rule add ?nn1 rule ?r)
-  (?fft-rule add ?nn2 rule ?r)
-  (?fft-rule add ?x rule ?r)
-  (?fft-rule add ?y rule ?r)
-  (?fft-rule add ?nn1 rule ?fft-rule)
-  (?fft-rule add ?nn2 rule ?fft-rule)
-  (?fft-rule opt-done))
- (del
-  (?this-obj rule ?this-rule)))
-
-)
-
-(comment		;; rem-add-main
-(rule
- (name fft-rule-opt-display)
- (attach-to global-node)
- (root-var global-node)
- (pred
-  (global-node local-rule-pool local-rule-pool-node)
-  (local-rule-pool-node lrp-rule ?fft-rule)
-  (?fft-rule name fft-rule)
-  (?fft-rule opt-done)
-  (?fft-rule add ?a))
- (add
-  (print fft-rule-opt-display ?fft-rule ?a)
-  (?fft-rule add-main ?a))
- (del
-  (?this-obj rule ?this-rule)))
-)

@@ -2295,3 +2295,26 @@ as a rule prop to more than one node, within the framework of nested
 rules. There seems to be a way to do this via flattening, and we
 should examine that."
 
+----------------------------------------------------------
+8/31/23 -- Run dels even on a redundant match
+
+A node may delete a rule after running it, but that rule may reappear
+during rule propagation. If it matches and no new edges are produced,
+run the dels anyway.  On the std bench this reduces redundancy and
+boosts efficiency:
+
+                    Old          New
+
+||MAIN           15.38588      9.941568
+||ME-EFFICIENCY   0.14948665   0.17226692 
+||ME-REDUNDANCY   0.21765913   0.10269759 
+||ME-FAILURE      0.6328542    0.7250355  
+
+Failure rate is now higher! 
+
+Also, we can now use this behavior to control more easily circulr rule
+propagation, where when we come around to the starting node no edges
+are added, and thus the rule does not continue to propagate, and the
+rul eis deleted from the starting node, thus forestalling more
+redunndant testing. See the new cas- rules in fft.lisp.
+
