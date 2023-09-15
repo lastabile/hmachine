@@ -108,13 +108,13 @@
   (?p lrp-rule ?odd-zero)
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
-  (?p lrp-rule ?copy-array-struct-new)
+  ;; (?p lrp-rule ?copy-array-struct-new)
   (?p lrp-rule ?odd-new)
   (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
   (?even-next name even-next)
-  (?copy-array-struct-new name copy-array-struct-new)
+  ;; (?copy-array-struct-new name copy-array-struct-new)
   (?odd-new name odd-new)
   )
  (add
@@ -134,7 +134,7 @@
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
-  (?nn1 rule ?copy-array-struct-new)
+  ;; (?nn1 rule ?copy-array-struct-new)
   (?nn1 rule ?odd-new)
   (?nn1 rule ?this-rule)
   )
@@ -179,14 +179,14 @@
   (?p lrp-rule ?odd-zero)
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
-  (?p lrp-rule ?copy-array-struct-new)
+  ;; (?p lrp-rule ?copy-array-struct-new)
   (?p lrp-rule ?even-new)
 
   (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
   (?even-next name even-next)
-  (?copy-array-struct-new name copy-array-struct-new)
+  ;; (?copy-array-struct-new name copy-array-struct-new)
   (?even-new name even-new)
 )
  (add
@@ -206,7 +206,7 @@
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
-  (?nn1 rule ?copy-array-struct-new)
+  ;; (?nn1 rule ?copy-array-struct-new)
   (?nn1 rule ?even-new)
   (?nn1 rule ?this-rule)
   )
@@ -245,10 +245,19 @@
   (?a even ?a1)
   (?ae0 is-elem-of ?a1)
   (?ae0 ref ?e0)
-  (?e0 zero))
+  (?e0 zero)
+  (?a local-rule-pool ?p)
+  (?p lrp-rule ?cas-zero)
+  (?cas-zero name cas-zero)
+  (?p lrp-rule ?cas-new)
+  (?cas-new name cas-new)
+  )
  (add
   (print even-zero ?this-obj ?a ?a1 ?ae0 ?e0)
-  (?ae0 zero))
+  (?ae0 zero)
+  (?ae0 rule ?cas-zero)
+  (?ae0 rule ?cas-new)
+  )
  (del
   (?this-obj rule ?this-rule)		;; Leaving in these dels looks ok
   ))
@@ -261,10 +270,19 @@
   (?ae0 is-elem-of ?a1)
   (?ae0 ref ?e1)
   (?e0 next ?e1)
-  (?e0 zero))
+  (?e0 zero)
+  (?a local-rule-pool ?p)
+  (?p lrp-rule ?cas-zero)
+  (?cas-zero name cas-zero)
+  (?p lrp-rule ?cas-new)
+  (?cas-new name cas-new)
+)
  (add
   (print odd-zero ?this-obj ?a ?a1 ?ae0 ?e0)
-  (?ae0 zero))
+  (?ae0 zero)
+  (?ae0 rule ?cas-zero)
+  (?ae0 rule ?cas-new)
+)
  (del
   (?this-obj rule ?this-rule)		;; Leaving in these dels looks ok
   ))
@@ -299,60 +317,6 @@
   (?e0 rule ?even-new)))
 
 (rule
- (name even-tree-max)
- (attach-to even)
- (attach-to odd)
- (pred
-  (?x even ?y)
-  (?x odd ?z)
-  (?z weave-next ?y)
-  (?x oe-max))
- (add
-  (print even-tree-max ?this-obj ?x ?y)
-  (?y oe-max)))
-
-(rule
- (name odd-tree-zero)
- (attach-to even)
- (attach-to odd)
- (pred
-  (?x odd ?y)
-  (?x even ?z)
-  (?y weave-next ?z)
-  (?x oe-zero))
- (add
-  (print odd-tree-zero ?this-obj ?x ?y)
-  (?y oe-zero)))
-
-
-;; 8/26/23 Commented out again. Speed better.
-;; This looks to be redundant, but not sure why.
-;; However for some reason things are faster with it in, so I'll leave it for now
-
-(comment
-(rule
- (name odd-even-weave)
- (attach-to even)
- (attach-to odd)
- (pred
-  (?p0 odd ?x00)
-  (?p0 even ?x01)
-  (?p1 odd ?x10)
-  (?p1 even ?x11)
-  (?x00 oe-zero)
-  (?x11 oe-max)
-  (?p0 oe-zero)
-  (?p1 oe-max)
-  (?p0 level ?l)
-  (?p1 level ?l)
-  (?x00 weave-next ?x01)
-  (?x10 weave-next ?x11))
- (add
-  (print odd-even-weave ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
-  (?p1 weave-next ?x00)))
-)
-
-(rule
  (name weave-next-rule)
  (attach-to weave-next)
  (attach-to odd)
@@ -369,38 +333,49 @@
   (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?x01 weave-next ?x10)))
 
-;; Here we are matching on properties of rules to find where we need to install another rule.
-;; Works but results in a glut of these rules.
-;; However adding the not clause boosts the efficiency quite a bit.
+;; Begin copy-array-struct section
+;; cas == copy-array-struct
 
 (rule
- (name install-copy-array-struct-next)
- (attach-to global-node)
+ (name cas-new)
+ (local)
+ (root-var ?e0)
  (pred
-  (global-node local-rule-pool ?p)
-  (?p lrp-rule ?r)
-  (?r add ?x is-elem-of ?y)
-  (?r name ?n)
-  (?p lrp-rule ?copy-array-struct-next)
-  (?copy-array-struct-next name copy-array-struct-next))
- (not
-  (?r name copy-array-struct-new)
-  )
+  (?a copy-array-struct ?a1)
+  (?e0 is-elem-of ?a)
+  (?e1 is-elem-of ?a)
+  (?e0 next ?e1)
+  (?nn1 new-node sn1))
  (add
-  (print install-copy-array-struct-next ?r ?x ?n)
-  (?r add ?x rule ?copy-array-struct-next))
+  (print cas-new ?this-obj ?root-var ?a ?a1 ?e0 ?e1 ?nn1)
+  (?nn1 is-elem-of ?a1)
+  (?a1 elem ?nn1)
+  (?nn1 ref ?e0)
+  )
  (del
   (?this-obj rule ?this-rule)))
 
-
-(comment
-
-;;;;;;; New experiment -- linear "next" movement
+(rule
+ (name cas-zero)
+ (local)
+ ;; (root-var ?e0)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?e0 is-elem-of ?a)
+  (?ae0 is-elem-of ?a1)
+  (?ae0 ref ?e0)
+  (?e0 zero))
+ (add
+  (print cas-zero ?this-obj ?root-var ?a ?a1 ?e0 ?ae0)
+  (?ae0 zero)
+  )
+ (del
+  (?this-obj rule ?this-rule)))
 
 (rule
- (name copy-array-struct-next-zero)
+ (name cas-next)
  (local)
- (root-var ?e0)
+ ;; (root-var ?e0)
  (pred
   (?a copy-array-struct ?a1)
   (?ae0 is-elem-of ?a1)
@@ -408,163 +383,40 @@
   (?ae0 ref ?e0)
   (?ae1 ref ?e1)
   (?e0 is-elem-of ?a)
-  (?e1 is-elem-of ?a)
-  (?e0 zero)
-  (?e0 next ?e1))
- (add
-  (print copy-array-struct-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
-  (?ae0 next ?ae1))
- (del
-  (?this-obj rule ?this-rule)
-  (?ae0 rule ?this-rule)				;; Targets of cas are not copied again
-  (?ae1 rule ?this-rule)
-  ))
-
-(rule
- (name copy-array-struct-next)
- (local)
- (root-var ?e0)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 is-elem-of ?a1)
-  (?ae1 is-elem-of ?a1)
-  (?ae2 is-elem-of ?a1)
-  (?ae1 ref ?e1)
-  (?ae2 ref ?e2)
   (?e1 is-elem-of ?a)
   (?e2 is-elem-of ?a)
+  (?e0 next ?e1)
   (?e1 next ?e2)
+  )
+ (add
+  (print cas-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
   (?ae0 next ?ae1)
   )
- (add
-  (print copy-array-struct-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?ae2 ?e1 ?e2)
-  (?ae0 next ?ae1))
  (del
   (?this-obj rule ?this-rule)
-  (?ae0 rule ?this-rule)				;; Targets of cas are not copied again
-  (?ae1 rule ?this-rule)
-  ))
-
-)
-
-;;;;;;; 
-
-(rule
- (name copy-array-struct-next)
- (local)
- (root-var ?e0)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 is-elem-of ?a1)
-  (?ae1 is-elem-of ?a1)
-  (?ae0 ref ?e0)
-  (?ae1 ref ?e1)
-  (?e0 is-elem-of ?a)
-  (?e1 is-elem-of ?a)
-  (?e0 next ?e1))
- (add
-  (print copy-array-struct-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
-  (?ae0 next ?ae1))
- (del
-  (?this-obj rule ?this-rule)
-  (?ae0 rule ?this-rule)				;; Targets of cas are not copied again
-  (?ae1 rule ?this-rule)
   ))
 
 (rule
- (name copy-array-struct-zero)
- (local)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 is-elem-of ?a1)
-  (?ae0 ref ?e0)
-  (?e0 zero))
- (add
-  (print copy-array-struct-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?e0)
-  (?ae0 zero)
-  (?a1 casz-ref1 ?ae0)
-  (?a casz-ref ?e0))
- (del
-  (?this-obj rule ?this-rule)
-  (?ae0 rule ?this-rule)))				;; Targets of cas are not copied again
-
-(rule
- (name copy-array-struct-not-zero)
- (local)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 is-elem-of ?a1)
-  (?ae0 ref ?e0))
- (not					;; Using not is convenient, but can probably do the same using tree-next, i.e., detect non-zero
-  (?e0 zero))
- (add
-  (print copy-array-struct-not-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?e0))
- (del
-  (?this-obj rule ?this-rule)))
-
-(rule
- (name opt-copy-array-struct-zero-and-not-zero)
+ (name cas-rule-mod)
  (attach-to global-node)
  (pred
   (global-node local-rule-pool ?p)
-  (?p lrp-rule ?copy-array-struct-zero)
-  (?copy-array-struct-zero name copy-array-struct-zero)
-  (?p lrp-rule ?copy-array-struct-not-zero)
-  (?copy-array-struct-not-zero name copy-array-struct-not-zero)
+  (?p lrp-rule ?cas-zero)
+  (?cas-zero name cas-zero)
+  (?p lrp-rule ?cas-new)
+  (?cas-new name cas-new)
+  (?p lrp-rule ?cas-next)
+  (?cas-next name cas-next)
   )
  (add
-  (print opt-copy-array-struct-zero-and-not-zero)
-  (?copy-array-struct-zero del ?ae0 rule ?copy-array-struct-not-zero)
-  (?copy-array-struct-not-zero del ?ae0 rule ?copy-array-struct-zero)
+  (print cas-rule-mod)
+  (?cas-new add ?nn1 rule ?cas-next)
+  (?cas-new add ?e1 rule ?cas-new)
+  (?cas-new del ?e0 rule ?cas-new)
+  (?cas-new add ?e1 rule ?cas-zero)
+  (?cas-next del ?ae1 rule ?cas-next)
+  ;; (?cas-next del ?e1 rule ?cas-zero)
   )
- (del
-  (?this-obj rule ?this-rule)))
-
-(rule
- (name copy-array-struct-new-gen)
- (attach-to global-node)
- (pred
-  (global-node local-rule-pool ?p)
-  (?p lrp-rule ?copy-array-struct-zero)
-  (?copy-array-struct-zero name copy-array-struct-zero)
-  (?p lrp-rule ?copy-array-struct-not-zero)
-  (?copy-array-struct-not-zero name copy-array-struct-not-zero)
-  (?p lrp-rule ?copy-array-struct-next)
-  (?copy-array-struct-next name copy-array-struct-next)
-  (?p lrp-rule ?even-new)
-  (?even-new name even-new)
-  (?p lrp-rule ?odd-new)
-  (?odd-new name odd-new)
-  )
- (add
-  (print copy-array-struct-new-gen)
-  (local-rule-pool-node lrp-rule
-						(rule
-						 (name copy-array-struct-new)
-						 (root-var ?e0)
-						 (pred
-						  (?e0 is-elem-of ?a)
-						  (?a copy-array-struct ?a1)
-						  (?a level ?l)
-						  (?nn1 new-node sn1))
-						 (add
-						  (print copy-array-struct-new ?this-obj ?this-rule ?this-obj-1 ?this-rule-1 ?a ?a1 ?e0 ?nn1)
-						  (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
-						  (?a1 elem ?nn1)
-						  (?nn1 ref ?e0)
-						  (?a1 level ?l)
-						  (?nn1 local-rule-pool ?p)
-						  (?nn1 casn-ref ?e0)
-						  (?nn1 rule ?copy-array-struct-zero)
-						  (?nn1 rule ?copy-array-struct-not-zero)
-						  (?nn1 rule-order ?copy-array-struct-not-zero ?copy-array-struct-zero)
-						  ;; (?nn1 rule ?even-new)
-						  ;; (?nn1 rule ?odd-new)
-						  (?e0 rule ?copy-array-struct-next)
-						  (?nn1 rule ?copy-array-struct-next)
-						  )
-						 (del
-						  (?this-obj-1 rule ?this-rule-1)))))
  (del
   (?this-obj rule ?this-rule)))
 
@@ -575,21 +427,28 @@
   (global-node local-rule-pool ?p)
   (?p lrp-rule ?tree-elem-rule)						;; Note cross-module ref
   (?tree-elem-rule name tree-elem-rule)
-  (?p lrp-rule ?copy-array-struct-new)
-  (?copy-array-struct-new name copy-array-struct-new)
+  (?p lrp-rule ?tree-elem-zero-rule)
+  (?tree-elem-zero-rule name tree-elem-zero-rule)
   (?p lrp-rule ?even-new)
   (?even-new name even-new)
   (?p lrp-rule ?odd-new)
   (?odd-new name odd-new)
+  (?p lrp-rule ?cas-zero)
+  (?cas-zero name cas-zero)
+  (?p lrp-rule ?cas-new)
+  (?cas-new name cas-new)
   )
  (add
   (print tree-elem-rule-mod)
-  (?tree-elem-rule add ?x rule ?copy-array-struct-new)
   (?tree-elem-rule add ?x rule ?even-new)
   (?tree-elem-rule add ?x rule ?odd-new)
+  ;; (?tree-elem-zero-rule add ?x rule ?cas-zero)
+  (?tree-elem-zero-rule add ?x rule ?cas-new)
   )
  (del
   (?this-obj rule ?this-rule)))
+
+;; End copy-array-struct section
 
 ;; We used to need a a root-var here, but not bailing from root-var loop fixed it.
 
@@ -773,9 +632,7 @@
   (note title "FFT Butterflies with Rule-30 Random Deltas")
   (note fft 2^ ?l points "\\n" rule-30 ?level levels)
   (?y weave-next ?z)
-  (?x weave-next ?y)
-  (?y oe-zero)
-  (?z oe-max)))
+  (?x weave-next ?y)))
 
 
 ;; Rule optimizer (for a specific rule). Adds rule propagators.

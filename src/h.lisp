@@ -20,7 +20,7 @@
 ;;					4?/7/23 Subst-match looks like it's working pretty well, esp. for det matches or small numbers of
 ;;					matches. Right now it's only active when the root var is a var rather than a const, so we get an
 ;;					intial reduction by subst of the root. For const-attached rules it normally explodes easily, such
-;;					that traditional all-matches-aux does better, since it whittles down the edges firrst to a
+;;					that traditional all-matches-aux does better, since it whittles down the edges first to a
 ;;					manageable level, though it does the whittling from a lot of edges, and that number increases with
 ;;					the input size. Subst-match shines in this regard, since it uses the qet system to lookup edges in
 ;;					an indexed manner, with an ASC flavor.
@@ -79,6 +79,10 @@
 ;; del-on-rematch -- In ace, we do the dels even though we've matched before and not added new edges. The idea is that
 ;;					 for example we probably still want to delete rules at the end of a propagation of rules around a
 ;;					 chain. As of 9/4/23 looks like it's working ok.
+;;
+;; elim-edge-to-trace -- Should we? It has not shown to be that useful and it seems that jpg snapshots offer a better
+;;						 debugging tool. Note right now it's turned off, using the dummy-sur-map.
+;; 
 
 (defc graph nil nil
   (let ((size 63)) ;; 1021 !!!!!!!!!!!!!!!!!!!!!!!
@@ -839,12 +843,12 @@
 		(local-rule-pool 'local-rule-pool-node)
 		(hget-key-rest1 (list nil nil))
 		(hget-sup-rest1 (list nil nil))
-		(edge-to-pred (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		(edge-to-add (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		(edge-to-trace (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		;; (edge-to-pred (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		;; (edge-to-add (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
-		;; (edge-to-trace (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		;; (edge-to-pred (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		;; (edge-to-add (make-sur-map))					 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		;; (edge-to-trace (make-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		(edge-to-pred (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		(edge-to-add (make-dummy-sur-map))				 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
+		(edge-to-trace (make-dummy-sur-map))			 ;; Nop by using  make-dummy-sur-map; Active using make-sur-map
 		(local-pool-add-node nil)
 		(global-pool-add-node nil)
 		(std-vars (make-std-vars))
@@ -855,7 +859,6 @@
 		)
 	(let ((hget-key-rest2 (rest hget-key-rest1))
 		  (hget-sup-rest2 (rest hget-sup-rest1))
-		  (elem-attrs '(_elem))
 		  (env-triggered-table (make-env-triggered std-vars))
 		  )
 
@@ -883,9 +886,6 @@
 				(dolist (r (second e))
 				  (setq flatlist (cons (list edge r) flatlist)))))
 			flatlist)))
-
-	  (defm get-elem-attrs ()
-		elem-attrs)
 
 	  (defm std-vars ()	;; For debug only
 		std-vars)
@@ -1113,7 +1113,7 @@
 
 	  ;; By default, executions both off the queue and in the full scan are local and global. See comment.
 	  ;;
-	  ;; Below, we run the different kinds of evaluators in order in a loop, global-node, queue, exec-all. We stop when
+	  ;; Below, we run the different kinds of evaluators in order in a loop: global-node, queue, exec-all. We stop when
 	  ;; a sequence of any three has produced no new edges.
 
 	  (defm execute-global-all-objs-loop (&key (queue-rule-mode :local-global) 
@@ -1194,56 +1194,6 @@
 			  ($nocomment
 			   (log-stat 'entropy (edge-asc-entropy))
 			   (log-stat 'dist (edge-asc-dimension-dist)))))))
-
-
-	  (defm old-execute-global-all-objs-loop (&key (queue-rule-mode :local-global) 
-											   (scan-rule-mode :local-global))  ;; Note this was local-only, but the
-																				;; global rule pool should mostly be
-																				;; small or empty, so we cover all the
-																				;; ground by checking them both, and
-																				;; doing that for each mode. Ideally
-																				;; these modes go away or just stay for
-																				;; debugging.
-		(block egl
-		  (let ((i 0)
-				(nedges 0)
-				(prev-nedges 0))
-			(defr
-			  ;; Note!! Can't use the fcn name "log" because it is silently
-			  ;; overridden by the built-in log (logarithm) fcn.
-			  (defl log1 (name thunk)
-				(format t "~%***~a~30t~a~35t~a" `(start ,name) i (date-time))
-				(funcall thunk)
-				(format t "~%***~a~30t~a~35t~a" `(end ,name) i (date-time))
-				(setq i (+ i 1)))
-			  (defl exec-until-no-new-edges (thunk)
-				(block b
-				  (let ((nedges 0)
-						(prev-nedges 0))
-					(loop
-					 (setq nedges (length (get-all-edges)))
-					 (when (= prev-nedges nedges)
-					   (return-from b nil))
-					 (setq prev-nedges nedges)
-					 (funcall thunk))
-					nil)))
-			  ($nocomment
-			   (log-stat 'entropy (edge-asc-entropy))
-			   (log-stat 'dist (edge-asc-dimension-dist)))
-			  (exec-until-no-new-edges
-				  (lambda ()
-					(exec-until-no-new-edges
-						(lambda ()
-						  (log1 'global-node
-								(lambda ()
-								  (execute-obj 'global-node :rule-mode :local-global :cont (lambda (m s p) nil)))))) ;; scan-rule-mode
-					(log1 'queue
-						  (lambda ()
-							(execute-queue :rule-mode queue-rule-mode)))
-					(log1 'exec-all
-						  (lambda ()
-							(execute-all-objs :rule-mode scan-rule-mode)))))
-			  nil))))
 
 	  ;; clauses below is the incoming query, and has the form:
 	  ;;
@@ -1447,14 +1397,13 @@
 						rule-components)))))))))
 
 	  ;; Nodes can no longer just be "unattached" in the sense of being immune to rules. This became more effective with
-	  ;; the change to global pool handling, i.e., it's all internal to the kernel and not visible in H. So below we
-	  ;; just return true. But I'm leaving the function in as someday we may want for some reason to make the
-	  ;; distinction.
+	  ;; the change to global pool handling, i.e., it's all internal to the kernel and not visible in H.  So we could
+	  ;; just return true, but we optimize a little by checking whether the global pool is empty, and if so, we check
+	  ;; for local rules.
 
 	  (defm has-rules (node)
-		(or t									;; We assume rules are always available in some way
-			(hget node 'global-rule-pool)
-			(hget node 'rule)))
+		(or (not (null (get-edges 'global-rule-pool-node)))
+			(not (null (hget node 'rule)))))
 
 	  (defm dedup-rules (rules)
 		(dedup-list rules :id-func (lambda (rule)

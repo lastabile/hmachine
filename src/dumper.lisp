@@ -11,7 +11,8 @@
 		(node-map (make-sur-map))
 		(node-set (make-sur-map))
 		(designated-rule-edges (make-sur-map))
-		(pair-list nil))
+		(pair-list nil)
+		(gv-dir (if (is-laptop) "c:/Program Files/Graphviz" "c:/Program Files (x86)/Graphviz2.38")))
 
 	(defm set-graph (graph)
 	  (setq g graph)
@@ -31,11 +32,38 @@
 		(let ((s (sort preds (lambda (x y) (< (sxhash x) (sxhash y))))))
 		  (symcat nest-prefix '- (! (g hget) rule-node 'name) '- (first (first s))))))
 
-	;; Given a file <x>.gv, produce <x>.svg. Current wd is used unless given absolute paths
+	;; Given a file <x>.gv, produce <x>.svg or <x>.jpg. Current wd is used unless given absolute paths
 
-	(defm gv-to-svg (file-root &key
-				   (edit-svg t)		;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
-				   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
+	(defm gv-to-image (gv-file &key
+							   (edit-svg t)			;; T to edit the svg to take out scale-down limits. But it also imposes scale-up limits.
+							   (n2 t)				;; T to do "leveled" layout; nil for circular as in Ladybug
+							   (file-type :svg))	;; one-of (:svg :jpg)
+	  (defr
+	    (defl cat (&rest x)
+	      (apply #'concatenate 'string x))
+		(defl file-root (gv-file)
+		  (subseq gv-file 0 (search ".gv" gv-file)))
+		(let ((gv-file-root (file-root gv-file)))
+	      (let ((cmd (format nil (cat "\"~a/bin/dot.exe\" ~a.gv | "
+									  "\"~a/bin/gvpack.exe\" -m0 | "
+									  "\"~a/bin/neato.exe\" -s ~a -T~a "
+									  "~a"
+									  " > ~a.~a")
+							 gv-dir
+							 gv-file-root
+							 gv-dir
+							 gv-dir
+							 (if n2 "-n2" "")
+							 (case file-type (:svg "svg") (:jpg "jpg"))
+							 (if (and (eq file-type :svg) edit-svg) "| sed -e \"s/<svg.*$/\<svg/\"" "")
+							 gv-file-root
+							 (case file-type (:svg "svg") (:jpg "jpg")))))
+			(let ((cmd (format nil "~a" cmd)))
+			  (shell-cmd cmd))))))
+
+	(defm old-gv-to-svg (file-root &key
+								   (edit-svg t)		;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
+								   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
 	  (defr
 	    (defl cat (&rest x)
 	      (apply #'concatenate 'string x))

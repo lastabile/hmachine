@@ -6,74 +6,75 @@
 ;; treetopobj levels ,n) is needed for globaltree.lisp
 
 (let ((n 3))
-  (clear-counters)
-  (clear-perf-stats)
+  (let ((i 0))
+	(defr
+	  (defl gv ()
+		(let ((d (make-dumper)))
+		  (let ((filename (format nil "~a~4,'0d" "pic" i)))
+			(let ((filename-gv (format nil "~a.gv" filename)))
+			  (setq i (+ i 1))
+			  (! (d set-graph) g)
+			  (! (d dump-gv-edges) filename-gv
+				 :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t
+				 :attrs '(
+						  ;; These are the standard attrs to show:
+						  fft-hb fft-comb odd  even  rule30val rule-30-next up delta3 delta3-rand d next-color
+						  ;; These are common extras:
+						  ;; zero d-casz center-up next casz-ref casz-ref1 copy-array-struct
+						  ;; These I played with using the animation:
+						  ;; fft-hb rule
+						  ))
+			  (! (d gv-to-image) filename :n2 t :file-type :jpg)))))
+	  (let ()
+		(clear-counters)
+		(clear-perf-stats)
+		(setq g (make-foundation))  
+		(! (g read-rule-file) "fft.lisp")
+		;; (! (g read-rule-file) "new-fft.lisp")			;; See this file for description of this experiment
+		;; (! (g read-rule-file) "fft-const-rules.lisp")
+		(! (g read-rule-file) "tree.lisp") ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
+		;; (read-rule-file "globaltree.lisp")
+		(! (g read-rule-file) "rule30.lisp")
+		(! (g read-rule-file) "fft-delta.lisp")
+		;; (! (g read-rule-file) "display-rules.lisp")
+		;; (! (g read-rule-file) "fft-display-rules.lisp")
+		;; (! (g add-natural-number-edges) 50)		;; Need this if expand rule-30 to 50 (or beyond)
+		(! (g define-rule) `(rule
+							 (name init)
+							 (attach-to global-node)
+							 (pred
+							  (global-node rule ?r)
+							  (?r name init))
+							 (add
+							  (print init)
+							  (r level ,(* 1 n))
+							  (r rule-30-top)
+							  ;; (x is treetopobj levels ,n)		;; Supports global-tree.lisp
+							  ;; (x is treetopobj l ,n)				;; Supports tree.lisp
+							  (tree-rule x ,n)
+							  (x fft-top) ;; An experiment in symbol-free matching, for max locality. Works, but slow. See fft-top-rule
+							  ;; (x n1)
+							  ;; (n1 n2)
+							  ;; (n2 n3)
+							  (x fft xfft)
+							  (x level ,n)
+							  (x color navajowhite)
+							  (x rand r)
+							  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
+							  (x local-rule-pool local-rule-pool-node)
+							  (r local-rule-pool local-rule-pool-node)
+							  (queue x r)
+							  )
+							 (del
+							  (global-node rule ?this-rule))))
+		;; (! (g break-rule) 'fft-comb-rule-next 'ace-new-edges (lambda () (gv)))
+		(time
+		 (timer 'main
+		   (lambda ()
+			 (! (g execute-global-all-objs-loop :print-tags (and nil '(me4 ace4 pop-head queue-node)))))))))))
+		
 
-  (setq g (make-foundation))  
 
-  (! (g read-rule-file) "fft-new-cas.lisp")
-  ;; (! (g read-rule-file) "fft.lisp")
-  ;; (! (g read-rule-file) "new-fft.lisp")			;; See this file for description of this experiment
-  ;; (! (g read-rule-file) "fft-const-rules.lisp")
-  
-  (! (g read-rule-file) "tree.lisp")  ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
-  ;; (read-rule-file "globaltree.lisp")
-  (! (g read-rule-file) "rule30.lisp")
-  (! (g read-rule-file) "fft-delta.lisp")
-
-  ;; (! (g read-rule-file) "display-rules.lisp")
-  ;; (! (g read-rule-file) "fft-display-rules.lisp")
-  
-  ;; (! (g add-natural-number-edges) 50)		;; Need this if expand rule-30 to 50 (or beyond)
-
-  (! (g define-rule) `(rule
-					   (name init)
-					   (attach-to global-node)
-					   (pred
-						(global-node rule ?r)
-						(?r name init))
-					   (add
-						(print init)
-						(r level ,(* 1 n))
-						(r rule-30-top)
-
-						;; (x is treetopobj levels ,n)		;; Supports global-tree.lisp
-
-						;; (x is treetopobj l ,n)				;; Supports tree.lisp
-						(tree-rule x ,n)
-
-						(x fft-top)		;; An experiment in symbol-free matching, for max locality. Works, but slow. See fft-top-rule
-						;; (x n1)
-						;; (n1 n2)
-						;; (n2 n3)
-
-						(x fft xfft)
-						(x level ,n)
-						(x color navajowhite)
-						(x rand r)
-						(x rule ,(! (g query) '((?x name fft-rule)) '?x))
-
-						(x local-rule-pool local-rule-pool-node)
-						(r local-rule-pool local-rule-pool-node)
-
-						(queue x r)
-						)
-					   (del
-						(global-node rule ?this-rule))))
-
-  ;; (! (g break-rule) 'rule-30-center 'ace-new-edges)
-  ;; (! (g trace-rule) 'xis-gen)
-  ;; (! (g trace-rule) 'tree-elem-rule)
-  ;; (! (g trace-rule) 'od-next)
-  ;; (! (g break-rule) 'od-next 'del-consequent-edges)
-  ;; (! (g break-rule) 'od-next 'del-edge)
-  ;; (! (g break-rule) 'od-next 'add-consequent-edges)
-  ;; (! (g break-rule) 'od-next 'match-and-execute-rule)
-  (time
-   (timer 'main
-	 (lambda ()
-	   (! (g execute-global-all-objs-loop :print-tags nil #| '(me4 ace4 pop-head queue-node) |#))
-	   ))))
 
 ;; 8/3/23 parameterize tree-rule and fft-rule
 
@@ -379,7 +380,8 @@
 						  ))
 		   (and (third e)
 				(! (g edge-exists) (list (third e) 'two-input-op))))))
-  (! (d gv-to-svg) "xxfft")
+  (! (d gv-to-image) "xxfft")
+  ;; (! (d gv-to-svg) "xxfft")
   ;; (! (d laptop-gv-to-svg) "xxfft")
   )
 
@@ -391,7 +393,7 @@
 						  aup next zero max
 						  ))
 		   )))
-  (! (d gv-to-svg) "x")
+  (! (d gv-to-image) "x")
   ;; (! (d laptop-gv-to-svg) "x")
   )
  
@@ -410,7 +412,7 @@
   (! (d dump-gv-edges) "all-edges.gv" :rules t :attrs-fcn
 	 (lambda (e)
 	   t))
-  (! (d gv-to-svg) "all-edges")
+  (! (d gv-to-image) "all-edges")
   ;; (! (d laptop-gv-to-svg) "all-edges")
 )
 
@@ -628,7 +630,7 @@
 	 :rules nil
 	 :attrs '(sigma even-func fe copied-from rule copy-rule))
   
-  (! (d gv-to-svg) "fe"))
+  (! (d gv-to-image) "fe"))
 
 ;; End fe-rule-test
 
@@ -663,7 +665,7 @@
 (let ((d (make-dumper)))
   (! (d set-graph) g)
   (! (d dump-gv-edges) "rule30.gv" :attrs '(rule-30-next up center-up rule30val))
-  (! (d gv-to-svg) "rule30"))
+  (! (d gv-to-image) "rule30"))
 
 (let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "xtree.gv" :attrs 
 											   '(aup next tree-next zero max ev od)))
@@ -907,53 +909,7 @@
 
 ;; Note can pass "array" specs to gvpack but it's better to pack them in
 
-"c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" xfft.gv | "c:\Program Files (x86)\Graphviz2.38\bin\gvpack.exe" -m0  | "c:\Program Files (x86)\Graphviz2.38\bin\neato.exe" -s -n2 -Tsvg | sed -e "s/<svg.*$/\<svg/" > xfft.svg
-
-egrep "defm|defc|defl" *.lisp
-
-
-egrep "MAIN|ALL-MATCHES|BIPARTITE-BREADTH-RULE-WALK-SEQ|CROSS-AUX2" xxx
-
-egrep "MAIN" xxx | gawk '{ print $2 }' >m1
-egrep "ALL-MATCHES" xxx | gawk '{ print $4 }' >m2
-egrep "CROSS-AUX2" xxx | gawk '{ print $4 }' >m3
-egrep "EXPAND-RULE-OBJ-EDGES " xxx | gawk '{ print $4 }' >m4
-egrep "EXPAND-EDGES " xxx | gawk '{ print $4 }' >m5
-
-egrep "ALL-MATCHES" xxx | gawk '{ print $2 }' >A-ALL-MATCHES
-egrep "CROSS-AUX2" xxx | gawk '{ print $2 }' >A-CROSS-AUX2
-egrep "EXPAND-RULE-OBJ-EDGES " xxx | gawk '{ print $2 }' >A-EXPAND-RULE-OBJ-EDGES
-egrep "EXPAND-EDGES " xxx | gawk '{ print $2 }' >A-EXPAND-EDGES
-egrep "VAR-MATCH-FILTER-EDGES" xxx | gawk '{ print $2 }' >A-VAR-MATCH-FILTER-EDGES
-
-egrep "ALL-MATCHES" xxx | gawk '{ print $3 }' >C-ALL-MATCHES
-egrep "CROSS-AUX2" xxx | gawk '{ print $3 }' >C-CROSS-AUX2
-egrep "EXPAND-RULE-OBJ-EDGES " xxx | gawk '{ print $3 }' >C-EXPAND-RULE-OBJ-EDGES
-egrep "EXPAND-EDGES " xxx | gawk '{ print $3 }' >C-EXPAND-EDGES
-egrep "MATCH-ONE-EDGE" xxx | gawk '{ print $3 }' >C-MATCH-ONE-EDGE
-egrep "M-AND-E-RULES-TESTED" xxx | gawk '{ print $3 }' >C-M-AND-E-RULES-TESTED
-egrep "M-AND-E-RULES-MATCHED" xxx | gawk '{ print $3 }' >C-M-AND-E-RULES-MATCHED
-
-
-plot "m1" with lines,  "m2" with lines,  "m3" with lines, "m4" with lines, "m5" with lines
-
-plot "ALL-MATCHES" with lines,  "CROSS-AUX2" with lines,  "EXPAND-RULE-OBJ-EDGES" with lines, "EXPAND-EDGES" with lines
-
-
-plot "C-ALL-MATCHES" with lines, \
-	"C-CROSS-AUX2" with lines, \
-	"C-EXPAND-RULE-OBJ-EDGES" with lines, \
-	"C-EXPAND-EDGES" with lines,\
-	"C-MATCH-ONE-EDGE" using :($1/100) with lines, \
-	"C-M-AND-E-RULES-TESTED" with lines, \
-	"C-M-AND-E-RULES-MATCHED" with lines, \
-	"A-ALL-MATCHES" using :($1*1e7) with lines, \
-	"A-EXPAND-RULE-OBJ-EDGES" using :($1*1e7) with lines, \
-	"A-EXPAND-EDGES" using :($1*1e7) with lines, \
-	"A-VAR-MATCH-FILTER-EDGES" using :($1*1e7) with lines
-
-egrep "defc|defm" *.lisp
-
+;; "c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" xfft.gv | "c:\Program Files (x86)\Graphviz2.38\bin\gvpack.exe" -m0  | "c:\Program Files (x86)\Graphviz2.38\bin\neato.exe" -s -n2 -Tsvg | sed -e "s/<svg.*$/\<svg/" > xfft.svg
 
 (let ((r nil))
   (maphash (lambda (k v) 
@@ -1089,27 +1045,6 @@ egrep "defc|defm" *.lisp
 					 (lambda (x y) (> (third x) (third y)))))
 	  (print x))
 	(print (list 'nrules nrules))))
-
-
-
-
-#|
-(let ((nodes (! (g get-all-nodes))))
-  (dolist (node nodes)
-	(let ((rules (! (g hget-all) node 'rule)))
-	  (dolist (rule rules)
-		(let ((envs (! (g query) `((rule-stat ?t ,rule ,node ?seq-no)))))
-		  (let ((edges (mapcar (lambda (env)
-								 (let ((type (env-lookup '?t env))
-									   (seq-no (env-lookup '?seq-no env)))
-								   `(rule-stat ,type ,rule ,node ,seq-no)))
-							   envs)))
-			(let ((sorted-edges (sort edges (lambda (x y) (< (nth 4 x) (nth 4 y))))))
-			  (print (list node (! (g hget) rule 'name)))
-			  (dolist (s sorted-edges)
-				(print s))))))))
-  nil)
-|#
 
 (setq g (make-graph))
 (! (g add-edge) '(1 2 3))
@@ -2154,13 +2089,15 @@ Gerry S
 		(let ((filename-gv (format nil "~a.gv" filename)))
 		  (setq i (+ i 1))
 		  (! (d set-graph) g)
-		  (! (d dump-gv-edges) filename-gv :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t :attrs '(rule-30-next rule30val zero max up center rule))
-		  (! (d gv-to-jpg) filename :n2 t)))))
-  (let ((n 5)) ;; 3
+		  (! (d dump-gv-edges) filename-gv
+			 :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t :attrs '(rule-30-next rule30val up center-up top)) ;; zero max center
+		  (! (d gv-to-image) filename :n2 nil :file-type :jpg)))))
+  (let ((n 50)) ;; 3
 	(clear-counters)
 	(clear-perf-stats)
 	(setq g (make-rule-30-test))
-	(! (g break-rule) 'xis 'ace-new-edges (lambda () (gv)))
+	(! (g break-rule) 'rule-30-center 'ace-new-edges (lambda () (gv)))
+	;; (! (g break-rule) 'xis 'ace-new-edges (lambda () (gv)))
 	;; (! (g break-rule) 'xis-not 'del-consequent-edges (lambda () (gv)))
 	(with-redirected-stdout "x"
 							(lambda (xstdout)
@@ -2172,7 +2109,7 @@ Gerry S
 (let ((d (make-dumper)))
   (! (d set-graph) g)
   (! (d dump-gv-edges) "rule30.gv" :rules nil :separate-number-nodes t :attrs '(rule-30-next up center rule30val xcoord level pos neg zero max))
-  (! (d gv-to-svg) "rule30"))
+  (! (d gv-to-image) "rule30"))
 
 (let ()
   (let ((n 3))
@@ -2232,7 +2169,7 @@ Gerry S
   (let ((d (make-dumper)))
 	(! (d set-graph) x)
 	(! (d dump-gv-edges) "y.gv" :rules nil :emit-legend nil :attrs '(p a pe pr #| d r an pn q e rn |#))
-	(! (d gv-to-svg) "y"))
+	(! (d gv-to-image) "y"))
   )
 
 
@@ -2328,7 +2265,7 @@ color-color
 	   :emit-legend nil
 	   :gv-graph-props "rankdir=LR;"  ;; "ranksep=5.0;"
 	   :attrs '(d ae ar pe pr am #| p d r an pn q e rn |#))
-	(! (d gv-to-svg) "y" :edit-svg t))
+	(! (d gv-to-image) "y" :edit-svg t))
   )
 
 
@@ -2348,7 +2285,7 @@ color-color
 	   :omitted-attrs '(xis rule-30-next-rule-1-1-1 rule-30-next-rule-1-1-0 rule-30-next-rule-1-0-1
 							rule-30-next-rule-1-0-0 rule-30-next-rule-0-1-1 rule-30-next-rule-0-1-0
 							rule-30-next-rule-0-0-1 rule-30-next-rule-0-0-0))
-	(! (d gv-to-svg) "y" :edit-svg t))
+	(! (d gv-to-image) "y" :edit-svg t))
   )
 
 
@@ -2508,7 +2445,7 @@ color-color
 	   :emit-legend nil
 	   :gv-graph-props "rankdir=LR;"
 	   :attrs '(ae ar pe pr am d #| p d r an pn q e rn |#))
-	(time (! (d gv-to-svg) "z" :edit-svg nil)))
+	(time (! (d gv-to-image) "z" :edit-svg nil)))
   )
 
 (let ((d (make-dumper))) (! (d set-graph) x)(! (d dump-gv-edges) "y1.gv" :rules nil :attrs '(a p r e)))
@@ -3233,7 +3170,7 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 	   '(
 		 a b c d e f n
 		 ))
-	(! (d gv-to-svg) "x")))
+	(! (d gv-to-image) "x")))
 
 
 (defr
@@ -3264,7 +3201,7 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 	   '(
 		 a b c d e f g
 		 ))
-	(! (d gv-to-svg) "z")))
+	(! (d gv-to-image) "z")))
 
 
 

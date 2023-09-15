@@ -27,6 +27,14 @@
 (defmacro $nocomment (&rest e)
   `(let () ,@e))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Machine and system info
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun is-laptop ()
+  (let ((mi (machine-instance)))
+	(equal (subseq mi 0 (search " " mi)) "DESKTOP-0QT0FUH")))
+
 ;;;;;;;;;;;;;
 ;; Perf Stats
 ;;;;;;;;;;;;;
