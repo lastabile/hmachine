@@ -71,7 +71,7 @@
 		(time
 		 (timer 'main
 		   (lambda ()
-			 (! (g execute-global-all-objs-loop :print-tags (and nil '(me4 ace4 pop-head queue-node)))))))))))
+			 (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node))))))))))
 		
 
 
@@ -1504,10 +1504,31 @@
 
 (dolist (x '(N2188 FROM-IS-RULE N714 RULE N701)) (print (! (g path) 'n2189 x)))
 
+;; These were used to test path -- breadth-first algorithm gets one of the shortest paths
 
+(let ()
+  (setq x (make-objgraph))
+  (let ((edges '(
+				 (n1 a1 n2)
+				 (n2 a2 n3)
+				 (n3 a3 n4)
+				 (n3 a4 n5)
+				 (n3 a8 n7)
+				 (n7 a9 n100)
+				 (n5 a5 n100)
+				 (n4 a6 n6)
+				 (n6 a7 n100)
+				 )))
+	(dolist (e edges)
+	  (! (x add-edge) e))))
 
+(! (x path) 'n1 'n100)
 
-
+(let ((d (make-dumper)))
+  (! (d set-graph) x)
+  (! (d dump-gv-edges) "x.gv" :rules nil :emit-legend nil :attrs (! (x get-all-nodes)))
+  (! (d gv-to-image) "x")
+  )
 
 
 ;; sed -e "s/<svg.*$/\<svg/" x.svg >y.svg
@@ -2282,12 +2303,18 @@ color-color
 	   :rules nil 
 	   :emit-legend nil
 	   :attrs '(r)
-	   :omitted-attrs '(xis rule-30-next-rule-1-1-1 rule-30-next-rule-1-1-0 rule-30-next-rule-1-0-1
-							rule-30-next-rule-1-0-0 rule-30-next-rule-0-1-1 rule-30-next-rule-0-1-0
-							rule-30-next-rule-0-0-1 rule-30-next-rule-0-0-0))
+	   :omitted-attrs '(xis 
+						;; rule-30-next-rule-1-1-1 
+						;; rule-30-next-rule-1-1-0 
+						;; rule-30-next-rule-1-0-1
+						;; rule-30-next-rule-1-0-0
+						;; rule-30-next-rule-0-1-1
+						;; rule-30-next-rule-0-1-0
+						;; rule-30-next-rule-0-0-1
+						;; rule-30-next-rule-0-0-0
+						))
 	(! (d gv-to-image) "y" :edit-svg t))
   )
-
 
 
 (let ()
@@ -2522,10 +2549,92 @@ color-color
   (time
    (timer 'main
 	 (lambda ()
-	   (! (g execute-global-all-objs-loop))
+	   (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node)))))))))))
 	   ))))
 
 (let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "y1.gv" :rules nil :attrs '(aup next tree-next zero max)))
+
+;; Make a run of a tree and get edge-trace-rule-graph
+
+(let ((n 3))
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-foundation))
+  (! (g read-rule-file) "tree.lisp")
+  (! (g define-rule) `(rule
+					   (name init)
+					   (attach-to global-node)
+					   (pred
+						(global-node rule ?r)
+						(?r name init))
+					   (add
+						(print init)
+						(tree-rule x ,n)
+						(x local-rule-pool local-rule-pool-node))
+					   (del
+						(global-node rule ?this-rule))))
+  (time
+   (timer 'main
+	 (lambda ()
+	   (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node) '(ace5) )))))
+  ($nocomment
+   (let ()
+	 (setq z (! (g edge-trace-rule-graph)))
+	 (let ((d (make-dumper)))
+	   (! (d set-graph) z)
+	   (! (d dump-gv-edges) "z.gv"
+		  :rules nil 
+		  :emit-legend nil
+		  :attrs '(r)
+		  :omitted-attrs '(
+						   ;; 
+						   ))
+	   (! (d gv-to-image) "z" :edit-svg t))))
+  ($nocomment
+   (let ()
+	 (setq y (! (g edge-trace-graph)
+				:make-new-graph t
+				:rules-fcn (lambda (r) (or nil (memq r '(
+														 init
+														 tree-top-rule
+														 tree-rule
+														 tree-max-rule
+														 tree-zero-rule
+														 tree-elem-zero-rule
+														 tree-elem-rule
+														 tree-top-propagate-rule
+														 tree-top-order-rule
+														 tree-loop-rule
+														 tree-next-rule
+														 tree-next-zero-rule
+														 ))))
+				:trim-dangling-adds-and-preds nil
+				))
+	 (let ((d (make-dumper)))
+	   (! (d set-graph) y)
+	   (! (d dump-gv-edges) "y.gv"
+		  :rules nil 
+		  :emit-legend nil
+		  :attrs (nth 1 '((a p) (pe pr ae ar)))
+		  :omitted-attrs '(
+						   ;; 
+						   ))
+	   (! (d gv-to-image) "y" :edit-svg nil))))
+  )
+
+;; Ordering of all rules wrt edges added
+
+(let ((r nil))
+  (let ((l (! ((! (g get-edge-to-trace)) as-list))))
+	(dolist (x l)
+	  (dolist (y (second x))
+		(when (eq (first y) 'add)
+		  (setq r (cons (list (second y) (fourth y)) r))))))
+  (dolist (x (sort r (lambda (x y) (< (first x) (first y)))))
+	(print x)))
+
+
+
 
 ;; string-nodes
 
@@ -2564,11 +2673,14 @@ color-color
 ;; tree-next-rule det
 
 (let ((rn (! (g query) '((?r type rule)(?r name tree-next-rule)) '?r)))
-  (let ((rg (! (g make-rule-graph) rn)))
-	(setq r rg)
-	(clear-perf-stats)
-	(! (r subst-match) g 'N107 '?x00 :verbose t)
-))
+  (let ((tree-nodes (! (g query) '((?x aup ?y)) '(?y))))
+	(let ((rg (! (g make-rule-graph) rn)))
+	  (setq r rg)
+	  (clear-perf-stats)
+	  (dolist (tree-node tree-nodes)
+		(print (list 'xxxx tree-node))
+		(print (! (r subst-match) g tree-node '?x00 :verbose (or nil '(s13)))))
+	  nil)))
 
 (! (r new-add-chains) nil)
 (dolist (x (! ((! (r get-chains)) as-list))) (print x))
@@ -2590,6 +2702,24 @@ color-color
 	(setq r rg)
 	(clear-perf-stats)
 	(! (r subst-match) g 'x '?a :verbose nil)))
+
+(let ((rn (! (g query) '((?r type rule)(?r name even-next)) '?r)))
+  (let ((rg (! (g make-rule-graph) rn)))
+	(let ((nodes (! (g query) (! (rg get-all-edges)) '(?a))))
+	  (setq r rg)
+	  (clear-perf-stats)
+	  (dolist (node nodes)
+		(print (list 'xxxx node))
+		(print (! (r subst-match) g node '?a :verbose (or nil (and '(s13) nil))))
+		nil))))
+
+;; Running this on xfft fails, but gives a set of partial matches.
+
+(let ((rn (! (g query) '((?r type rule)(?r name even-next)) '?r)))
+  (let ((rg (! (g make-rule-graph) rn)))
+	(setq r rg)
+	(clear-perf-stats)
+	(! (r subst-match) g 'xfft '?a :verbose '(s13 s14 s15))))
 
 ;; tree-top-rule -- not var-connected?
 

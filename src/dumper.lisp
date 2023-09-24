@@ -5,7 +5,6 @@
 
 (defc dumper nil ()
   (let ((g nil)
-		(elem-attrs nil)
 		(gv-attrs nil)
 		(nest-prefix 0)
 		(node-map (make-sur-map))
@@ -16,7 +15,6 @@
 
 	(defm set-graph (graph)
 	  (setq g graph)
-	  (setq elem-attrs (! (g get-elem-attrs)))
 	  (setq gv-attrs (mapcar (lambda (x) x) (! (g query) '((?x gv-attr)) '(?x)))))
 	
 	(defm downcase (x)
@@ -60,57 +58,6 @@
 							 (case file-type (:svg "svg") (:jpg "jpg")))))
 			(let ((cmd (format nil "~a" cmd)))
 			  (shell-cmd cmd))))))
-
-	(defm old-gv-to-svg (file-root &key
-								   (edit-svg t)		;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
-								   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
-	  (defr
-	    (defl cat (&rest x)
-	      (apply #'concatenate 'string x))
-	    (let ((cmd (format nil (cat "\"c:/Program Files (x86)/Graphviz2.38/bin/dot.exe\" ~a.gv | "
-					"\"c:/Program Files (x86)/Graphviz2.38/bin/gvpack.exe\" -m0 | "
-					"\"c:/Program Files (x86)/Graphviz2.38/bin/neato.exe\" -s ~a -Tsvg "
-					"~a"
-					" > ~a.svg")
-			       file-root 
-			       (if n2 "-n2" "")
-			       (if edit-svg "| sed -e \"s/<svg.*$/\<svg/\"" "")
-			       file-root)))
-	      (let ((cmd (format nil "~a" cmd)))
-		(shell-cmd cmd)))))
-
-	(defm gv-to-jpg (file-root &key
-							   (n2 t))			;; T to do "leveled" layout; nil for circular as in Ladybug
-	  (defr
-	    (defl cat (&rest x)
-	      (apply #'concatenate 'string x))
-	    (let ((cmd (format nil (cat "\"c:/Program Files (x86)/Graphviz2.38/bin/dot.exe\" ~a.gv | "
-					"\"c:/Program Files (x86)/Graphviz2.38/bin/gvpack.exe\" -m0 | "
-					"\"c:/Program Files (x86)/Graphviz2.38/bin/neato.exe\" -s ~a -Tjpg "
-					" > ~a.jpg")
-			       file-root 
-			       (if n2 "-n2" "")
-			       file-root)))
-	      (let ((cmd (format nil "~a" cmd)))
-		(shell-cmd cmd)))))
-
-	(defm laptop-gv-to-svg (file-root &key
-					  (edit-svg t) ;; T to edit the svg to take out scale-downb limits. But it also imposes scale-up limits.
-					  (n2 t))      ;; T to do "leveled" layout; nil for circular as in Ladybug
-	  (defr
-	    (defl cat (&rest x)
-	      (apply #'concatenate 'string x))
-	    (let ((cmd (format nil (cat "\"c:/Program Files/Graphviz/bin/dot.exe\" ~a.gv | "
-					"\"c:/Program Files/Graphviz/bin/gvpack.exe\" -m0 | "
-					"\"c:/Program Files/Graphviz/bin/neato.exe\" -s ~a -Tsvg "
-					"~a"
-					" > ~a.svg")
-			       file-root 
-			       (if n2 "-n2" "")
-			       (if edit-svg "| sed -e \"s/<svg.*$/\<svg/\"" "")
-			       file-root)))
-	      (let ((cmd (format nil "~a" cmd)))
-		(shell-cmd cmd)))))
 
 	;; This svg dump assumes a rule-30 graph. See the ca-to-svg fcn below which generates fast and large rule-30 svg
 	;; files. Leave this code here since it may later prove a good basis for generating other graphs directly to
@@ -200,7 +147,7 @@
 		  (is-new-node-var nil)
 		  (do-not-emit nil)
 		  (gv-attr-map (make-sur-map))) ;; gv-attr -> attr value
-		(let ((omitted-attrs (append omitted-attrs elem-attrs '(triggered add pred del binding left right print note))))
+		(let ((omitted-attrs (append omitted-attrs '(triggered add pred del binding left right print note))))
 		  (with-open-file (s file :direction :output)
 			(defr
 			  (defl string-concat (x y)

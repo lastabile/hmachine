@@ -112,83 +112,9 @@
  (del
   (?this-obj rule ?this-rule)))
 
-(comment
-(rule
- (name is-1-param)
- (attach-to is)
- (pred
-  (?x is ?y ?p ?v)
-  (?y rule ?r))
- (del
-  (?x is ?y ?p ?v))
- (add
-  (print is-1-param ?this-obj ?x ?y ?r ?p ?v)
-  (?x rule ?r)
-  (?x ?p ?v)
-  ;; (?x from-is-1-param-rule ?r) ;; xxx We're not using these now and they add clutter
-  ))
-
-(rule
- (name is-0-param)
- (attach-to is)
- (pred
-  (?x is ?y)
-  (?y rule ?r))
- (del
-  (?x is ?y))
- (add
-  (print is-0-param ?this-obj ?x ?y ?r)
-  (?x rule ?r)
-  ;; (?x from-is-0-param-rule ?r) ;; xxx
-))
-
-(rule
- (name is-0-param-xrule)
- (attach-to is)
- (pred
-  (?x is ?y)
-  (?y xrule ?r))
- (del
-  (?x is ?y))
- (add
-  (print is-0-param-xrule ?this-obj ?x ?y ?r)
-  (?x rule ?r)
-  ;; (?x from-is-0-param-xrule-rule ?r) ;; xxx
-  ))
-)
-
-(comment
- (rule
-  (name is-not)
-  (attach-to is-not)
-  (pred
-   (?x is-not ?y)	   ;; Put this...	; ; ; ;
-   (?x is ?y)		   ;; ...and detect this ; ; ; ;
-   (?y rule ?r)
-   (?x rule ?r))
-  (add
-   (print is-not ?x ?y ?r))
-  (del
-   (?x is ?y)
-   (?x is-not ?y)
-   (?x rule ?r)
-   (?this-obj rule ?this-rule)))
-)
-
-(comment
-(rule
- (name is-not-xrule)
- (attach-to is-not)
- (pred
-  (?x is-not ?y)
-  (?y xrule ?r)
-  (?x rule ?r))
- (add
-  (print is-not-xrule ?x ?y ?r))
- (del
-  (?x is-not ?y)
-  (?x rule ?r)))
-)
+;; This for os "is" and "is-not" replaces all othger old ones. Much
+;; better using the rest var and a "has" notation, allowing for
+;; inheritance of arbitrary info without funny naming and so forth.
 
 (rule
  (name xis-gen)
@@ -228,33 +154,6 @@
   )
  (del
   (?this-obj rule ?this-rule))
-)
-
-(comment
-(rule
- (name xis)
- (attach-to xis)
- (pred
-  (?x xis ?y)
-  (?y has ?*r))
- (add
-  (print xis ?x ?y ?*r)
-  (?x ?*r))
- (del
-  (?x xis ?y)))
-
-(rule
- (name xis-not)
- (attach-to xis-not)
- (pred
-  (?x xis-not ?y)
-  (?y has ?*r))
- (add
-  (print xis-not ?x ?y ?*r))
- (del
-  (?x xis ?y)
-  (?x xis-not ?y)
-  (?x ?*r)))
 )
 
 (rule

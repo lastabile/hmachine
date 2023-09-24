@@ -187,12 +187,12 @@
 	(member fcn
 			'(
 			  ;; execute-obj
+			  ;; execute-global-all-objs-loop
 			  ;; match-and-execute-rule
 			  ;; subst-match
 			  ;; infer-root-rule-var check-rule-edges check-obj-containment
 			  ;; all-matches
 			  ;; all-matches-aux  
-			  ;; old-all-matches-aux  
 			  ;; get-root-vars
 			  ;; get-rule-components
 			  ;; infer-root-var

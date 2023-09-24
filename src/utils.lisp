@@ -425,33 +425,10 @@
 
 ;; l1 \ l2
 ;;
-;; Tested this and with intersect, and this is faster.
-;;
-;; Todo: Retain ordering. Not clear needed since this is used mainly
-;; on sets of edges, whereas edges themselves need order preservation
-;; more.
-
-;; CL set-diff preserves order  ;; fix-set-subtract-order
+;; Uses CL set-difference, which retains ordering as desired.
 
 (defun set-subtract (l1 l2 &key (test #'equal))
   (set-difference l1 l2 :test test))
-
-(defun old-set-subtract (l1 l2 &key (test #'equal))
-  (let ((r nil))
-	(dolist (x l1)
-	  (when (not (member x l2 :test test))
-		(setq r (cons x r))))
-	r))
-
-(defun old-old-set-subtract (l1 l2 &key (test #'equal))
-  (timer 'set-subtract
-	(lambda ()
-	  (let ((i (intersect l1 l2))
-			(r nil))
-		(dolist (x1 l1)
-		  (when (not (member x1 i :test test))
-			(setq r (cons x1 r))))
-		r))))
 
 ;; mapunion and mapsunion, using an optimized internal function named using our old conventions.
 ;; The s in mapsunion means strict, which means return nil if any fcn result is nil
