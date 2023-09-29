@@ -2326,9 +2326,9 @@
 				 (not (! (rule-graph has-rest-vars))))
 			(! (rule-graph subst-match) self obj-node root-var
 			   :verbose 
-			   nil
-			   ;; '(s12)
-			   ;; '(s0 s2 s4)
+			    nil
+				;; '(s16 s0)
+				;; '(s0 s2 s4)
 			   )
 			(all-matches-aux2 rule-graph obj-node root-var)))
 
@@ -3852,14 +3852,14 @@
 			(let ((last-ks nil))
 			  (let () #| ((ks-with-existing-edges (make-sur-map :input-test #'equalp :res-test #'equalp))) |#		;; partial-match-info
 				(defm subst-match (objgraph obj-node root-var &key verbose)
-				  (macrolet ((xprint (&rest x) nil))
+				  (macrolet ((yprint (&rest x) nil))
 					(timer 'subst-match
 					  (lambda ()
 						(let ((g objgraph))
 						  (let ((use-singleton-qets (and (! (self has-single-const-preds))
 														 (not (is-var-name root-var)))))
 							(defr
-							  (defl yprint (tag &rest x)
+							  (defl xprint (tag &rest x)
 								(when (or (eq verbose t)
 										  (memq tag verbose))
 								  (print (cons tag x))))
@@ -3890,18 +3890,11 @@
 							  (defl check-consts (ks) ;; T if all preds have only consts, no vars
 								(block b
 								  (dolist (k ks)
-									(let ((pred-info (k-pred-info k)))
-									  (dolist (node pred-info)
-										(when (eq node 'v)
-										  (return-from b nil)))))
+									(when (memq 'v (k-pred-info k))
+									  (return-from b nil)))
 								  t))
 							  (defl check-const (k)
-								(let ((pred-info (k-pred-info k)))
-								  (block b
-									(dolist (node pred-info)
-									  (when (eq node 'v)
-										(return-from b nil)))
-									t)))
+								(not (memq 'v (k-pred-info k))))
 							  (defl subst (ks env) ;; Returns new ks
 								(timer 'subst
 								  (lambda ()
@@ -3932,7 +3925,9 @@
 												(let ((qets (filter-vars-to-qets pred pred-info)))
 												  (let ((len (! (qet-edge-len-cache lookup-one) qets))) ;; Caching the lengths seems only marginally effective
 													(when (null len)
-													  (let ((new-edges (mapunion (lambda (qet) (when (or use-singleton-qets (> (length qet) 1)) (! (g get-edges-from-subqet) qet))) qets)))
+													  (let ((new-edges (mapunion (lambda (qet)
+																				   (when (or use-singleton-qets (> (length qet) 1))
+																					 (! (g get-edges-from-subqet) qet))) qets)))
 														(when new-edges
 														  (setq len (length new-edges))
 														  (! (qet-edge-len-cache insert-one) qets len))))
@@ -3957,7 +3952,9 @@
 											(let ((pred (k-pred k)))
 											  (let ((pred-info (k-pred-info k)))
 												(let ((qets (filter-vars-to-qets pred pred-info)))
-												  (let ((new-edges (mapunion (lambda (qet) (when (or use-singleton-qets (> (length qet) 1)) (! (g get-edges-from-subqet) qet))) qets)))
+												  (let ((new-edges (mapunion (lambda (qet)
+																			   (when (or use-singleton-qets (> (length qet) 1))
+																				 (! (g get-edges-from-subqet) qet))) qets)))
 													(let ((r (mapcad (lambda (edge)
 																	   (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
 																	 new-edges)))
@@ -4027,6 +4024,7 @@
 								  (let ((ks (subst ks env)))
 									(clrhash envs)
 									(doloop 0 0 ks env)
+									(xprint 's16 doloop-cnt)
 									(let ((new-node-env (get-new-node-env)))
 									  (let ((envs-list (hash-table-value-to-list envs)))
 										($comment (when (null envs-list) ;; partial-match-info 
@@ -4035,7 +4033,9 @@
 															(! (ks-with-existing-edges inputs)))))
 										(when (null envs-list)
 										  (xprint 's13 last-env-chain)
-										  (let ((up (unmatched-preds last-ks)))	;; Call this function, even though we may not print it, as it represents overhead we will likely incur is we adopt a partial-match model
+										  ;; Call unmatched-preds, even though we may not print the result, as it represents
+										  ;; overhead we will likely incur if we adopt a partial-match model
+										  (let ((up (unmatched-preds last-ks)))
 											(xprint 's15 up)))
 										(mapcar (lambda (env) (append env new-node-env)) envs-list)))))))))))))))))))
 

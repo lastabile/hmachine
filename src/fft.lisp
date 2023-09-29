@@ -105,16 +105,12 @@
   (?nn1 new-node sn1)
   (?e0 local-rule-pool ?p)
   (?p lrp-rule ?even-zero)
-  (?p lrp-rule ?odd-zero)
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
-  ;; (?p lrp-rule ?copy-array-struct-new)
   (?p lrp-rule ?odd-new)
   (?even-zero name even-zero)
-  (?odd-zero name odd-zero)
   (?odd-next name odd-next)
   (?even-next name even-next)
-  ;; (?copy-array-struct-new name copy-array-struct-new)
   (?odd-new name odd-new)
   )
  (add
@@ -131,10 +127,8 @@
 
   (?nn1 xis ev-od-obj)
   (?nn1 rule ?even-zero)
-  (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
-  ;; (?nn1 rule ?copy-array-struct-new)
   (?nn1 rule ?odd-new)
   (?nn1 rule ?this-rule)
   )
@@ -175,20 +169,16 @@
   (?e0 value ?v)
   (?nn1 new-node sn1)
   (?e0 local-rule-pool ?p)
-  (?p lrp-rule ?even-zero)
   (?p lrp-rule ?odd-zero)
   (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
-  ;; (?p lrp-rule ?copy-array-struct-new)
   (?p lrp-rule ?even-new)
 
-  (?even-zero name even-zero)
   (?odd-zero name odd-zero)
   (?odd-next name odd-next)
   (?even-next name even-next)
-  ;; (?copy-array-struct-new name copy-array-struct-new)
   (?even-new name even-new)
-)
+  )
  (add
   (print odd-new ?a ?e0 ?nn1)
   (?nn1 is-elem-of ?a1) ;; Should have parent rule apply instead
@@ -202,11 +192,9 @@
   (?nn1 ref ?e0)
 
   (?nn1 xis ev-od-obj)
-  (?nn1 rule ?even-zero)
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
-  ;; (?nn1 rule ?copy-array-struct-new)
   (?nn1 rule ?even-new)
   (?nn1 rule ?this-rule)
   )
@@ -243,6 +231,7 @@
  (local)
  (pred
   (?a even ?a1)
+  (?e0 is-elem-of ?a)
   (?ae0 is-elem-of ?a1)
   (?ae0 ref ?e0)
   (?e0 zero)
@@ -268,6 +257,12 @@
  (pred
   (?a odd ?a1)
   (?ae0 is-elem-of ?a1)
+
+  ;; These two preds, while not essential to match, help narrow it down
+  ;; much better in subst-match, avoiding much depth scanning
+  (?e0 is-elem-of ?a)  
+  (?e1 is-elem-of ?a)
+  
   (?ae0 ref ?e1)
   (?e0 next ?e1)
   (?e0 zero)
@@ -276,13 +271,13 @@
   (?cas-zero name cas-zero)
   (?p lrp-rule ?cas-new)
   (?cas-new name cas-new)
-)
+  )
  (add
-  (print odd-zero ?this-obj ?a ?a1 ?ae0 ?e0)
+  (print odd-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?e0)
   (?ae0 zero)
   (?ae0 rule ?cas-zero)
   (?ae0 rule ?cas-new)
-)
+  )
  (del
   (?this-obj rule ?this-rule)		;; Leaving in these dels looks ok
   ))
@@ -594,7 +589,7 @@
   (?nn1 fft ?nn3)
   (?nn2 fft ?nn4)
   (?nn3 ?nn4 fft-comb ?y)
-  (?y rule ?fft-comb-rule-zero)
+  ;; (?y rule ?fft-comb-rule-zero)		;; ok to remove this
   (?nn3 rule ?fft-comb-rule-zero)
   (?nn4 rule ?fft-comb-rule-zero)
   (?y level ?l)

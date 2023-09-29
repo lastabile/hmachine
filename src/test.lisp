@@ -2679,7 +2679,7 @@ color-color
 	  (clear-perf-stats)
 	  (dolist (tree-node tree-nodes)
 		(print (list 'xxxx tree-node))
-		(print (! (r subst-match) g tree-node '?x00 :verbose (or nil '(s13)))))
+		(print (! (r subst-match) g tree-node '?x00 :verbose (or nil '(s13 s14)))))
 	  nil)))
 
 (! (r new-add-chains) nil)
