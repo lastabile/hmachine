@@ -33,7 +33,9 @@
 
 (defun is-laptop ()
   (let ((mi (machine-instance)))
-	(equal (subseq mi 0 (search " " mi)) "DESKTOP-0QT0FUH")))
+	(or	
+	 (equal (string-downcase (subseq mi 0 (search " " mi))) "desktop-0qt0fuh")
+	 (equal (string-downcase (subseq mi 0 (search " " mi))) "rosencrantz"))))
 
 ;;;;;;;;;;;;;
 ;; Perf Stats

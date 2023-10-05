@@ -911,6 +911,10 @@
 
 ;; "c:\Program Files (x86)\Graphviz2.38\bin\dot.exe" xfft.gv | "c:\Program Files (x86)\Graphviz2.38\bin\gvpack.exe" -m0  | "c:\Program Files (x86)\Graphviz2.38\bin\neato.exe" -s -n2 -Tsvg | sed -e "s/<svg.*$/\<svg/" > xfft.svg
 
+;; Format needed on rosencrantz under eshell:
+
+;; "c:/Program Files/Graphviz/bin/dot.exe" xxfft.gv | "c:/Program Files/Graphviz/bin/gvpack.exe" -m0  | "c:/Program Files/Graphviz/bin/neato.exe" -s -n2 -Tsvg > xxfft.svg
+
 (let ((r nil))
   (maphash (lambda (k v) 
 			 (setq r (cons
