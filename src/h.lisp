@@ -1950,9 +1950,14 @@
 									   (log-stat 'entropy (edge-asc-entropy))
 									   (log-stat 'dist (edge-asc-dimension-dist)))
 
-									  ($nocomment
+									  ($comment
 									   ;;
 									   ;; better-root-var
+									   ;;
+									   ;; 10/10/23
+									   ;; Turned off for now as if appears to be just as fast or faster, and
+									   ;; higher efficiency, without the heuristic. It's also simpler for further
+									   ;; root-var analysis to assume there is no heuristic.
 									   ;;
 									   ;; 5/2/23
 									   ;; Experiment -- after a certain number of successes, as recorded by the
@@ -2271,7 +2276,6 @@
 									  (let ()
 										(when (null rule-graph)
 										  (setq rule-graph (make-rule-graph rule-node)))
-										;; (print (list 'p (hget rule-node 'name) root-var obj-node))
 										(let ((envlist (all-matches-aux rule-graph obj-node root-var)))
 										  (when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
 											;; (print (list 'f (hget rule-node 'name) root-var obj-node scan-subst-status))
@@ -2326,9 +2330,11 @@
 				 (not (! (rule-graph has-rest-vars))))
 			(! (rule-graph subst-match) self obj-node root-var
 			   :verbose 
-			    nil
-				;; '(s16 s0)
-				;; '(s0 s2 s4)
+			   nil
+			   ;; '(s0 s2 s15)
+			   ;; '(s15)		;; partial-match-info
+			   ;; '(s16 s0)
+			   ;; '(s0 s2 s4)
 			   )
 			(all-matches-aux2 rule-graph obj-node root-var)))
 
@@ -3980,7 +3986,8 @@
 									   (when (not r)
 										 (! (ks-with-existing-edges insert-one) kes kes))
 									   r)))))
-							   ;; Get list of original-preds and reduced preds such that the reduced preds still have
+							  ;; partial-match-info
+							  ;; Get list of original-preds and reduced preds such that the reduced preds still have
 							   ;; vars. Not clear exaclty what we need here yet.
 							  (defl unmatched-preds (ks)
 								(timer 'unmatched-preds
@@ -4033,10 +4040,11 @@
 															(! (ks-with-existing-edges inputs)))))
 										(when (null envs-list)
 										  (xprint 's13 last-env-chain)
+										  ;; partial-match-info
 										  ;; Call unmatched-preds, even though we may not print the result, as it represents
 										  ;; overhead we will likely incur if we adopt a partial-match model
 										  (let ((up (unmatched-preds last-ks)))
-											(xprint 's15 up)))
+											(xprint 's15 obj-node rule-node rule-name up)))
 										(mapcar (lambda (env) (append env new-node-env)) envs-list)))))))))))))))))))
 
 	;; Also in objgraph (as-is)
