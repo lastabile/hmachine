@@ -56,7 +56,15 @@
 ;;						 9/24/23 Added code to calc and print unmatched preds on failure. Still just for test. See tags
 ;;						 below; need to adjust them and delete older code.
 ;;
-;; better-root-var -- 5/2/23 Detect root var use and set designated root vars via heuristic. 
+;; better-root-var -- 5/2/23 Detect root var use and set designated root vars via heuristic.
+;;					  10/10/23  Turned off for now as if appears to be just as fast or faster, and
+;;							    higher efficiency, without the heuristic. It's also simpler for further
+;;							    root-var analysis to assume there is no heuristic.
+;;
+;; match-perf -- Improve match perf by looking at the various pieces, e.g., poss-match. First we've shorted out
+;;					 scan-and-subst, and everything seems to be faster. This trag is related to tghe previous two,. IN
+;;					 particular, how we handle root vars is critical to perf. But also, we'll need to balance how we
+;;					 approach partial match with the desire to fail quickly if a full match is not possible.
 ;;
 ;; all-var-mod -- Disabled 5/18/23. Some time ago made changes to enable a pred to have all vars. A good experiment, but
 ;;				  not practical to pursue right now. See write-up in doc.txt. Tag left in below with I hope appropriate
@@ -1001,10 +1009,15 @@
 			(print (list 'queue-node n)))
 		  (if (and only-if-not-queued
 				   (node-queued n))
-			  nil
-			  (if push-head
-				  (! (obj-queue push-head) n)
-				  (! (obj-queue push-tail) n)))))
+			  (let ()
+				(! (edge-to-trace insert) (list n) (list 'tested :already-queued seqno nil nil nil))
+				nil)
+			  (let ()
+				(! (edge-to-trace insert) (list n) (list 'tested :queued seqno nil nil nil))
+				(setq seqno (+ seqno 1))
+				(if push-head
+					(! (obj-queue push-head) n)
+					(! (obj-queue push-tail) n))))))
 
 	  (defm get-queue () ;; debug fcn
 		obj-queue)
@@ -1026,7 +1039,8 @@
 		   ;; more dup of rule execs.
 		   ;; (let ((obj (! (obj-queue pop-tail))))
 		   (let ((obj (! (obj-queue pop-head))))
-			 
+			 (! (edge-to-trace insert) (list obj) (list 'tested :dequeued seqno nil nil nil))
+			 (setq seqno (+ seqno 1))
 			 (when (and obj
 						(memq 'pop-head print-tags))
 			   (print (list 'pop-head obj)))
@@ -1245,7 +1259,7 @@
 				   (setq no-new-edges-cnt (if no-new-edges (+ no-new-edges-cnt 1) 0))
 				   (when (= no-new-edges-cnt 3)
 					 (return-from b nil)))))
-			  ($nocomment
+			  ($comment
 			   (log-stat 'entropy (edge-asc-entropy))
 			   (log-stat 'dist (edge-asc-dimension-dist)))))))
 
@@ -1271,6 +1285,10 @@
 	  ;; vardesc is list of vars => list of bound value lists, each bound value list in the order of the given vars
 	  ;; vardesc is null => list of all envs
 	  ;; vardesc is :edges => list of all matched edges, i.e., envs resolved
+	  ;;
+	  ;; Subst-match not used below as it can loop explosively, in particular on
+	  ;;	  (! (g query) '((?r type rule)(?r name ?n)(?r file ?f)))
+	  ;; Looks like the multiple occurences of a given file name to a rule is the issue.
 
 	  (defm query (clauses &optional vardesc &key rule-trace)
 		(let ((pred-clauses (subseq clauses 0 (or (search '(:not) clauses) (length clauses)))))
@@ -1312,7 +1330,7 @@
 							  (setq obj-edges (hunion obj-edges edge-set))))
 						  (dolist (obj-edge obj-edges)
 							(! (og add-edge) obj-edge)))))
-					;; (setq gog og)		;; Could get large 
+					($nocomment (setq gog og))		;; Could get large
 					(let ((r (! (og query2) clauses not-clauses rule-trace)))
 					  (dolist (rule-edge rule-edges)
 						(rem-edge rule-edge))
@@ -1325,7 +1343,7 @@
 			  (when rule-trace
 				(trace-rule 'query))
 			  (dolist (node (get-all-nodes))
-				(let ((envs (all-matches-with-not rule node)))
+				(let ((envs (all-matches-with-not rule node :use-all-matches-aux2 t)))		;; Avoid issues with subst-match loop explosion
 				  (dolist (env envs)
 					(let ((env (env-prune env (! (std-vars base-vars)))))
 					  (let ((env (set-subtract env '((t t)))))
@@ -1541,13 +1559,8 @@
 		(let ((new-or-dup-edge-list nil))			;; should be new or dup or print
 		  (let ((all-node-hash (make-hash-table :test #'equal)))
 			(let ((new-node-hash (make-hash-table :test #'equal)))
-			  (let ((match-count-hash (make-hash-table :test #'equal))) ;; Temp for testing?  Count how many of a seqno-rule pair we have
-				(defm get-match-count-list ()
-				  (hash-table-to-list match-count-hash))
-				(defm get-match-count-hash ()
-				  match-count-hash)
-				(defm do-add-consequent-edges (obj-node pred-edges add-edges not-edges del-edges rule-node envlist print-tags cont)
-				  (defr
+			  (defm do-add-consequent-edges (obj-node pred-edges add-edges not-edges del-edges rule-node envlist print-tags cont)
+				(defr
 					;; Delete edges after evaluating their elements as vars. 
 					;; First evaluates not-edges and for each env if any not-edge exists, then bail from that env
 					;; Returns a list of deleted edges (which only exist as lists, not edges)
@@ -1561,12 +1574,12 @@
 									 (mapappend (lambda (node)
 												  (let ((node (env-lookup node env)))
 													(cond
-													 ((listp node)
-													  node)
-													 ((eq node :undefined)
-													  nil)
-													 (t
-													  (list node)))))
+													  ((listp node)
+													   node)
+													  ((eq node :undefined)
+													   nil)
+													  (t
+													   (list node)))))
 												edge)))
 								(when (edge-exists not-edge)
 								  (return-from b nil))))
@@ -1575,12 +1588,12 @@
 									 (mapappend (lambda (node)
 												  (let ((node (env-lookup node env)))
 													(cond
-													 ((listp node)
-													  node)
-													 ((eq node :undefined)
-													  nil)
-													 (t
-													  (list node)))))
+													  ((listp node)
+													   node)
+													  ((eq node :undefined)
+													   nil)
+													  (t
+													   (list node)))))
 												edge)))
 								(when del-edge
 								  (check-rule-trace (hget rule-node 'name) (list 'del-edge del-edge))
@@ -1596,234 +1609,236 @@
 						  (when (and (equal var (first pred-edge))
 									 (eq (second pred-edge) 'new-node))
 							(return-from b t)))))
-					(defl has-no-adds (add-edges)
-					  (block b
-						(dolist (edge add-edges)
-						  (when (not (eq (first edge) 'print))
-							(return-from b nil)))
-						t))
-					(defl get-implicit-nodes-to-queue (new-edges new-node-hash all-node-hash)
-					  (let ((all-nodes (hash-table-value-to-list all-node-hash)))
-						(let ((new-nodes (hash-table-value-to-list new-node-hash)))
-						  (let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
-							(let ((nodes-with-rules (mapcad (lambda (node)
-															  (when (hget node 'rule)
-																node))
-															all-nodes)))
-							  ;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
-							  (let ((nodes (hunion
-											all-nodes
+				  (defl has-no-adds (add-edges)
+					(block b
+					  (dolist (edge add-edges)
+						(when (not (eq (first edge) 'print))
+						  (return-from b nil)))
+					  t))
+				  (defl get-implicit-nodes-to-queue (new-edges new-node-hash all-node-hash)
+					(let ((all-nodes (hash-table-value-to-list all-node-hash)))
+					  (let ((new-nodes (hash-table-value-to-list new-node-hash)))
+						(let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
+						  (let ((nodes-with-rules (mapcad (lambda (node)
+															(when (hget node 'rule)
+															  node))
+														  all-nodes)))
+							;; (print (list 'gnq all-nodes nodes-with-rules (length all-nodes) (length nodes-with-rules)))
+							(let ((nodes (hunion
+										  all-nodes
+										  (hunion
+										   nil ;; new-nodes
+										   (hunion
+											rule-neighborhood-nodes
 											(hunion
-											 nil ;; new-nodes
-											 (hunion
-											  rule-neighborhood-nodes
-											  (hunion
-											   nil ;; nodes-with-rules
-											   nil))))))
-								nodes))))))
-					;;
-					;; This gets a little hokey, but worth a try. (exec <node>) will be considered transient, and so
-					;; that edge should be deleted. (<node> exec) will be left in. We presume here that we'll not have a
-					;; huge nunmber of these right now.
-					;;
+											 nil ;; nodes-with-rules
+											 nil))))))
+							  nodes))))))
+				  ;;
+				  ;; This gets a little hokey, but worth a try. (exec <node>) will be considered transient, and so
+				  ;; that edge should be deleted. (<node> exec) will be left in. We presume here that we'll not have a
+				  ;; huge nunmber of these right now.
+				  ;;
 
-					;; !!!! Disabled !!!!
+				  ;; !!!! Disabled !!!!
 
-					(defl get-explicit-nodes-to-exec ()
-					  (block b
-						(return-from b nil)
-						(let ((exec-edges (get-edges-from-subqet '(exec))))
-						  (let ((prefix-exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) exec-edges)))
-							(let ((suffix-exec-edges (mapcad (lambda (e) (when (and (= (length e) 2) (eq (second e) 'exec)) e)) exec-edges)))
-							  (let ((nodes-to-exec (set-subtract (hunion (nodes prefix-exec-edges) (nodes suffix-exec-edges)) '(exec))))
-								(dolist (edge prefix-exec-edges)
-								  (rem-edge edge))
-								nodes-to-exec))))))
+				  (defl get-explicit-nodes-to-exec ()
+					(block b
+					  (return-from b nil)
+					  (let ((exec-edges (get-edges-from-subqet '(exec))))
+						(let ((prefix-exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) exec-edges)))
+						  (let ((suffix-exec-edges (mapcad (lambda (e) (when (and (= (length e) 2) (eq (second e) 'exec)) e)) exec-edges)))
+							(let ((nodes-to-exec (set-subtract (hunion (nodes prefix-exec-edges) (nodes suffix-exec-edges)) '(exec))))
+							  (dolist (edge prefix-exec-edges)
+								(rem-edge edge))
+							  nodes-to-exec))))))
 
-					(defl old-get-explicit-nodes-to-exec ()
-					  (block b
-						;; (return-from b nil)
-						(let ((exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) (get-edges-from-subqet '(exec)))))
-						  (when (and exec-edges
-									 (= (length exec-edges) 1))
-							(let ((exec-edge (first exec-edges)))
-							  (let ((exec-list (rest exec-edge)))
-								(rem-edge exec-edge)
-								exec-list))))))
+				  (defl old-get-explicit-nodes-to-exec ()
+					(block b
+					  ;; (return-from b nil)
+					  (let ((exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) (get-edges-from-subqet '(exec)))))
+						(when (and exec-edges
+								   (= (length exec-edges) 1))
+						  (let ((exec-edge (first exec-edges)))
+							(let ((exec-list (rest exec-edge)))
+							  (rem-edge exec-edge)
+							  exec-list))))))
 
-					;; !!!! Disabled !!!!
+				  ;; !!!! Disabled !!!!
 
-					(defl get-explicit-nodes-to-queue ()
-					  (block b
-						(return-from b nil)
-						(let ((queue-edge (first (get-edges-from-subqet '(queue)))))
-						  (if queue-edge
-							  (let ((queue-list (rest queue-edge)))
-								(rem-edge queue-edge)
-								queue-list)))))
-					(defl get-queue-info ()
-					  (mapcar (lambda (n) (list n (hget-all-list (list n) '(rule name)))) 
-							  (! (obj-queue as-list))))
-					(let ((r nil)
-						  (first-edge nil)
-						  (rule-name (hget rule-node 'name))
-						  (matched-edges nil)
-						  (deleted-edges nil)
-						  (matched-and-new-edges-per-env nil))
-					  (dolist (env envlist)
-						(timer 'add-consequent-edges-per-env
-						  (lambda ()
-							(let ((root-var (env-lookup '?root-var env)) ;; Not used?
-								  (print-list nil))
-							  (clrhash all-node-hash)
-							  (! (env-new-edges clear))
-							  (setq new-or-dup-edge-list nil)
-							  (block yyy
-								(let ()
-								  (if (! (env-triggered-table rule-has-been-triggered) rule-node env)
-									  (let ()
-										(check-rule-trace rule-name `(add-consequent-edges already-triggered rule ,rule-node ,rule-name obj ,obj-node))
-										(gstat 'already-env-triggered-rules (lambda (x y) (+ x y)) (lambda () 1))
-										;; (when (= (length envlist) 1)
-										;;   (rem-edge `(,obj-node rule ,rule-node)))
-										(return-from yyy nil))
-									  (let ((te nil))
-										#|
-										(when (not (edge-exists `(,rule-node no-triggered)))
-										(setq te (! (env-triggered-table insert) rule-node env matched-edges)))
-										|#
-										;; (when (= (length envlist) 1)
-										;;    (rem-edge `(,obj-node rule ,rule-node)))
-										(dolist (edge not-edges)
-										  (let ((not-edge 
-												 (mapcar (lambda (node)
-														   (env-lookup node env))
-														 edge)))
-											(when (edge-exists not-edge)
-											  (return-from yyy nil))))
-										(let ((trig-insert-called nil))
-										  (clrhash new-node-hash)
+				  (defl get-explicit-nodes-to-queue ()
+					(block b
+					  (return-from b nil)
+					  (let ((queue-edge (first (get-edges-from-subqet '(queue)))))
+						(if queue-edge
+							(let ((queue-list (rest queue-edge)))
+							  (rem-edge queue-edge)
+							  queue-list)))))
+					
+				  (defl get-queue-info ()
+					(mapcar (lambda (n) (list n (hget-all-list (list n) '(rule name)))) 
+							(! (obj-queue as-list))))
+
+				  (defl check-rulegraph-cache (edge)
+					(let ((node (first edge)))
+					  (when (eq (hget node 'type) 'rule)
+						(invalidate-rulegraph-cache-entry node))))
+
+				  (defl print-info (p env)
+					($nocomment	;; Perf test taking out prints shows no speed diff
+					 (let ((root-var (env-lookup '?root-var env :idempotent nil)))
+					   (print (list seqno #|(get-log-seqno)|# obj-node root-var p)))))
+					
+				  (let ((r nil)
+						(first-edge nil)
+						(rule-name (hget rule-node 'name))
+						(matched-edges nil)
+						(deleted-edges nil)
+						(matched-and-new-edges-per-env nil))
+					(dolist (env envlist)
+					  (timer 'add-consequent-edges-per-env
+						(lambda ()
+						  (let ((root-var (env-lookup '?root-var env)) ;; Not used?
+								(print-list nil))
+							(clrhash all-node-hash)
+							(! (env-new-edges clear))
+							(setq new-or-dup-edge-list nil)
+							(block yyy
+							  (let ()
+								(if (! (env-triggered-table rule-has-been-triggered) rule-node env)
+									(let ()
+									  (check-rule-trace rule-name `(add-consequent-edges already-triggered rule ,rule-node ,rule-name obj ,obj-node))
+									  (gstat 'already-env-triggered-rules (lambda (x y) (+ x y)) (lambda () 1))
+									  ;; (when (= (length envlist) 1)
+									  ;;   (rem-edge `(,obj-node rule ,rule-node)))
+									  (return-from yyy nil))
+									(let ((te nil))
+									  #|
+									  (when (not (edge-exists `(,rule-node no-triggered))) ;
+									  (setq te (! (env-triggered-table insert) rule-node env matched-edges))) ;
+									  |#
+									  ;; (when (= (length envlist) 1)
+									  ;;    (rem-edge `(,obj-node rule ,rule-node)))
+									  (dolist (edge not-edges)
+										(let ((not-edge 
+											   (mapcar (lambda (node)
+														 (env-lookup node env))
+													   edge)))
+										  (when (edge-exists not-edge)
+											(return-from yyy nil))))
+									  (let ((trig-insert-called nil))
+										(clrhash new-node-hash)
 									  
-										  ;; Check here if need to do a del if there are no adds. Do this here since will fall through the next loop if no adds are present.
-										  (when (has-no-adds add-edges)
-											(setq deleted-edges (append deleted-edges (del-consequent-edges del-edges not-edges envlist))))
+										;; Check here if need to do a del if there are no adds. Do this here since will fall through the next loop if no adds are present.
+										(when (has-no-adds add-edges)
+										  (setq deleted-edges (append deleted-edges (del-consequent-edges del-edges not-edges envlist))))
 
-										  (dolist (add-edge add-edges)
-											(let ((edge-is-print (eq (first add-edge) 'print)))	;; This avoids sensing resulting edges as prints, as happened with for-rule
-											  (block xxx
-												(let ((new-edge nil))
-												  (dolist (node add-edge)
-													(let ((new-node (let ((sn (env-lookup node env)))			;; dump-sn
-																	   (if (and (is-var-name node)
-																				(is-scoped-new-pool-node sn)
-																				(preds-contain-new-node-var node))
-																		   (let ((nn (gethash sn new-node-hash)))
-																			 (when (null nn)
-																			   (setq nn (setf (gethash sn new-node-hash)
-																							  (new-obj-node))))
-																			 nn)
-																		   sn))))
-													  ;; Bound value will be a list if the var was a rest var, so append the contents in that case
-													  ;; (print (list 'ace1  new-edge new-node))
-													  (setq new-edge (append new-edge
-																			 (cond
-																			  ((listp new-node)
-																			   new-node)
-																			  ((eq new-node :undefined)
-																			   nil)
-																			  (t
-																			   (list new-node)))))))
-												  (when (eq (first new-edge) 'name-attr)
-													(let ((rule (second new-edge))
-														  (name (node-name-cat (rest (rest new-edge)))))
-													  (setq new-edge `(,rule name ,name))))
-												  (when edge-is-print ;; For debug -- if print is head node of an edge, print it
-													(setq print-list (append print-list (list (rest new-edge)))))
-												  (setq new-or-dup-edge-list (append new-or-dup-edge-list (list new-edge)))
-												  (when (and (not (edge-exists new-edge))
-															 (not (eq (first new-edge) 'print)))
-													(when (null first-edge)
-													  (setq first-edge new-edge)
-													  ;; Be sure we're adding edges before deleting anything, i.e., want to avoid extra deletes
-													  (setq deleted-edges (append deleted-edges (del-consequent-edges del-edges not-edges envlist))))
-													(when (not trig-insert-called)
-													  (! (env-triggered-table insert) rule-node env)
-													  (setq trig-insert-called t))
-													(dolist (new-node new-edge)
-													  (setf (gethash new-node all-node-hash) new-node))
-													(add-edge new-edge)
-													(when (memq 'ace4 print-tags)
-													  (print (list 'ace4 'add new-edge)))
-													(! (env-new-edges insert) new-edge new-edge))))))
-										  ;; (print new-node-hash)
-										  )))))
-							  (check-rule-trace rule-name `(add-consequent-edges edge-scan-done rule ,rule-node ,rule-name obj ,obj-node ,(hash-table-count all-node-hash)))
-							  ;;
-							  ;; 11/10/22 Trying this to fix the empty-add print problem. 
-							  ;;
-							  (when (and (= (hash-table-count all-node-hash) 0)
-										 print-list
-										 (has-no-adds add-edges))
-								(dolist (p print-list)
-								  ;; Note recording this count does not tell us for sure how many matches, since there
-								  ;; may be more than one print per add. So we assume just one here.
-								  (setf (gethash (list seqno rule-name) match-count-hash)
-										(+ (or (gethash (list seqno rule-name) match-count-hash) 0) 1))
-								  (setf (gethash rule-name match-count-hash)
-										(max (or (gethash rule-name match-count-hash) 0) (gethash (list seqno rule-name) match-count-hash)))
-								  ($nocomment (print (list seqno (get-log-seqno) p)))))		;; Perf test taking out prints shows no speed diff
+										(dolist (add-edge add-edges)
+										  (let ((edge-is-print (eq (first add-edge) 'print))) ;; This avoids sensing resulting edges as prints, as happened with for-rule
+											(block xxx
+											  (let ((new-edge nil))
+												(dolist (node add-edge)
+												  (let ((new-node (let ((sn (env-lookup node env)))	;; dump-sn
+																	(if (and (is-var-name node)
+																			 (is-scoped-new-pool-node sn)
+																			 (preds-contain-new-node-var node))
+																		(let ((nn (gethash sn new-node-hash)))
+																		  (when (null nn)
+																			(setq nn (setf (gethash sn new-node-hash)
+																						   (new-obj-node))))
+																		  nn)
+																		sn))))
+													;; Bound value will be a list if the var was a rest var, so append the contents in that case
+													;; (print (list 'ace1  new-edge new-node))
+													(setq new-edge (append new-edge
+																		   (cond
+																			 ((listp new-node)
+																			  new-node)
+																			 ((eq new-node :undefined)
+																			  nil)
+																			 (t
+																			  (list new-node)))))))
+												(when (eq (first new-edge) 'name-attr)
+												  (let ((rule (second new-edge))
+														(name (node-name-cat (rest (rest new-edge)))))
+													(setq new-edge `(,rule name ,name))))
+												(when edge-is-print ;; For debug -- if print is head node of an edge, print it
+												  (setq print-list (append print-list (list (rest new-edge)))))
+												(setq new-or-dup-edge-list (append new-or-dup-edge-list (list new-edge)))
+												(when (and (not (edge-exists new-edge))
+														   (not (eq (first new-edge) 'print)))
+												  (when (null first-edge)
+													(setq first-edge new-edge)
+													;; Be sure we're adding edges before deleting anything, i.e., want to avoid extra deletes
+													(setq deleted-edges (append deleted-edges (del-consequent-edges del-edges not-edges envlist))))
+												  (when (not trig-insert-called)
+													(! (env-triggered-table insert) rule-node env)
+													(setq trig-insert-called t))
+												  (dolist (new-node new-edge)
+													(setf (gethash new-node all-node-hash) new-node))
+												  (add-edge new-edge)
+												  (check-rulegraph-cache new-edge)
+												  (when (memq 'ace4 print-tags)
+													(print (list 'ace4 'add new-edge)))
+												  (! (env-new-edges insert) new-edge new-edge))))))
+										;; (print new-node-hash)
+										)))))
+							(check-rule-trace rule-name `(add-consequent-edges edge-scan-done rule ,rule-node ,rule-name obj ,obj-node ,(hash-table-count all-node-hash)))
+							;;
+							;; 11/10/22 Trying this to fix the empty-add print problem. 
+							;;
+							(when (and (= (hash-table-count all-node-hash) 0)
+									   print-list
+									   (has-no-adds add-edges))
+							  (dolist (p print-list)
+								(print-info p env)))
 
-							  ;; del-on-rematch
-							  ;;
-							  ;; Here, we do the dels even though we've matched before and not added new edges. The idea
-							  ;; is that we probably still want to delete rules at the end of a propagation of rules
-							  ;; around a chain.
+							;; del-on-rematch
+							;;
+							;; Here, we do the dels even though we've matched before and not added new edges. The idea
+							;; is that we probably still want to delete rules at the end of a propagation of rules
+							;; around a chain.
 
-							  ($nocomment												;; Still problems with this?
-							   (when (= (hash-table-count all-node-hash) 0)
-								 (del-consequent-edges del-edges not-edges envlist)))
+							($nocomment	;; Still problems with this?
+							 (when (= (hash-table-count all-node-hash) 0)
+							   (del-consequent-edges del-edges not-edges envlist)))
 
-							  (when (not (= (hash-table-count all-node-hash) 0))
-								(dolist (p print-list)
-								  (setf (gethash (list seqno rule-name) match-count-hash)
-										(+ (or (gethash (list seqno rule-name) match-count-hash) 0) 1))
-								  (setf (gethash rule-name match-count-hash)
-										(max (or (gethash rule-name match-count-hash) 0) (gethash (list seqno rule-name) match-count-hash)))
-								  ($nocomment (print (list seqno (get-log-seqno) p)))
-								  )
-								(setq r t)
-								(let ((me (matched-edges pred-edges env)))
-								  (setq matched-edges (cons me matched-edges))
-								  ;; Note use of ordered list of potentially redundant edges for tracing. Print edges are also included. 
-								  (setq matched-and-new-edges-per-env (cons (list me new-or-dup-edge-list #|(! (env-new-edges results))|# ) matched-and-new-edges-per-env)))
-								;; (add-consequent-edges-info (list env (hash-table-to-list all-node-hash)))
-								)
-							  (let ((explicit-nodes-to-exec (get-explicit-nodes-to-exec)))
-								(let ((explicit-nodes-to-queue (get-explicit-nodes-to-queue)))
-								  (if (or explicit-nodes-to-exec explicit-nodes-to-queue)
-									  (let ()
-										(dolist (node explicit-nodes-to-exec)
-										  (queue-node node :push-head t :print-tags print-tags))
-										(dolist (node explicit-nodes-to-queue)
-										  (queue-node node :push-head nil :print-tags print-tags)))
-									  (let ((nodes (get-implicit-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
-										($comment
-										 (when nodes 
-										   (print (list 'ace2 nodes))))
-										(dolist (node nodes)
-										  (when (has-rules node)
-											(queue-node node :only-if-not-queued t :print-tags print-tags)))
-										(when nodes
-										  (when (memq 'ace5 print-tags)
-											(print (list 'ace5 (get-queue-info))))
-										  (when (memq 'ace6 print-tags)
-											(print (list 'ace6 (! (obj-queue as-list))))))))))))))
-					  (when nil ;; r
-						(print (list 'a (hget rule-node 'name) matched-and-new-edges-per-env)))
-					  ;; (print (list 'ace3 (! (new-edges as-list)) matched-edges))
-					  (when r
-						(check-rule-trace rule-name `(ace-new-edges rule ,rule-node ,rule-name obj ,obj-node)))
-					  (funcall cont r matched-edges deleted-edges matched-and-new-edges-per-env)))))))))
+							(when (not (= (hash-table-count all-node-hash) 0))
+							  (dolist (p print-list)
+								(print-info p env))
+							  (setq r t)
+							  (let ((me (matched-edges pred-edges env)))
+								(setq matched-edges (cons me matched-edges))
+								;; Note use of ordered list of potentially redundant edges for tracing. Print edges are also included. 
+								(setq matched-and-new-edges-per-env (cons (list me new-or-dup-edge-list #|(! (env-new-edges results))|# ) matched-and-new-edges-per-env)))
+							  ;; (add-consequent-edges-info (list env (hash-table-to-list all-node-hash)))
+							  )
+							(let ((explicit-nodes-to-exec (get-explicit-nodes-to-exec)))
+							  (let ((explicit-nodes-to-queue (get-explicit-nodes-to-queue)))
+								(if (or explicit-nodes-to-exec explicit-nodes-to-queue)
+									(let ()
+									  (dolist (node explicit-nodes-to-exec)
+										(queue-node node :push-head t :print-tags print-tags))
+									  (dolist (node explicit-nodes-to-queue)
+										(queue-node node :push-head nil :print-tags print-tags)))
+									(let ((nodes (get-implicit-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
+									  ($comment
+									   (when nodes 
+										 (print (list 'ace2 nodes))))
+									  (dolist (node nodes)
+										(when (has-rules node)
+										  (queue-node node :only-if-not-queued t :print-tags print-tags)))
+									  (when nodes
+										(when (memq 'ace5 print-tags)
+										  (print (list 'ace5 (get-queue-info))))
+										(when (memq 'ace6 print-tags)
+										  (print (list 'ace6 (! (obj-queue as-list))))))))))))))
+					(when nil ;; r
+					  (print (list 'a (hget rule-node 'name) matched-and-new-edges-per-env)))
+					;; (print (list 'ace3 (! (new-edges as-list)) matched-edges))
+					(when r
+					  (check-rule-trace rule-name `(ace-new-edges rule ,rule-node ,rule-name obj ,obj-node)))
+					(funcall cont r matched-edges deleted-edges matched-and-new-edges-per-env))))))))
 	
 	  (defm trace-rule (rule-name)
 		(add-edge `(rule-trace ,rule-name)))
@@ -2245,88 +2260,62 @@
 						  (return scan-edges)))))
 				  (values max-sum result)))))))
 
-	  (defm all-matches (rule-node obj-node) ;; all-var-mod -- not right now [5/18/23 -- not sure what this means]
+	  (defm all-matches (rule-node obj-node &key use-all-matches-aux2) ;; all-var-mod -- not right now [5/18/23 -- not sure what this means]
 		(timer 'all-matches
 		  (lambda ()
 			(defr
-			  (defl all-matches-hash-equal (x y)
-				(and (equal (first x) (first y))
-					 (env-equal (second x) (second y))))
-			  (let ((rule-graph nil))
-				(let ((root-vars (get-root-vars rule-node)))
-				  (define-hash-table-test all-matches-hash-test all-matches-hash-equal set-hash)
-				  (let ((h (make-hash-table :size 7 :test 'all-matches-hash-test)))
-					(let ((possible-match-fcn (possible-match-fcn rule-node obj-node)))
-					  (block b
-						(dolist (root-var root-vars)
-						  (let ((pinfo (funcall possible-match-fcn root-var)))
-							;; (print (list 'i pinfo root-var))
-							(let ((poss-match (first pinfo)))
-							  (let ((scan-subst-status (second pinfo)))
-								(when poss-match
-								  ($comment (print (list 'am4 (hget rule-node 'name) scan-subst-status)))
-								  (if (and (not (null scan-subst-status))
-										   (not (eq scan-subst-status :unknown))
-										   (let ((poss-match-env scan-subst-status))
-											 ($comment (print (list 'am5 (hget rule-node 'name) poss-match-env)))
-											 (! (env-triggered-table rule-has-been-triggered) rule-node poss-match-env)))
-									  (let ()
-										;; (print (list 'g2 (hget rule-node 'name) scan-subst-status))
-										nil)
-									  (let ()
-										(when (null rule-graph)
-										  (setq rule-graph (make-rule-graph rule-node)))
-										(let ((envlist (all-matches-aux rule-graph obj-node root-var)))
-										  (when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
-											;; (print (list 'f (hget rule-node 'name) root-var obj-node scan-subst-status))
-											;; (let ((seqno (hget 'all-rules 'new-edges)))
-											;; (add-edge `(,rule-node fposs ,seqno ,root-var ,obj-node)))
-											)
-										  ;; (print (list 'g1 (hget rule-node 'name) root-var obj-node poss-match scan-subst-status))
-										  (when (and envlist poss-match (not (eq scan-subst-status t))) ;; Catch case when subst fails 
-											;; (print (list 'g (hget rule-node 'name) root-var obj-node scan-subst-status))
-											)
-										  ;; Case when all-matches-aux fails, yet we got a valid env back from scan-and-subst
-										  (when (and (null envlist) poss-match scan-subst-status (not (eq scan-subst-status :unknown)))
-											;; (print (list 'h (hget rule-node 'name) root-var obj-node scan-subst-status))
-											)
-										  (when envlist
-											($comment (print (list 'am1 (hget rule-node 'name) obj-node root-var envlist #| scan-subst-status |# )))
-											($comment 
-											 (let ((rule-trace (edge-exists `(rule-trace ,(! (rule-graph name))))))
-											   (let ((verbose (if rule-trace t '(s11))))
-												 (let ((subst-match (! (rule-graph subst-match) self obj-node root-var :verbose verbose)))
-												   (when t (not (envs-equal envlist subst-match))
-														 (print (list 'am3 (hget rule-node 'name) obj-node root-var (envs-equal envlist subst-match) envlist subst-match)))))))
-											(dolist (env envlist)
-											  ;; (print (list 'am2 env))
-											  (let ((env-info (list root-var env)))
-												(setf (gethash env-info h) env-info)))
-											;; (return-from b nil)  ;; To bail or not to bail, that is the question. Today we bail.
-																	;; global-change -- no don't bail, get all root vars 
-																	;; 5/18/23 -- Keep don't-bail, as dealing with root vars seems fundamental.
-											)))))))))))
-					(when (not (= (hash-table-count h) 0))
-					  (let ((std-var-level (or (hget rule-node 'std-var-level) 0)))
-						(let ((envlist nil))
-						  (let ((std-bindings `((,(! (std-vars var-base-to-var) '?this-rule std-var-level) ,rule-node)
-												(,(! (std-vars var-base-to-var) '?this-rule-name std-var-level) ,(hget rule-node 'name))
-												(,(! (std-vars var-base-to-var) '?this-obj std-var-level) ,obj-node))))
-							(maphash (lambda (k v)
-									   (let ((root-var (first v))
-											 (env (second v)))
-										 (setq envlist (cons (append `(,@std-bindings
-																	   (,(! (std-vars var-base-to-var) '?root-var std-var-level) ,root-var))
-																	 env)
-															 envlist))))
-									 h)
-							envlist)))))))))))
+				(defl all-matches-hash-equal (x y)
+				  (and (equal (first x) (first y))
+					   (env-equal (second x) (second y))))
+				(let ((rulegraph (make-rule-graph rule-node)))
+				  (let ((root-vars (get-root-vars rule-node)))
+					(define-hash-table-test all-matches-hash-test all-matches-hash-equal set-hash)
+					(let ((h (make-hash-table :size 7 :test 'all-matches-hash-test)))
+					  (let ((possible-match-fcn (possible-match-fcn rule-node obj-node rulegraph)))
+						(block b
+						  (dolist (root-var root-vars)
+							(let ((poss-match (funcall possible-match-fcn root-var)))
+							  ($comment (print (list 'am6 (hget rule-node 'name) obj-node poss-match root-var)))
+							  (when poss-match
+								(let ()
+								  (let ((envlist (all-matches-aux rulegraph obj-node root-var :use-all-matches-aux2 use-all-matches-aux2)))
+									(when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
+									  ;; (print (list 'f (hget rule-node 'name) root-var obj-node scan-subst-status))
+									  ;; (let ((seqno (hget 'all-rules 'new-edges)))
+									  ;; (add-edge `(,rule-node fposs ,seqno ,root-var ,obj-node)))
+									  )
+									(when envlist
+									  ($comment (print (list 'am1 (hget rule-node 'name) obj-node root-var envlist)))
+									  (dolist (env envlist)
+										;; (print (list 'am2 env))
+										(let ((env-info (list root-var env)))
+										  (setf (gethash env-info h) env-info)))
+									  ;; (return-from b nil)  ;; To bail or not to bail, that is the question. Today we bail.
+									  ;; global-change -- no don't bail, get all root vars 
+									  ;; 5/18/23 -- Keep don't-bail, as dealing with root vars seems fundamental.
+									  ))))))))
+					  (when (not (= (hash-table-count h) 0))
+						(let ((std-var-level (or (hget rule-node 'std-var-level) 0)))
+						  (let ((envlist nil))
+							(let ((std-bindings `((,(! (std-vars var-base-to-var) '?this-rule std-var-level) ,rule-node)
+												  (,(! (std-vars var-base-to-var) '?this-rule-name std-var-level) ,(hget rule-node 'name))
+												  (,(! (std-vars var-base-to-var) '?this-obj std-var-level) ,obj-node))))
+							  (maphash (lambda (k v)
+										 (let ((root-var (first v))
+											   (env (second v)))
+										   (setq envlist (cons (append `(,@std-bindings
+																		 (,(! (std-vars var-base-to-var) '?root-var std-var-level) ,root-var))
+																	   env)
+															   envlist))))
+									   h)
+							  envlist)))))))))))
 
 	  ;; To disable subst-match for testing, rename this method to something and rename all-matches-aux2 to
 	  ;; all-matches-aux
 
-	  (defm all-matches-aux (rule-graph obj-node root-var)
-		(if (and (is-var-name root-var)
+	  (defm all-matches-aux (rule-graph obj-node root-var &key use-all-matches-aux2)
+		(if (and (not use-all-matches-aux2)
+				 (is-var-name root-var)
 				 (not (! (rule-graph has-rest-vars))))
 			(! (rule-graph subst-match) self obj-node root-var
 			   :verbose 
@@ -2366,8 +2355,8 @@
 	  ;; Does all-matches, but also checks the not clause. Note this
 	  ;; logic also appears in add-consequent-edges. Used in query.
 
-	  (defm all-matches-with-not (rule-node obj-node)
-		(let ((envs (all-matches rule-node obj-node)))
+	  (defm all-matches-with-not (rule-node obj-node &key use-all-matches-aux2)
+		(let ((envs (all-matches rule-node obj-node :use-all-matches-aux2 use-all-matches-aux2)))
 		  (let ((not-edges (! ((get-rule-components rule-node) nots))))
 			(if (null not-edges)
 				envs
@@ -2882,240 +2871,132 @@
 							  (filter-vars edge))
 							pred-list)))
 
-	  ;; Returns a function which when called with the root var, will do
-	  ;; the check, in the rule context setup by the closure. Much
-	  ;; faster than calling the whole thing over and over.
+	  ;; Returns a function which when called with the root var, will do the check, in the rule context setup by the
+	  ;; closure. Much faster than calling the whole thing over and over.
 
-	  ;; 3/25/19 -- Troubles with this new possible-match-fcn when
-	  ;; tried with fe-rule-test. Had to change from detecting
-	  ;; consts in scan-and-subst to just checking edge existence,
-	  ;; since the copiers can have vars in the results. Also in
-	  ;; scan-and-subst had to change from detecting a null env to
-	  ;; checking that it's stopped changing on each loop. Otherwise
-	  ;; we always get a binding to a var.
+	  ;; 10/17/23 -- Removed scan-and-subst. With advent of subst-match it's less useful, and adds overhead. Overall
+	  ;; speed increased by quite a bit, though there are more calls now to subst-match.
+	  ;; 
+	  ;; 3/25/19 -- Troubles with this new possible-match-fcn when tried with fe-rule-test. Had to change from detecting
+	  ;; consts in scan-and-subst to just checking edge existence, since the copiers can have vars in the results. Also
+	  ;; in scan-and-subst had to change from detecting a null env to checking that it's stopped changing on each
+	  ;; loop. Otherwise we always get a binding to a var.
 	  ;;
-	  ;; Also took out chain-check -- probably breaks due to the
-	  ;; need to handle vars in some way not accounted for in the
-	  ;; chain processing.  However scan-and-subst seems to
-	  ;; supersede its need anyway.
+	  ;; Also took out chain-check -- probably breaks due to the need to handle vars in some way not accounted for in
+	  ;; the chain processing.  However scan-and-subst seems to supersede its need anyway.
 	  ;;
-	  ;; This could be pointing out that we should be careful in
-	  ;; straying too much from the isomorphism theme.
+	  ;; This could be pointing out that we should be careful in straying too much from the isomorphism theme.
 
-	  (defm possible-match-fcn (rule-node obj-node)	;; all-var-mod
+	  (defm possible-match-fcn (rule-node obj-node rulegraph)	;; all-var-mod
 		(timer 'possible-match-fcn
 		  (lambda ()
 			(macrolet ((hprint (&rest args)
-							   nil
-							   ;; `(print (list ,@args))
-							   ))
+						 nil
+						 ;; `(print (list ,@args))
+						 ))
 			  (defr
-				;; Returns nil if no match, an env if match, and :unknown if it's not certain
-				(defl scan-and-subst (preds root-var obj-node)
-				  (timer 'scan-and-subst
-					(lambda ()
+
+				  (defl get-rule-preds-root (preds root-var) ;; Returns <preds-containing-root-var>
+					(let ((r nil))
+					  (dolist (pred preds)
+						(when (member root-var pred :test #'equal)
+						  (setq r (cons pred r))))
+					  r))
+
+				  ;; Reduces preds by removing all vars which are not the root var, and substituting obj-node for the root var.
+				  ;; Then looks up the existence of the resulting qets. T iff all of them exist, else nil.
+
+				  (defl check-rule-preds-root-qets (preds root-var obj-node)
+					(let ((qets (filter-non-root-vars preds root-var obj-node)))
 					  (block b
-						(let ((qet-edge-count-cache (make-sur-map :input-size 31 :res-size 1)))
-						  (defr
-							(defl lookup-qet-edge-count (qet)
-							  (! (qet-edge-count-cache lookup-one) qet))
-							(defl insert-qet-edge-count (qet count)
-							  (! (qet-edge-count-cache insert) qet count))
-							(defl check-consts (pred) ;; T if all consts
-							  (block b
-								(dolist (node pred)
-								  (when (is-var-name node)
-									(return-from b nil)))
-								t))
-							(defl remove-vars (preds)  
-							  (mapcar (lambda (pred)
-										(filter-vars pred))
-									  preds))
-							;; Using this local form just to emphasize that we're doing a subst and possibly leaving vars in the
-							;; result. This is not the intent of matched-edges so we're just trying here to be clear wrt naming.
-							(defl subst (preds env)
-							  (matched-edges preds env))
-							(let ((status nil))
-							  (let ((env `((,root-var ,obj-node))))
-								(let ((envout env))
-								  (let ((prev-envout nil))
-									(let ((edge-count-prod 1))
-									  (let ((new-preds preds))
-										(block b
-										  (loop
-										   (when (or (null env)
-													 (null (env-no-conflict-dedup envout))
-													 (env-equal envout prev-envout))
-											 (return-from b nil))
-										   (setq edge-count-prod 1)
-										   (setq status nil)
-										   (setq new-preds (subst new-preds env)) ;; Does subst of vars via env
-										   (let ((new-env (let ((new-pred-qets (remove-vars new-preds)))
-															(hprint 'e new-preds env new-pred-qets)
-															(mapunion (lambda (pred pred-qet) ;; Should provide an env of new bindings 
-																		(let ((edge-count (lookup-qet-edge-count pred-qet)))
-																		  (let ((edge-count (or edge-count 
-																								(insert-qet-edge-count pred-qet
-																													   (! (self count-edges-from-subqet) pred-qet)))))
-																			(setq edge-count-prod (* edge-count-prod edge-count))
-																			(hprint 'e1 pred pred-qet)
-																			(if (= edge-count 1)
-																				(let ((edges (get-edges-from-subqet pred-qet)))
-																				  (let ((edge (first edges)))					  ;; Need to do a one-edge match here?
-																																  ;; Current algorithm seems to assume a single edge returned in qet lookup
-																					(let ((r (mapunion (lambda (pred-node obj-node)
-																										 (when (is-var-name pred-node)
-																										   (list (list pred-node obj-node))))
-																									   pred edge)))
-																					  (hprint 'e2 r)
-																					  r)))
-																				(let ()
-																				  ;; Set this flag if we have more than one edge in the qet lookup. Means non-det and need to return :unknown
-																				  (when (> edge-count 1)
-																					(setq status t))
-																				  nil)))))
-																	  new-preds
-																	  new-pred-qets))))
-											 (hprint 'e3 new-env) 
-											 (setq prev-envout envout)
-											 (setq envout (hunion envout new-env))
-											 (setq env new-env))))
+						(dolist (qet qets)
+						  (when (not (or (and (qet-exists qet)
+											  (or
+											   (edge-exists qet)
+											   (not (null (superqets qet)))))))
+							(return-from b nil)))
+						(hprint 'q (hget rule-node 'name) preds root-var obj-node qets)
+						t)))
 
-										;; At this point new-preds should be all constants and all of its edges must exist for the function to be true
-										;;
-										;; Also, if we left the last loop and there were any non-unique edges from qets, 
-										;; then we have the non-determisitic case and we really need to return :unknown
-										
-										($comment
-										 (when (> edge-count-prod 1)
-										   (hprint 'e5 (hget rule-node 'name) obj-node edge-count-prod)))
+				(defl filter-non-root-vars (preds root-var obj-node)
+				  (mapcar (lambda (pred)
+							(mapcad (lambda (node)
+									  (cond
+										((eq node root-var)
+										 obj-node)
+										((not (is-var-name node))
+										 node)
+										(t
+										 nil)))
+									pred))
+						  preds))
 
-										(let ((r (block b
-												   (dolist (new-pred new-preds)
-													 (when (or nil #|(not (check-consts new-pred))|#
-															   (not (edge-exists new-pred)))
-													   (return-from b nil)))
-												   t)))
-										  (let ((r (if r
-													   (let ()
-														 (hprint 'e4 envout preds root-var obj-node)
-														 (hunion envout '((t t))))
-													   (if status
-														   :unknown
-														   nil))))
-											(gstat 'scan-and-subst-success (lambda (x y) (+ x y)) (lambda () (if (and (not (null r)) (not (eq r :unknown))) 1 0)))
-											(gstat 'scan-and-subst-failure (lambda (x y) (+ x y)) (lambda () (if (null r) 1 0)))
-											(gstat 'scan-and-subst-unknown (lambda (x y) (+ x y)) (lambda () (if (eq r :unknown) 1 0)))
-											($comment
-											 (when (and (not (null r)) (not (eq r :unknown)))
-											   (print `(scan-and-subst rule ,rule-node ,(hget rule-node 'name) env ,r)))
-											 )
-											r))))))))))))))
-		
-			  (defl get-rule-preds-root (preds root-var) ;; Returns <preds-containing-root-var>
-				(let ((r nil))
-				  (dolist (pred preds)
-					(when (member root-var pred :test #'equal)
-					  (setq r (cons pred r))))
-				  r))
+				(defl get-const-prop (preds root-var)
+				  (block b
+					(dolist (pred preds)
+					  (when (or
+							 (and (= (length pred) 2)
+								  (eq root-var (first pred))
+								  (not (is-var-name (second pred))))
+							 (and (= (length pred) 3)
+								  (eq root-var (first pred))
+								  (not (is-var-name (second pred)))
+								  (not (is-var-name (third pred)))))
+						(return-from b pred)))))
 
-			;; Reduces preds by removing all vars which are not the root var, and substituting obj-node for the root var.
-			;; Then looks up the existence of the resulting qets. T iff all of them exist, else nil.
-
-			(defl check-rule-preds-root-qets (preds root-var obj-node)
-			  (let ((qets (filter-non-root-vars preds root-var obj-node)))
-				(block b
-				  (dolist (qet qets)
-					(when (not (or (and (qet-exists qet)
-										(or
-										 (edge-exists qet)
-										 (not (null (superqets qet)))))))
-					  (return-from b nil)))
-				  (hprint 'q (hget rule-node 'name) preds root-var obj-node qets)
-				  t)))
-
-			(defl filter-non-root-vars (preds root-var obj-node)
-			  (mapcar (lambda (pred)
-						(mapcad (lambda (node)
-								  (cond
-								   ((eq node root-var)
-									obj-node)
-								   ((not (is-var-name node))
-									node)
-								   (t
-									nil)))
-								pred))
-					  preds))
-
-			(defl get-const-prop (preds root-var)
-			  (block b
-				(dolist (pred preds)
-				  (when (or
-						 (and (= (length pred) 2)
-							  (eq root-var (first pred))
-							  (not (is-var-name (second pred))))
-						 (and (= (length pred) 3)
-							  (eq root-var (first pred))
-							  (not (is-var-name (second pred)))
-							  (not (is-var-name (third pred)))))
-					(return-from b pred)))))
-
-			(let ()
-			  (hprint 'r (hget rule-node 'name) obj-node)
-			  (let ((obj-edges (get-edges obj-node)))
-				(let ((obj-nodes (nodes obj-edges)))
-				  (let ((rule-comps (get-rule-components rule-node)))
-					(let ((preds (second (filter-new-node-pred-edges (! (rule-comps preds))))))
-					  (let ((pred-const-nodes (get-rule-consts-pred preds)))
-						(let ((ipo (intersect pred-const-nodes obj-nodes)))	;; all-var-mod: Change this to (let ((ipo obj-nodes))...) to enable all-vars
-						  (let ((has-rest-vars (block b (mapc (lambda (pred) (when (has-rest-var pred) (return-from b t))) preds) nil)))
-							(lambda (root-var) ;; Returns (pos-match = {t, nil}, scan-and-subst-status = {:unknown, :not-called, <an env>, nil})
-							  (timer 'possible-match
-								(lambda ()
-								  (block b
-									(let ((r 
-										   (and ipo
-												(or (is-var-name root-var)
-													(equal root-var obj-node))
-												(let ((root-preds (get-rule-preds-root preds root-var)))
-												  (let ((root-pred-const-nodes (get-rule-consts-pred root-preds)))
-													(let ((pred-qets-match (check-rule-preds-root-qets root-preds root-var obj-node)))
-													  (when am-traced
-														(print (list 'pmf1 root-var preds root-preds root-pred-const-nodes obj-nodes obj-node obj-edges pred-qets-match)))
-													  (and
-													   pred-qets-match
-													   (= (length (intersect root-pred-const-nodes obj-nodes))
-														  (length root-pred-const-nodes))
-													   )))))))
-									  (when am-traced
-										(print (list 'pmf2 r)))
-									  (let ((r (or (and has-rest-vars '(t nil))
-												   (if r
-													   (let ((s (scan-and-subst preds root-var obj-node)))
-												   
-														 ;; (setq s :unknown)		;; !!!!!
-
-														 (hprint 's (hget rule-node 'name) root-var obj-node r s)
-														 (if (null s)
-															 (list nil nil)
-															 (list t s)))
-													   (list nil :not-called)))))
-										($comment (when (and (second r) (listp (second r)))
-													(print (list 'pm1 rule-node (hget rule-node 'name) root-var preds r))))
-										;; Not clear which of these stats is better
-										(gstat 'possible-match-true  (lambda (x y) (+ x y)) (lambda () (if (first r) 1 0)))
-										(gstat 'possible-match-false (lambda (x y) (+ x y)) (lambda () (if (first r) 0 1)))
-										;; (bool-timer 'possible-match-true 'possible-match-false (lambda () (first r)))
-										r)))))))))))))))))))
+				(let ()
+				  (let ((obj-edges (get-edges obj-node)))
+					(let ((obj-nodes (nodes obj-edges)))
+					  (let ((rule-comps (get-rule-components rule-node)))
+						(let ((preds (second (filter-new-node-pred-edges (! (rule-comps preds))))))
+						  (let ((pred-const-nodes (get-rule-consts-pred preds)))
+							(let ((ipo (intersect pred-const-nodes obj-nodes)))	;; all-var-mod: Change this to (let ((ipo obj-nodes))...) to enable all-vars
+							  (let ((has-rest-vars (block b (mapc (lambda (pred) (when (has-rest-var pred) (return-from b t))) preds) nil)))
+								(lambda (root-var) ;; Returns pos-match = {t, nil}
+								  (timer 'possible-match
+									(lambda ()
+									  (block b
+										(let ((r 
+											   (and ipo
+													(or (is-var-name root-var)
+														(equal root-var obj-node))
+													(let ((root-preds (get-rule-preds-root preds root-var)))
+													  (let ((root-pred-const-nodes (get-rule-consts-pred root-preds)))
+														(let ((pred-qets-match (check-rule-preds-root-qets root-preds root-var obj-node)))
+														  (when am-traced
+															(print (list 'pmf1 root-var preds root-preds root-pred-const-nodes obj-nodes obj-node obj-edges pred-qets-match)))
+														  (and
+														   pred-qets-match
+														   (= (length (intersect root-pred-const-nodes obj-nodes))
+															  (length root-pred-const-nodes))
+														   )))))))
+										  (let ((r (or r has-rest-vars)))
+											;; Not clear which of these stats is better
+											(gstat 'possible-match-true  (lambda (x y) (+ x y)) (lambda () (if r 1 0)))
+											(gstat 'possible-match-false (lambda (x y) (+ x y)) (lambda () (if r 0 1)))
+											;; (bool-timer 'possible-match-true 'possible-match-false (lambda () r))
+											r)))))))))))))))))))
 
 	  ;; Returns rulegraph, a subclass of graph. See that class for comments.
 
 	  (defm make-rule-graph (rule-node)
-		(let ((rule-graph (make-rulegraph rule-node (hget rule-node 'name) (hget rule-node 'root-var))))
-		  (let ((rule-edges (! ((get-rule-components rule-node) preds))))
-			(dolist (rule-edge rule-edges)
-			  (! (rule-graph add-edge) rule-edge))
-			rule-graph)))
+		(! (self make-rule-graph-aux) rule-node))
+
+	  (defm invalidate-rulegraph-cache-entry (rule-node)
+		(! (self invalidate-rulegraph-cache-entry-aux) rule-node))
+
+	  (let ((rulegraph-cache (make-sur-map)))
+		(defm invalidate-rulegraph-cache-entry-aux (rule-node)
+		  (! (rulegraph-cache remove) rule-node))
+		(defm make-rule-graph-aux (rule-node)
+		  (let ((rulegraph (! (rulegraph-cache lookup-one) rule-node)))
+			(or rulegraph
+				(let ((rulegraph (make-rulegraph rule-node (hget rule-node 'name) (hget rule-node 'root-var))))
+				  (let ((rule-edges (! ((get-rule-components rule-node) preds))))
+					(dolist (rule-edge rule-edges)
+					  (! (rulegraph add-edge) rule-edge))
+					(! (rulegraph-cache insert-one) rule-node rulegraph)
+					rulegraph))))))
 
 	  ;; Builds new graph from current one by substituting nodes in the
 	  ;; graph by the bindings in env. Note this is used when the
@@ -3817,6 +3698,9 @@
 	(defm name ()
 	  rule-name)
 
+	(defm get-preds ()
+	  (get-all-edges))
+
 	(defm get-rule-children (bnode root-var)
 	  (cond
 	   ((and (is-var-name root-var)
@@ -3902,70 +3786,64 @@
 							  (defl check-const (k)
 								(not (memq 'v (k-pred-info k))))
 							  (defl subst (ks env) ;; Returns new ks
-								(timer 'subst
-								  (lambda ()
-									(mapcar (lambda (k)
-											  (let ((pred (k-pred k)))
-												(let ((pred-info (k-pred-info k)))
-												  (let ((pred-info-list (mapcar (lambda (node pred-info-node)
-																				  (if (eq pred-info-node 'v)
-																					  (let ((val (env-lookup node env :idempotent nil)))
-																						(if val
-																							(list val 'd)
-																							(list node pred-info-node)))
-																					  (list node pred-info-node)))
-																				pred pred-info)))
-													(make-k :pred (mapcar (lambda (x) (first x)) pred-info-list)
-															:pred-info (mapcar (lambda (x) (second x)) pred-info-list)
-															:orig-pred (k-orig-pred k))))))
-											ks))))
-							  (defl find-min-edges-k (ks)
-								(timer 'find-min-edges-k
-								  (lambda ()
-									(let ((n 1e38))
-									  (let ((min-k nil))
-										(dolist (k ks)
+								(mapcar (lambda (k)
 										  (let ((pred (k-pred k)))
 											(let ((pred-info (k-pred-info k)))
-											  (when (not (check-const k))
-												(let ((qets (filter-vars-to-qets pred pred-info)))
-												  (let ((len (! (qet-edge-len-cache lookup-one) qets))) ;; Caching the lengths seems only marginally effective
-													(when (null len)
-													  (let ((new-edges (mapunion (lambda (qet)
-																				   (when (or use-singleton-qets (> (length qet) 1))
-																					 (! (g get-edges-from-subqet) qet))) qets)))
-														(when new-edges
-														  (setq len (length new-edges))
-														  (! (qet-edge-len-cache insert-one) qets len))))
-													(when (and len (< len n))
-													  (setq n len)
-													  (setq min-k k))))))))
-										(xprint 's11 min-k)
-										min-k)))))
-							  (defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
-								(timer 'match
-								  (lambda ()
-									(defr
-									  (defl find-var-binding (env)
-										(block b
-										  (dolist (binding env)
-											(when (is-var-name (first binding))
-											  (return-from b (list binding))))
-										  nil))
-									  (let ((k-to-match (find-min-edges-k ks)))
-										(let ((k k-to-match))
-										  (when k
-											(let ((pred (k-pred k)))
-											  (let ((pred-info (k-pred-info k)))
-												(let ((qets (filter-vars-to-qets pred pred-info)))
+											  (let ((pred-info-list (mapcar (lambda (node pred-info-node)
+																			  (if (eq pred-info-node 'v)
+																				  (let ((val (env-lookup node env :idempotent nil)))
+																					(if val
+																						(list val 'd)
+																						(list node pred-info-node)))
+																				  (list node pred-info-node)))
+																			pred pred-info)))
+												(make-k :pred (mapcar (lambda (x) (first x)) pred-info-list)
+														:pred-info (mapcar (lambda (x) (second x)) pred-info-list)
+														:orig-pred (k-orig-pred k))))))
+										ks))
+							  (defl find-min-edges-k (ks)
+								(let ((n 1e38))
+								  (let ((min-k nil))
+									(dolist (k ks)
+									  (let ((pred (k-pred k)))
+										(let ((pred-info (k-pred-info k)))
+										  (when (not (check-const k))
+											(let ((qets (filter-vars-to-qets pred pred-info)))
+											  (let ((len (! (qet-edge-len-cache lookup-one) qets))) ;; Caching the lengths seems only marginally effective
+												(when (null len)
 												  (let ((new-edges (mapunion (lambda (qet)
 																			   (when (or use-singleton-qets (> (length qet) 1))
 																				 (! (g get-edges-from-subqet) qet))) qets)))
-													(let ((r (mapcad (lambda (edge)
-																	   (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
-																	 new-edges)))
-													  (xprint 's9 pred new-edges r)
-													  r))))))))))))
+													(when new-edges
+													  (setq len (length new-edges))
+													  (! (qet-edge-len-cache insert-one) qets len))))
+												(when (and len (< len n))
+												  (setq n len)
+												  (setq min-k k))))))))
+									(xprint 's11 min-k)
+									min-k)))
+							  (defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
+								(defr
+									(defl find-var-binding (env)
+									  (block b
+										(dolist (binding env)
+										  (when (is-var-name (first binding))
+											(return-from b (list binding))))
+										nil))
+									(let ((k-to-match (find-min-edges-k ks)))
+									  (let ((k k-to-match))
+										(when k
+										  (let ((pred (k-pred k)))
+											(let ((pred-info (k-pred-info k)))
+											  (let ((qets (filter-vars-to-qets pred pred-info)))
+												(let ((new-edges (mapunion (lambda (qet)
+																			 (when (or use-singleton-qets (> (length qet) 1))
+																			   (! (g get-edges-from-subqet) qet))) qets)))
+												  (let ((r (mapcad (lambda (edge)
+																	 (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
+																   new-edges)))
+													(xprint 's9 pred new-edges r)
+													r))))))))))
 							  (defl edges-exist (ks) ;; All pred edges need to exist
 								(block b
 								  (dolist (k ks)
@@ -3990,21 +3868,19 @@
 							  ;; Get list of original-preds and reduced preds such that the reduced preds still have
 							   ;; vars. Not clear exaclty what we need here yet.
 							  (defl unmatched-preds (ks)
-								(timer 'unmatched-preds
-								  (lambda ()
-									(list
-									 (mapcad (lambda (k)
-											   (let ((pred (k-pred k)))
-												 (let ((pred-info (k-pred-info k)))
-												   (when (memq 'v pred-info) ;; If we find a v we know we're not resolved.
-													 (k-orig-pred k)))))
-											 ks)
-									 (mapcad (lambda (k)
-											   (let ((pred (k-pred k)))
-												 (let ((pred-info (k-pred-info k)))
-												   (when (memq 'v pred-info) ;; If we find a v we know we're not resolved.
-													 pred))))
-											 ks)))))
+								(list
+								 (mapcad (lambda (k)
+										   (let ((pred (k-pred k)))
+											 (let ((pred-info (k-pred-info k)))
+											   (when (memq 'v pred-info) ;; If we find a v we know we're not resolved.
+												 (k-orig-pred k)))))
+										 ks)
+								 (mapcad (lambda (k)
+										   (let ((pred (k-pred k)))
+											 (let ((pred-info (k-pred-info k)))
+											   (when (memq 'v pred-info) ;; If we find a v we know we're not resolved.
+												 pred))))
+										 ks)))
 							  (defl doloop (lvl cnt ks env-chain)
 								(xprint 's1 ks lvl cnt doloop-cnt)
 								(xprint 's14 env-chain)
@@ -4140,7 +4016,27 @@
 	;; This is also a candidate for caching, using the signature
 	(defm has-rest-vars ()
 	  (block b (mapc (lambda (pred) (when (! (g has-rest-var) pred) (return-from b t))) (get-all-edges)) nil))
-))
+
+	;; T if any pred has at lesat two consecutive vars
+	(defm has-seq-vars ()
+	  (block b
+		(defr
+			(defl doloop (pred cnt)
+			  (cond
+				((= cnt 2)
+				 (return-from b t))
+				((null pred)
+				 nil)
+				((is-var-name (first pred))
+				 (doloop (rest pred) (+ cnt 1)))
+				(t
+				 (doloop (rest pred) 0))))
+			(let ()
+			  (dolist (pred (get-all-edges ))
+				(doloop pred 0))
+			  nil))))
+
+	))
 
 (defc rulegraph-adds objgraph (graph rule-node)
   (let ()
@@ -4878,5 +4774,9 @@
 ;; eval: (put 'add-consequent-edges 'lisp-indent-function 'defun)
 ;; eval: (put 'dolists 'lisp-indent-function 'defun)
 ;; eval: (put 'macrolet 'lisp-indent-function 'defun)
+;; eval: (put 'defr 'lisp-indent-function 'defun)
+;; eval: (put 'defl 'lisp-indent-function 'defun)
 ;; fill-column: 120
 ;; End:
+
+

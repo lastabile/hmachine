@@ -527,7 +527,7 @@
   (?y type array)
   (?y level 0)
   (?x level-zero)
-  (?y level-zero)
+  ;; (?y level-zero)
   (?x d ?y)	;; display-connection
   )
  (del

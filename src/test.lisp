@@ -377,12 +377,8 @@
 						  ;; casz-ref
 						  ;; casz-ref1
 						  ;; copy-array-struct
-						  ))
-		   (and (third e)
-				(! (g edge-exists) (list (third e) 'two-input-op))))))
+						  )))))
   (! (d gv-to-image) "xxfft")
-  ;; (! (d gv-to-svg) "xxfft")
-  ;; (! (d laptop-gv-to-svg) "xxfft")
   )
 
 (let ((d (make-dumper)))
@@ -465,6 +461,8 @@
 		  (terpri s))))
 	nil))
 
+;; Sort by seqno
+
 (with-open-file (s "xxx" :direction :output)
   (let ((*print-pretty* nil))
 	(let ((et (! ((! (g get-edge-to-trace)) as-list))))
@@ -478,8 +476,10 @@
 								(< (if (eq (first (second x)) 'tested) (third (second x)) (second (second x)))
 								   (if (eq (first (second y)) 'tested) (third (second y)) (second (second y))))))))
 		  (dolist (x flatlist)
-			(print x s)))
-		flatlist))))
+			(let ((e (first x)))
+			  (let ((e (mapcar (lambda (n) (if (eq (! (g hget) n 'type) 'rule) (list n (! (g hget) n 'name)) n)) e)))
+				(print (cons e (rest x)) s)))))
+		nil))))
 
 ;; True if a given node has always failed testing under a given rule
 
@@ -1456,17 +1456,6 @@
 			(! (g execute-global-all-objs-loop))))
 		(setq dims (cons (! (g dimensions)) dims))))))
 
-(defun f (dims-list)
-  (let ((h (make-hash-table)))
-	(dolist (dims dims-list)
-	  (dolist (dim dims)
-		(let ((name (first dim))
-			  (dimval (second dim)))
-		  (setf (gethash name h) (cons dimval (gethash name h))))))
-	h))
-
-		(setq dims (cons (! (g dimensions)) dims))))))
-
 ;; Dumping number on dimensions (degrees) of nodes 
 
 (let ((lmax 0))
@@ -1599,7 +1588,7 @@
 					(copy-file src-path dst-path))))))
 		  nil)))))))
 
-
+#|
 At last, I have a follow-on to my Chaos paper which you so kindly read
 and reviewed. The paper is attached. Note I have not written a
 conclusion section yet, although I have notes on that in the doc file
@@ -1625,21 +1614,7 @@ Thanks,
 Jack D
 * Al O
 Gerry S
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+|#
 
 
 (let ((n 3))
@@ -2093,6 +2068,8 @@ Gerry S
 (with-open-file (s "rule30test" :direction :output)
   (let ((std *standard-output*))
 	(let ((*standard-output* s))
+	  (clear-counters)
+	  (clear-perf-stats)
 	  (setq g (make-rule-30-test))
 	  (time (! (g run) 200)))))
 
@@ -2131,10 +2108,27 @@ Gerry S
 
 (ca-to-svg "y.svg" 101 30 :colorized t)
 
+
 (let ((d (make-dumper)))
   (! (d set-graph) g)
   (! (d dump-gv-edges) "rule30.gv" :rules nil :separate-number-nodes t :attrs '(rule-30-next up center rule30val xcoord level pos neg zero max))
   (! (d gv-to-image) "rule30"))
+
+(let ((d (make-dumper)))
+  (! (d set-graph) g)
+  (let ((edges (hunion
+				(! (g query) '((?x rule30val ?y)(?x rule ?r)) :edges)
+				(hunion
+				 (! (g query) '((?x rule30val ?y)) :edges)
+				 (hunion
+				  (! (g query) '((?x up ?y)) :edges)
+				  (hunion
+				   (! (g query) '((?x max)) :edges)
+				   (hunion
+					(! (g query) '((?x rule-30-next ?y)) :edges)
+					nil)))))))
+	(! (d dump-gv-edges) "rule30.gv" :rules nil :separate-number-nodes t :edges edges)
+	(! (d gv-to-image) "rule30")))
 
 (let ()
   (let ((n 3))
@@ -2641,38 +2635,6 @@ color-color
 
 
 ;; string-nodes
-
-(let ((rule-chain-indices nil))
-  (defr
-	(defl xprint (x) nil)
-	(dolist (x (! (g query) '((?r type rule)(?r name ?n)) '(?r ?n)))
-	  (let ((rule (first x)))
-		(let ((name (second x)))
-		  (let ((r (! (g make-rule-graph) rule)))
-			(mapc (lambda (x) (! (g rem-edge) (list rule 'rg x))) (! (g hget-all) rule 'rg))
-			(! (g add-edge) (list rule 'rg r))
-			(let ((root-vars (mapcad (lambda (x) (when (is-var-name x) x)) (! (r get-root-vars)))))
-			  (let ((root-var (first root-vars)))
-				(let ((conn (! (r rule-is-connected-via-vars))))
-				  (let ((rule-covered (set-equal (! (r get-all-edges)) (! (r get-edges-from-chains)))))
-					(let ((rule-det (= (or (gethash name (! (g get-match-count-hash))) 0) 1)))
-					  (print (list '************* 'rule rule name root-var conn rule-covered rule-det))
-					  (when root-var
-						(print (list 'bipseq (! (g bipartite-breadth-rule-walk-seq) r root-var))))
-					  (xprint (list 'rule-chains (! ((! (r get-chains)) as-list))))
-					  (xprint (list 'rule-chain-indices (! ((! (r get-chains)) inputs))))
-					  (setq rule-chain-indices (hunion rule-chain-indices (mapcar (lambda (x) (rest x)) (! ((! (r get-chains)) inputs)))))
-					  (! (r bipartite-breadth-rule-walk)
-					  ;; (! (r bipartite-depth-rule-walk)
-						 root-var
-						 :result-fcn (lambda (bnode level)
-									   (when (or (is-var-name bnode)
-												 (is-edge bnode))
-										 (print (list bnode (/ (- level 1) 2)))))))))))))))
-	(xprint (list 'all-rule-chain-indices rule-chain-indices (length rule-chain-indices)))
-	(let ((data-chain-indices (mapunion (lambda (x) (list (rest x))) (! ((! (g get-chains)) inputs)))))
-	  (xprint (list 'all-data-chain-indices data-chain-indices (length data-chain-indices)))))
-  nil)
 
 ;; tree-next-rule det
 
@@ -3385,11 +3347,45 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 	;; (! (g trace-rule) 'xis)
 	(! (g execute-global-all-objs-loop))))
 
+
+;;;
+
+
+(let ()
+  (let ((all-nodes (! (g get-all-nodes))))
+	(let ((r (! (g query) '((?r type rule)(?r name tree-next-rule)) '?r)))
+	  (let ((rg (! (g make-rule-graph) r)))
+		(let ((subqets (! (rg all-subqets))))
+		  (dolist (node all-nodes)
+			(let ((vars (mapcad (lambda (x) (when (is-var-name x) x)) (! (rg get-all-nodes)))))
+			  (let ((qets (mapcad (lambda (qet) (when (> (length qet) 1) (! (g get-edges-from-subqet) qet)))
+								  (dedup-list 
+								   (mapcar (lambda (qet)
+											 (mapcar (lambda (n) (if (memq n vars) node n)) qet))
+										   subqets)))))
+				(print (list node qets))))))))))
+
+;; Print each node and its degree (number of edges containing node)
+
+
+(dolist (x (sort (mapcar (lambda (node)
+						   (list node (length (! (g get-edges) node)) (! (g hget) node 'type)))
+						 (! (g get-all-nodes)))
+				 (lambda (x y) (> (second x) (second y)))))
+  (print x))
+
+
+
+
+
+
 ;;
 ;; Accumulation of useful queries
 ;;
 
 (! (g query) '((?r type rule)(?r name ?n)))
+
+(! (g query) '((?r type rule)(?r name ?n)(?r file ?f)))
 
 (! (g query) '((?r type rule)(?r name rule-30-center)(?r pred ?*p)(?r add ?*a)(?r del ?*d)) :edges)
 

@@ -234,9 +234,9 @@
 			  ;; matched-edges
 			  ;; e-filter-by-common-nodes
 			  ;; rule-has-failed-enough
-			  ;; queue-node
+;;			  queue-node
 			  ;; push-tail
-			  ;; pop-head
+;;			  pop-head
 			  ;; push-head
 			  ;; pop-tail
 			  ;; remove

@@ -207,8 +207,52 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
  (del
   (global-node rule ?this-rule)))
 
+;; Needs work: redundant triggering!
+;; Perhaps: rule leaves behind another rule that detects if deleted stuff comes back
+
+;; 10/20/23 -- This looks very interesting! The main rule,
+;; rule-30-max-prune, sometimes needs to be re-invoked, since rules
+;; which need to be pruned can be added to the node again. And that
+;; only happens on exec-all since the only pred is (?x max). So rather
+;; than leave rule-30-max-prune there to be invoked over and over, we
+;; replace it with a rule that detects when rule-30-next rules (via
+;; rule-30-next-rule-obj) have been added, and reinstates
+;; rule-30-max-prune, thus getting rid of the rules. Should no more
+;; such rules be added, we just have the single
+;; rule-30-max-prune-rules-added hanging off the last max node.
+;;
+;; This is a good exercise using nested rules and rthe "?this.."
+;; indicators to refer to the rules at different levels,
+
 (rule
  (name rule-30-max-prune)
+ (local)
+ (pred
+  (?x max))
+ (add
+  (print rule-30-max-prune ?x)
+  ;; (?x xis-not rule-30-next-rule-obj)
+  (?x rule (rule
+			(name rule-30-max-prune-rules-added)
+			(pred
+			 (rule-30-next-rule-obj has rule ?r)
+			 (?x rule ?r))
+			 (add
+			  (print rule-30-max-prune-rules-added ?x ?r)
+			  (?x rule ?this-rule))						;; Yes, needs to add rule-30-max-prune
+			 (del
+			  (?this-obj-1 rule ?this-rule-1)			;; Delete rule-30-max-prune-rules-added
+			  ;; (...)									;; More dels are added by rule-30-max-prune-opt
+			  ))))
+ (del
+  (?this-obj rule ?this-rule)							;; Delete rule-30-max-prune
+  )
+ )
+
+(comment
+(rule
+ (name rule-30-max-prune)
+ ;; (disabled)
  (local)
  (pred
   (?x max))
@@ -220,6 +264,8 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   ;; (?this-obj rule ?this-rule)		;; Needs to be invoked more than once!
   )
  )
+)
+
 
 (rule
  (name rule-30-max-prune-opt-gen)
