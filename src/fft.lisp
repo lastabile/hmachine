@@ -131,6 +131,8 @@
   (?nn1 rule ?even-next)
   (?nn1 rule ?odd-new)
   (?nn1 rule ?this-rule)
+
+  (?nn1 likes level-zero)		;; Assure level-zero is queued
   )
  (del
   (?this-obj rule ?this-rule)
@@ -197,6 +199,8 @@
   (?nn1 rule ?even-next)
   (?nn1 rule ?even-new)
   (?nn1 rule ?this-rule)
+
+  (?nn1 likes level-zero)		;; Assure level-zero is queued
   )
  (del
   (?this-obj rule ?this-rule)
@@ -548,7 +552,8 @@
   (?y rule ?odd-new)
   (?odd-new name odd-new))
  (add
-  (print level-zero-rule ?x ?y))
+  (print level-zero-rule ?x ?y)
+  (?x junk ?y))		;; Force an add for testing !!!!!!!!!!!
  (del
   (?y rule ?odd-new)
   (?y rule ?even-new)

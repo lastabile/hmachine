@@ -2620,6 +2620,33 @@ color-color
 	   (! (d gv-to-image) "y" :edit-svg nil))))
   )
 
+
+(let ()
+  (setq x (! (g edge-trace-graph) 
+			 :make-new-graph t
+			 :rules-fcn (lambda (r) t)
+			 ;; :nodes '(level sigma rule-30-next rule-30-top)
+			 :trim-dangling-adds-and-preds nil
+			 ))
+  (! (x read-rule-file) "edge-trace-trim-rules.lisp")
+  (time (with-redirected-stdout "y2"
+								(lambda (std)
+								  (! (x execute-global-all-objs-loop)))))
+  (! (x read-rule-file) "edge-trace-rules.lisp")
+  ;;  (! (x trace-rule) 'edge-trace-add-trim)
+  (time (with-redirected-stdout "y3"
+								(lambda (std)
+								  (! (x execute-global-all-objs-loop)))))
+  (let ((d (make-dumper)))
+	(! (d set-graph) x)
+	(! (d dump-gv-edges) "y.gv"
+	   :rules nil 
+	   :emit-legend nil
+	   :gv-graph-props "rankdir=LR;"  ;; "ranksep=5.0;"
+	   :attrs '(d p a #| ae ar pe pr am p d r an pn q e rn |#))
+	(! (d gv-to-image) "y" :edit-svg t))
+  )
+
 ;; Ordering of all rules wrt edges added
 
 (let ((r nil))

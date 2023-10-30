@@ -125,11 +125,11 @@
 					(setq pos-edge-hash (make-hash-table :test #'equal))
 					(setf (gethash pos pos-hash) pos-edge-hash))
 				  (setf (gethash edge pos-edge-hash) edge)))
-			  (log-stat 'node-dim (length (get-edges node)))
+			  ($comment (log-stat 'node-dim (length (get-edges node))))
 			  node))
 		  (let ((e (gethash edge edgelist)))
 			(when (null e)
-			  (log-stat 'edge-size (length edge))
+			  ($comment (log-stat 'edge-size (length edge)))
 			  (setq e edge)
 			  (setf (gethash edge edgelist) edge)
 			  (let ((i 0))
@@ -1025,8 +1025,8 @@
 	  (defm clear-queue ()
 		(setq obj-queue (make-queue)))
 
-	  ;; Do a straight execution of the queue, popping off the head, *except* if the obj exec succeeds, re-queue the
-	  ;; obj. 
+	  ;; Do a straight execution of the queue, popping off the head, *however* if the obj exec succeeds, re-queue the
+	  ;; obj.
 	  ;;
 	  ;; re-queue-behavior
 
@@ -1619,7 +1619,7 @@
 					(let ((all-nodes (hash-table-value-to-list all-node-hash)))
 					  (let ((new-nodes (hash-table-value-to-list new-node-hash)))
 						(let ((rule-neighborhood-nodes (! (self get-rule-neighborhood) all-nodes)))
-						  (let ((nodes-with-rules (mapcad (lambda (node)
+						  (let ((nodes-with-rules (mapcad (lambda (node)									;; BUG?!!! global rules bypassed?
 															(when (hget node 'rule)
 															  node))
 														  all-nodes)))
@@ -1951,9 +1951,10 @@
 								  )
 								(setq matched-edges-list x-matched-edges-list)
 								(setq deleted-edges x-deleted-edges)
-								(when (or m
-										  deleted-edges)
-								  (log-stat 'new-edge-rule rule-name))
+								($comment
+								 (when (or m
+										   deleted-edges)
+								   (log-stat 'new-edge-rule rule-name)))
 								(when deleted-edges
 								  (dolist (del-edge deleted-edges)
 									(! (edge-to-trace insert) del-edge (list 'del seqno rule-node rule-name obj-node))))
@@ -1961,7 +1962,7 @@
 									(let ()
 									  (setq match-status :new-edges)
 
-									  ($nocomment
+									  ($comment
 									   (log-stat 'entropy (edge-asc-entropy))
 									   (log-stat 'dist (edge-asc-dimension-dist)))
 
@@ -2003,7 +2004,7 @@
 											   (add-edge (list rule-node 'root-var root-var)))))))
 									  
 									  (! (rule-stats update-new-edges) rule-node)
-									  (log-stat 'new-edge-by-rule 5000)
+									  ($comment (log-stat 'new-edge-by-rule 5000))
 									  (update-new-edges-max-expand-len rule-node)
 									  (setq r t))
 									(let ()
@@ -3537,7 +3538,7 @@
 	  ;;   Maybe develop a dump-stat file, which has a bunch of things over time
 
 	  (defm update-last-expand-len (rule-node len)
-		(log-stat 'expand len)
+		($comment (log-stat 'expand len))
 		(let ((entry (get-entry rule-node)))
 		  (setf (rule-stats-entry-last-expand-len entry) (max (rule-stats-entry-last-expand-len entry) len))
 		  nil))
@@ -3545,7 +3546,7 @@
 	  (defm update-new-edges-max-expand-len (rule-node)
 		(let ((entry (get-entry rule-node)))
 		  (setf (rule-stats-entry-new-edges-max-expand-len entry) (max (rule-stats-entry-new-edges-max-expand-len entry) (rule-stats-entry-last-expand-len entry)))
-		  (log-stat 'expand-max (rule-stats-entry-new-edges-max-expand-len entry))
+		  ($comment (log-stat 'expand-max (rule-stats-entry-new-edges-max-expand-len entry)))
 		  nil))
 
 	  )))
@@ -4499,7 +4500,7 @@
 ;; properly, but a large rule-30 rule-dep exec fails with explosion issues.
 
 (let ((h (make-hash-table :test #'equal)))
-  (defun new-cross-aux2 (envs-list &key (record-lengths t))
+  (defun new-cross-aux2 (envs-list &key (record-lengths t) rule-trace-info)
 	(timer 'cross-aux2
 	  (lambda ()
 		(let ((envs-list (sort envs-list (lambda (x y) (< (length x) (length y))))))
