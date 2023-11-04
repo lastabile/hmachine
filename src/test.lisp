@@ -3418,3 +3418,5 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 
 (! (g query) '((?r type rule)(?r name ?n)(?r add ?x rule-30-next ?y)))
 
+(! (g query) '((?r1 type rule)(?r1 name ?n1)(?r2 type rule)(?r2 name ?n2)(?r1 attach-to ?u)(?r1 pred ?x ?a ?y)(?r2 add ?z ?a ?t)))
+

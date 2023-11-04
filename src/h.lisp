@@ -62,7 +62,7 @@
 ;;							    root-var analysis to assume there is no heuristic.
 ;;
 ;; match-perf -- Improve match perf by looking at the various pieces, e.g., poss-match. First we've shorted out
-;;					 scan-and-subst, and everything seems to be faster. This trag is related to tghe previous two,. IN
+;;					 scan-and-subst, and everything seems to be faster. This tag is related to the previous two, in
 ;;					 particular, how we handle root vars is critical to perf. But also, we'll need to balance how we
 ;;					 approach partial match with the desire to fail quickly if a full match is not possible.
 ;;
@@ -2945,38 +2945,55 @@
 								  (not (is-var-name (third pred)))))
 						(return-from b pred)))))
 
-				(let ()
+				(defl check-obj-qets (obj-node rulegraph)
+				  (block b
+					(let ((pred-consts (! (rulegraph get-pred-consts))))
+					  (dolist (const pred-consts)
+						(when (or (qet-exists (list obj-node const))
+								  (qet-exists (list const obj-node)))
+						  (return-from b t)))
+					  nil)))
+
+				(defl check-pred-const-obj-nodes-intersection (obj-node rule-node)
 				  (let ((obj-edges (get-edges obj-node)))
 					(let ((obj-nodes (nodes obj-edges)))
 					  (let ((rule-comps (get-rule-components rule-node)))
 						(let ((preds (second (filter-new-node-pred-edges (! (rule-comps preds))))))
 						  (let ((pred-const-nodes (get-rule-consts-pred preds)))
 							(let ((ipo (intersect pred-const-nodes obj-nodes)))	;; all-var-mod: Change this to (let ((ipo obj-nodes))...) to enable all-vars
-							  (let ((has-rest-vars (block b (mapc (lambda (pred) (when (has-rest-var pred) (return-from b t))) preds) nil)))
-								(lambda (root-var) ;; Returns pos-match = {t, nil}
-								  (timer 'possible-match
-									(lambda ()
-									  (block b
-										(let ((r 
-											   (and ipo
-													(or (is-var-name root-var)
-														(equal root-var obj-node))
-													(let ((root-preds (get-rule-preds-root preds root-var)))
-													  (let ((root-pred-const-nodes (get-rule-consts-pred root-preds)))
-														(let ((pred-qets-match (check-rule-preds-root-qets root-preds root-var obj-node)))
-														  (when am-traced
-															(print (list 'pmf1 root-var preds root-preds root-pred-const-nodes obj-nodes obj-node obj-edges pred-qets-match)))
-														  (and
-														   pred-qets-match
-														   (= (length (intersect root-pred-const-nodes obj-nodes))
-															  (length root-pred-const-nodes))
-														   )))))))
-										  (let ((r (or r has-rest-vars)))
-											;; Not clear which of these stats is better
-											(gstat 'possible-match-true  (lambda (x y) (+ x y)) (lambda () (if r 1 0)))
-											(gstat 'possible-match-false (lambda (x y) (+ x y)) (lambda () (if r 0 1)))
-											;; (bool-timer 'possible-match-true 'possible-match-false (lambda () r))
-											r)))))))))))))))))))
+							  ipo)))))))
+				
+				(let ()
+				  (let ((ipo (check-pred-const-obj-nodes-intersection obj-node rule-node)))
+					(let ((rule-comps (get-rule-components rule-node)))  ;; Note calls here redundant wrt check-pred-const-obj-nodes-intersection
+					  (let ((preds (second (filter-new-node-pred-edges (! (rule-comps preds))))))
+						(let ((has-rest-vars (block b (mapc (lambda (pred) (when (has-rest-var pred) (return-from b t))) preds) nil)))
+						  (lambda (root-var) ;; Returns pos-match = {t, nil}
+							(timer 'possible-match
+							  (lambda ()
+								(block b
+								  (let ((r 
+										 (and ipo
+											  (or (is-var-name root-var)
+												  (equal root-var obj-node))
+											  (let ((obj-edges (get-edges obj-node))) ;; Note calls here redundant wrt check-pred-const-obj-nodes-intersection
+												(let ((obj-nodes (nodes obj-edges)))
+												  (let ((root-preds (get-rule-preds-root preds root-var)))
+													(let ((root-pred-const-nodes (get-rule-consts-pred root-preds)))
+													  (let ((pred-qets-match (check-rule-preds-root-qets root-preds root-var obj-node)))
+														(when am-traced
+														  (print (list 'pmf1 root-var preds root-preds root-pred-const-nodes obj-nodes obj-node obj-edges pred-qets-match)))
+														(and
+														 pred-qets-match
+														 (= (length (intersect root-pred-const-nodes obj-nodes))
+															(length root-pred-const-nodes))
+														 )))))))))
+									(let ((r (or r has-rest-vars)))
+									  ;; Not clear which of these stats is better
+									  (gstat 'possible-match-true  (lambda (x y) (+ x y)) (lambda () (if r 1 0)))
+									  (gstat 'possible-match-false (lambda (x y) (+ x y)) (lambda () (if r 0 1)))
+									  ;; (bool-timer 'possible-match-true 'possible-match-false (lambda () r))
+									  r))))))))))))))))
 
 	  ;; Returns rulegraph, a subclass of graph. See that class for comments.
 
@@ -4018,7 +4035,7 @@
 	(defm has-rest-vars ()
 	  (block b (mapc (lambda (pred) (when (! (g has-rest-var) pred) (return-from b t))) (get-all-edges)) nil))
 
-	;; T if any pred has at lesat two consecutive vars
+	;; T if any pred has at least two consecutive vars
 	(defm has-seq-vars ()
 	  (block b
 		(defr
@@ -4037,6 +4054,15 @@
 				(doloop pred 0))
 			  nil))))
 
+	(defm get-pred-consts ()
+	  (let ((r nil))
+		(dolist (pred (get-all-edges))
+		  (when (not (eq (second pred) 'new-node))
+			(dolist (node pred)
+			  (when (not (is-var-name node))
+				(setq r (cons node r))))))
+		(dedup-list r)))
+	
 	))
 
 (defc rulegraph-adds objgraph (graph rule-node)
