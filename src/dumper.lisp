@@ -720,7 +720,7 @@
 ;;
 
 (defc gnuplot nil nil
-  (let ((gp-prog "C:/Program Files (x86)/gnuplot/bin/gnuplot.exe"))
+  (let ((gp-prog "C:/Program Files/gnuplot/bin/gnuplot.exe"))
 	  ;; Prints out the command line need to get the info out of the transcript file, and prints the needed gnuplot
 	  ;; commands to produce a window per graph
 	  (defm plot-log (info &key (do-grep t))
@@ -787,7 +787,6 @@
 			 (num-edges-from-subqet               2 :perf)
 			 (get-edges-from-subqet               2 :perf)
 			 (count-edges-from-subqet             2 :perf)
-			 (scan-and-subst                      2 :perf)
 			 (subst-match                         2 :perf)
 			 (cross-aux2                          2 :perf)
 			 (match-pat-obj-edge-lists            2 :perf)

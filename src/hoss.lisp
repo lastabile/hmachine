@@ -205,7 +205,6 @@
 			  ;; x-match-all-pat-obj-edge-lists
 			  ;; match-one-edge
 			  ;; any-binding-invalid
-			  ;; env-no-conflict-dedup
 			  ;; get-children
 			  ;; get-rule-children
 			  ;; bipartite-breadth-rule-walk

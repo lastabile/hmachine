@@ -25,3 +25,6 @@
 
 (defun version-compile-file (file warnings)
   (compile-file file :warnings warnings))
+
+(defvar *cl-type* :clisp)
+

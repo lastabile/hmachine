@@ -423,7 +423,11 @@
 		(+ (h (first l)) (h (rest l))))))
 	(h l)))
 
-(define-hash-table-test set-hash-test set-equal set-hash)
+(let ((set-hash-test-name nil))
+  (defun set-hash-test ()
+	(when (null set-hash-test-name)
+	  (setq set-hash-test-name (hdefine-hash-table-test #'set-equal #'set-hash)))
+	set-hash-test-name))
 
 ;; l1 \ l2
 ;;
@@ -687,6 +691,24 @@
 			   (setq r (cons v r)))
 			 h)
 	r))
+
+;; Hash table test defs -- implementation-dependent
+
+(defun hdefine-hash-table-test (equality-fcn hash-fcn)
+  (let ((equality-fcn-name (gensym)))
+	(let ((hash-fcn-name (gensym)))
+	  (setf (symbol-function equality-fcn-name) equality-fcn)
+	  (setf (symbol-function hash-fcn-name) hash-fcn)
+	  (let ((test-name equality-fcn-name))
+		(case (cl-type)
+		  (:clisp
+		   (eval `(define-hash-table-test ,test-name ,equality-fcn-name ,hash-fcn-name)))
+		  (:sbcl
+		   (eval `(define-hash-table-test ,equality-fcn-name ,hash-fcn-name)))
+		  (:abcl
+		   nil)) 
+		test-name))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Gather
 ;;

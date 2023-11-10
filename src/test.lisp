@@ -18,7 +18,10 @@
 				 :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t
 				 :attrs '(
 						  ;; These are the standard attrs to show:
-						  fft-hb fft-comb odd  even  rule30val rule-30-next up delta3 delta3-rand d next-color
+
+						  fft-hb 
+						  ;; fft-hb fft-comb odd  even  rule30val rule-30-next up delta3 delta3-rand d next-color
+						  
 						  ;; These are common extras:
 						  ;; zero d-casz center-up next casz-ref casz-ref1 copy-array-struct
 						  ;; These I played with using the animation:
@@ -68,11 +71,15 @@
 							 (del
 							  (global-node rule ?this-rule))))
 		;; (! (g break-rule) 'fft-comb-rule-next 'ace-new-edges (lambda () (gv)))
-		(time
-		 (timer 'main
-		   (lambda ()
-			 (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node))))))))))
-		
+		;; (! (g break-rule) 'fft-rule 'ace-new-edges (lambda () (gv)))
+		(let ((fcn (lambda (xstdout)
+					 (timer 'main
+					   (lambda ()
+						 (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node))))))))
+		  (time
+		   (if t
+			   (funcall fcn nil)
+			   (with-redirected-stdout "fft.txt" fcn))))))))
 
 
 
@@ -587,11 +594,11 @@
 		  ;; (! (g execute-global-all-objs-loop)) ;; Temp! until we get queuing work right.
 		  ))))
 
-  ($nocomment 
+  ($nocomment
    (f 20))								;; The basic single run
 
   ;; Perf runs
-  ;; Nat to 200 
+  ;; Nat to 100
   ($comment								;; Perf runs
    (with-open-file (s "feperf" :direction :output)
 	 (let ((std *standard-output*))
