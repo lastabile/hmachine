@@ -1499,12 +1499,27 @@ Performance is good but not great.
 Biggest problem is memory -- does not seem to allow sizes more than 2G.
 Debugging faciitiles better than other CLs.
 
+
+
 abcl -- Armed Bear Common Lisp
 java -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
 Does not handle ^C interrupt -- exits. Thus it's only good for benchmarks.
 Very fast CL.
 4G max heap:
 java -Xmx4000m -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
+
+Laptop:
+
+ANT_HOME=C:\Users\lstab\apache-ant-1.10.14
+JAVA_HOME=C:\Program Files\Java\jdk-21
+
+Built abcl:
+"c:\Program Files\Java\jdk-21\bin\java.exe" -jar c:\Users\lstab\abcl-src-1.9.2\dist\abcl.jar
+
+To build abcl:
+cd c:\Users\lstab\abcl-src-1.9.2
+ant -f build.xml
+
 
 sbcl -- Steel Bank Common Lisp
 

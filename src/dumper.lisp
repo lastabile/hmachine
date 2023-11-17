@@ -616,7 +616,7 @@
 ;; Experiments so far show that 1001 levels is pushing it for browsers and is really slow. The svg file in that case is a
 ;; good 74M.  A good large size which is tolerably slow is 401.
 
-(defun ca-to-svg (file n rule-no &key colorized)
+(defun ca-to-svg (file n rule-no &key colorized (viewbox '(10000.0 10000.0)) xlate)
   (with-open-file (s file :direction :output)
 	(defr
 	  (defl make-rule-array (rule-no)
@@ -656,50 +656,55 @@
 							  (+ x rad) (+ y rad)
 							  (+ x rad) (- y rad))
 					  (format s "</g>~%")))))))))
-	  (let ((header '("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
-					  "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\""
-					  "\"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">"
-					  "<svg"
-					  "viewBox=\"0.00 0.00 4000.00 4000.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
-					  "<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  2000.00 30.00)\">")))
-		(dolist (h header)
-		  (format s "~a~%" h))
-		(let ((r (make-rule-array rule-no)))
-		  (let ((color-array (make-rule-color-array)))
-			(let ((a0 (make-array n :initial-element 0)))
-			  (let ((a1 (make-array n :initial-element 0)))
-				(let ((ca (make-array n :initial-element 'cyan)))
-				  (let ((c (/ (- n 1) 2)))
-					(setf (aref a0 c) 1)
-					(let ((default-l 0))
-					  (let ((default-r 0))
-						(dotimes (j (/ (- n 1) 2))
-						  ;; (print a0)
-						  (write-line a0 ca j)
-						  (let ()
-							(dotimes (i n)
-							  (cond
-							   ((= i 0)
-								(let ((is-all-x (and (= default-l (aref a0 0) (aref a0 1))
-													 (= (aref r default-l (aref a0 i) (aref a0 (+ i 1))) (- 1 default-l)))))
-								  (setf (aref a1 i) (aref r default-l (aref a0 i) (aref a0 (+ i 1))))
-								  (setf (aref ca i) (aref color-array default-l (aref a0 i) (aref a0 (+ i 1))))
-								  (when is-all-x
-									(setq default-l (- 1 default-l)))))
-							   ((= i (- n 1))
-								(let ((is-all-x (and (= (aref a0 (- i 1)) (aref a0 i) default-r)
-													 (= (aref r (aref a0 (- i 1)) (aref a0 i) default-r) (- 1 default-r)))))
-								  (setf (aref a1 i) (aref r (aref a0 (- i 1)) (aref a0 i) default-r))
-								  (setf (aref ca i) (aref color-array (aref a0 (- i 1)) (aref a0 i) default-r))
-								  (when is-all-x
-									(setq default-r (- 1 default-r)))))
-							   (t 
-								(setf (aref a1 i) (aref r (aref a0 (- i 1)) (aref a0 i) (aref a0 (+ i 1))))
-								(setf (aref ca i) (aref color-array (aref a0 (- i 1)) (aref a0 i) (aref a0 (+ i 1)))))))
-							(dotimes (i n)
-							  (setf (aref a0 i) (aref a1 i)))))))))))))
-		(format s "</g>~%")
-		(format s "</svg>~%")))))
+	  (let ((vx (first viewbox)))
+		(let ((vy (second viewbox)))
+		  (let ((xlate (or xlate (/ vx 2))))
+			(let ((header `("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>"
+							"<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\""
+							"\"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">"
+							"<svg"
+							,(format nil "viewBox=\"0.00 0.00 ~a ~a\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">" vx vy)
+							;; "viewBox=\"0.00 0.00 20000.00 20000.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
+							,(format nil "<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  ~a 30.00)\">" xlate))))
+							;; "<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(  10000.00 30.00)\">")))
+			  (dolist (h header)
+				(format s "~a~%" h))
+			  (let ((r (make-rule-array rule-no)))
+				(let ((color-array (make-rule-color-array)))
+				  (let ((a0 (make-array n :initial-element 0)))
+					(let ((a1 (make-array n :initial-element 0)))
+					  (let ((ca (make-array n :initial-element 'cyan)))
+						(let ((c (/ (- n 1) 2)))
+						  (setf (aref a0 c) 1)
+						  (let ((default-l 0))
+							(let ((default-r 0))
+							  (dotimes (j (/ (- n 1) 2))
+								;; (print a0)
+								(write-line a0 ca j)
+								(let ()
+								  (dotimes (i n)
+									(cond
+									 ((= i 0)
+									  (let ((is-all-x (and (= default-l (aref a0 0) (aref a0 1))
+														   (= (aref r default-l (aref a0 i) (aref a0 (+ i 1))) (- 1 default-l)))))
+										(setf (aref a1 i) (aref r default-l (aref a0 i) (aref a0 (+ i 1))))
+										(setf (aref ca i) (aref color-array default-l (aref a0 i) (aref a0 (+ i 1))))
+										(when is-all-x
+										  (setq default-l (- 1 default-l)))))
+									 ((= i (- n 1))
+									  (let ((is-all-x (and (= (aref a0 (- i 1)) (aref a0 i) default-r)
+														   (= (aref r (aref a0 (- i 1)) (aref a0 i) default-r) (- 1 default-r)))))
+										(setf (aref a1 i) (aref r (aref a0 (- i 1)) (aref a0 i) default-r))
+										(setf (aref ca i) (aref color-array (aref a0 (- i 1)) (aref a0 i) default-r))
+										(when is-all-x
+										  (setq default-r (- 1 default-r)))))
+									 (t 
+									  (setf (aref a1 i) (aref r (aref a0 (- i 1)) (aref a0 i) (aref a0 (+ i 1))))
+									  (setf (aref ca i) (aref color-array (aref a0 (- i 1)) (aref a0 i) (aref a0 (+ i 1)))))))
+								  (dotimes (i n)
+									(setf (aref a0 i) (aref a1 i)))))))))))))
+			  (format s "</g>~%")
+			  (format s "</svg>~%"))))))))
 
 ;; The transcript/log from perf -- look for fftperf and rule30perf in test.lisp -- has three main sections of interet,
 ;; the perf-stats output, the rule-stats output, and the output of (room t). Perf indiciators are marked with "||" and

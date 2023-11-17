@@ -1,9 +1,6 @@
 
 ;; Not done!
 
-(sb-ext:unlock-package 'common-lisp)
-(sb-ext:unlock-package 'sb-ext)
-
 (defun version-file-src-ext ()
   "lisp")
 
@@ -19,4 +16,4 @@
   (funcall thunk))
 
 (defun version-compile-file (file warnings)
-  (compile-file file :warnings warnings))
+  (compile-file file))
