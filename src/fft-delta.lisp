@@ -37,7 +37,8 @@
  (add
   (print fft-rule-delta2 ?this-obj ?y)
   (?y fcn-color ?s)
-  (?y color ?t))
+  (?y color ?t)
+  )
  (del
   ;; (?this-obj rule ?this-rule)
   ))
@@ -57,18 +58,15 @@
   (print fft-rule-delta3 ?this-obj ?x ?y ?c)
   (?x delta3 ?y)
   (?x delta3-rand ?r)
-  (?y inv-delta3 ?x))
+  (?y inv-delta3 ?x)
+  )
  (del
   ;; (?this-obj rule ?this-rule)
   ))
 
 (rule
  (name fft-rule-delta4)		;; Propagate color and rand along weave-next
- (attach-to weave-next)
- (attach-to color)
- (attach-to rand)
- (attach-to center-up)
- (attach-to next-color)
+ (attach-to center-up)		;; Attching here Appears to help most with queuing
  (pred
   (?x weave-next ?y)
   (?x color ?c)
@@ -78,6 +76,49 @@
  (add
   (print fft-rule-delta4 ?this-obj ?x ?y ?c ?s)
   (?y color ?s)
-  (?y rand ?u)))
+  (?y rand ?u)
+  )
+)
 
+(rule
+ (name weave-next-rule)
+ (attach-to weave-next-root)
+ (pred
+  (?p0 weave-next-root)
+  (?p0 odd ?x00)
+  (?p0 even ?x01)
+  (?p1 odd ?x10)
+  (?p1 even ?x11)
+  (?x00 weave-next ?x01)
+  (?x10 weave-next ?x11)
+  (?p0 weave-next ?p1)
+  )
+ (add
+  (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
+  (?x01 weave-next ?x10)
+  (?p1 weave-next-root)
+  )
+ (del
+  (?p0 weave-next-root)))
 
+(rule
+ (disabled)
+ (name weave-next-rule-paste)
+ (attach-to weave-next-root)
+ (pred
+  (?p0 weave-next-root)
+  (?p0 odd ?x00)
+  (?p0 even ?x01)
+  (?p1 odd ?x10)
+  (?p1 even ?x11)
+  (a wn b) ;; (?x00 weave-next ?x01)
+  (?x10 weave-next ?x11)
+  (?p0 weave-next ?p1)
+  )
+ (add
+  (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
+  (a wn b) ;; (?x01 weave-next ?x10)
+  (?p1 weave-next-root)
+  )
+ (del
+  (?p0 weave-next-root)))

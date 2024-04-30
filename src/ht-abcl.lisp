@@ -10,10 +10,11 @@
 (defun version-compile-file (file warnings)
   (compile-file file))
 
-(defvar *cl-type* :abcl)
-
 (defun version-suppressor (warnings thunk)
-  (funcall thunk))
+  (let ((*suppress-compiler-warnings* (not warnings)))
+	(funcall thunk)))
 
 (defun version-compile-file (file warnings)
   (compile-file file))
+
+(defvar *cl-type* :abcl)

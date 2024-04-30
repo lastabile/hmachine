@@ -77,7 +77,7 @@
   (?r not ?*rest-not)
   )
  (add
-  (print copy-rule-rule ?root-var ?this-obj ?this-rule ?name ?r  rest-pred= ?*rest-pred rest-add= ?*rest-add rest-del= ?*rest-del rest-not= ?*rest-not)
+  (print copy-rule-rule ?root-var ?this-obj ?this-rule ?name ?r ?y rest-pred= ?*rest-pred rest-add= ?*rest-add rest-del= ?*rest-del rest-not= ?*rest-not)
   (?y type rule)
   (?y name ?name)
   (?y root-var ?x-root-var)

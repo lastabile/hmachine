@@ -1,3 +1,4 @@
+
 (rule
  (name ev-init-gen)
  (attach-to global-node)
@@ -142,7 +143,6 @@
 (rule
  (name even-next)
  (local)
- ;; (attach-to even is-elem-of ref next)
  (pred
   (?a even ?a1)
   (?ae0 is-elem-of ?a1)
@@ -158,7 +158,7 @@
   (print even-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
   (?ae0 next ?ae1))
  (del
-  (?this-obj rule ?this-rule) ;; Leaving in these dels looks ok
+  ;; (?this-obj rule ?this-rule) ;; Back and forth on keeping this in!
   ))
 
 (rule
@@ -210,7 +210,6 @@
 (rule
  (name odd-next)
  (local)
- ;; (attach-to odd is-elem-of ref next)
  (pred
   (?a odd ?a1)
   (?ae0 is-elem-of ?a1)
@@ -226,9 +225,8 @@
   (print odd-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
   (?ae0 next ?ae1))
  (del
-  (?this-obj rule ?this-rule)		;; Leaving in these dels looks ok
+  ;; (?this-obj rule ?this-rule) ;; Back and forth on keeping this in!
   ))
-
 
 (rule
  (name even-zero)
@@ -315,23 +313,6 @@
   (print even-new-rule-propagate ?a ?e0)
   (?e0 rule ?even-new)))
 
-(rule
- (name weave-next-rule)
- (attach-to weave-next)
- (attach-to odd)
- (attach-to even)
- (pred
-  (?p0 odd ?x00)
-  (?p0 even ?x01)
-  (?p1 odd ?x10)
-  (?p1 even ?x11)
-  (?x00 weave-next ?x01)
-  (?x10 weave-next ?x11)
-  (?p0 weave-next ?p1))
- (add
-  (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
-  (?x01 weave-next ?x10)))
-
 ;; Begin copy-array-struct section
 ;; cas == copy-array-struct
 
@@ -347,6 +328,7 @@
   (?nn1 new-node sn1))
  (add
   (print cas-new ?this-obj ?root-var ?a ?a1 ?e0 ?e1 ?nn1)
+  (print cas-new1 ?nn1 ?e0)
   (?nn1 is-elem-of ?a1)
   (?a1 elem ?nn1)
   (?nn1 ref ?e0)
@@ -413,7 +395,7 @@
   (?cas-new add ?e1 rule ?cas-new)
   (?cas-new del ?e0 rule ?cas-new)
   (?cas-new add ?e1 rule ?cas-zero)
-  (?cas-next del ?ae1 rule ?cas-next)
+  ;; (?cas-next del ?ae1 rule ?cas-next)		;; Can't del the rule from here yet! Removed 1/9/24 when did "sequential" tree rules
   ;; (?cas-next del ?e1 rule ?cas-zero)
   )
  (del
@@ -479,9 +461,7 @@
   (?ef1 ?eg1 fft-hb ?ey1)
 
   ;; For display
-
   (?y comb-hb ?ey1)
-  
   )
  (del
   (?this-obj rule ?this-rule)
@@ -583,8 +563,9 @@
   (?x even ?nn1)
   (?x odd ?nn2)
   (?nn1 type array)
-  (?nn2 type array)
   (?nn2 weave-next ?nn1)
+  (?nn2 type array)
+
   (?nn1 oe ?x)
   (?nn2 oe ?x)
   (?nn1 oev 0)
@@ -605,6 +586,7 @@
   (?nn2 local-rule-pool ?p)
   (?nn3 local-rule-pool ?p)
   (?nn4 local-rule-pool ?p)
+
   ;; (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
   ;; (exec ?nn1 ?nn2 ?nn3 ?nn4 ?y)
 )
@@ -615,13 +597,7 @@
  (name fft-top-rule)
  (attach-to fft-top)
  (pred
-
-  (?x fft-top)		;; An experiment in symbol-free matching, i.e., looking for the three
-					;; commented-out edges rather than fft-top, for max locality. Works, but slow.
-  ;; (?x ?n1)
-  ;; (?n1 ?n2)
-  ;; (?n2 ?n3)
-			
+  (?x fft-top)
   (?x odd ?y)
   (?x even ?z)
   (?x rand ?r)
@@ -632,8 +608,11 @@
   (note title "FFT Butterflies with Rule-30 Random Deltas")
   (note fft 2^ ?l points "\\n" rule-30 ?level levels)
   (?y weave-next ?z)
-  (?x weave-next ?y)))
-
+  (?x weave-next ?y)
+  (?x weave-next-root)
+  (?y weave-next-root)
+  (?z weave-next-root)
+  ))
 
 ;; Rule optimizer (for a specific rule). Adds rule propagators.
 ;; Experimental -- note this one adds more rules to a given node than needed.

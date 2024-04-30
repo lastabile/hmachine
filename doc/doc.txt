@@ -836,7 +836,7 @@ x qi y == - Let x1, y1 be the removal of  all elements not common to x and y fro
 
 Thus, we abandon intesection as a model and just talk of common
 subsets, and the intersection/union (meet/join) lattice becomes a
-partial order where meet is not unique, i.e., there is no unqiue
+partial order where meet is not unique, i.e., there is no unique
 common lower bound.
 
 
@@ -1508,6 +1508,23 @@ Very fast CL.
 4G max heap:
 java -Xmx4000m -jar c:\Users\lstabile\abcl-bin-1.4.0\abcl.jar
 
+Note java arrays are int-index, and this only postive 32-bit, so 2G is
+largest number of elements possible in a single array.
+
+I have set heaps large, e.g. 20g below:
+
+		java -Xmx5g LasTest.java
+		Hello World!
+		1073741824
+		42
+		1073741824
+		$ java -Xmx20g LasTest.java
+		Hello World!
+		1073741824
+		42
+		1073741824
+
+
 Laptop:
 
 ANT_HOME=C:\Users\lstab\apache-ant-1.10.14
@@ -1519,6 +1536,47 @@ Built abcl:
 To build abcl:
 cd c:\Users\lstab\abcl-src-1.9.2
 ant -f build.xml
+
+Rosencrantz:
+
+ANT_HOME=C:\Users\lstabile\apache-ant-1.10.14
+JAVA_HOME=C:\Program Files\Java\jdk-21
+
+Built abcl:
+"c:/Program Files/Java/jdk-21/bin/java.exe" -Xmx4000m -jar c:/Users/lstabile/abcl-src-1.9.2/abcl/dist/abcl.jar
+
+"c:\Program Files\Java\jdk-21\bin\java.exe" -Xmx4000m -jar c:\Users\lstabile\abcl-src-1.9.2\abcl\dist\abcl.jar
+
+To build abcl:
+cd c:/Users/lstabile/abcl-src-1.9.2/abcl
+ant -f build.xml
+
+Eclipse:
+
+chmod 0 examples/java-interface due to erronous pickup of BankAccount example as main
+
+"C:\Program Files\Java\jdk-21\bin\javaw.exe" -classpath "C:\Users\lstabile\abcl-src-1.9.2\dist\abcl.jar;C:\Users\lstabile\abcl-src-1.9.2\dist\abcl-contrib.jar" -m abcl/org.armedbear.lisp.Main
+
+"C:\Program Files\Java\jdk-21\bin\javaw.exe" -classpath "C:\Users\lstabile\abcl-src-1.9.2\abcl\build\classes" org.armedbear.lisp.Main
+
+- Had to import into default workspace to get around "module" error
+- Had to set wd to hmachine
+- Issue with redefined memq! Not in clisp; caused recursive loop and out of stack
+- Need macro for impl-spec define, e.g. (when-cl-type :clisp (defun memwq ...))
+- Due to eclipse us enow have two sources!
+
+
+jdb:
+
+Start with listening:
+"C:\Program Files\Java\jdk-21\bin\java.exe" -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=1044 -classpath "C:\Users\lstabile\abcl-src-1.9.2\abcl\build\classes" org.armedbear.lisp.Main
+
+Attach:
+"C:\Program Files\Java\jdk-21\bin\jdb.exe" -connect com.sun.jdi.SocketAttach:hostname=localhost,port=1044
+
+trace go methods 5614
+
+
 
 
 sbcl -- Steel Bank Common Lisp
@@ -2107,7 +2165,7 @@ is to hack with the *print dynamic vars.
 The tag all-var-mod is in the code and the needed changes are marked
 and tests retained. But right now it's disabled.
 
-The idea is that the subgraohs we need to match on are omcpletly
+The idea is that the subgraohs we need to match on are comcpletly
 local, i.e., we have a small max degree of any node, sort of a
 "manifold" constraint.  Then, markers for which we'd normally use
 constant symbols, like attribute names, become local graph patterns,
@@ -2127,18 +2185,18 @@ model. This might be worth pursuing sometime.
 It turns out there are conficting defintions of various orderings in
 math and cs.
 
-Sets: a well-known standard definition, unorderd, unduplicated objects.
+Set: a well-known standard definition, unorderd, unduplicated objects.
 
-Sequences: Tuples.
+Sequence: Tuple.
 
-Subsequence: Any subset of a sequence which retains the sequence order
-	(like the original subqets). So (1 2) ia a subseq of (a 1 b 2 c)
-	CL and some other languages get this wrong, with subseq operations
-	only applying to contiguous subseqs.
+Subsequence: Any subset of a sequence which retains the transitive
+	sequence order (like the original subqets). So (1 2) ia a subseq
+	of (a 1 b 2 c). CL and some other languages get this wrong, with
+	subseq operations only applying to contiguous subseqs.
 
-Strings: Tuples.
+String: Tuples.
 
-Substrings: Contiguous subseqs.
+Substring: Contiguous subseq.
 
 Hypergraph: Unordered edges.
 
@@ -2164,9 +2222,11 @@ lot this way.  This is where the qet system is now and it appears to
 work well. So a qet will be a "string".
 
 Once we go beyond sets, set operations must give way to operations
-more appropriate to srtings (qets). Operations like intersection and union 
-require more elaborate counterparts, and have limited use. Similarly, tuple operations like concat, splicing, etc. are not 
-useful in the H context. The one property used is containment, i.e., is one string a substring of another? This is all we need.
+more appropriate to srtings (qets). Operations like intersection and
+union require more elaborate counterparts, and have limited
+use. Similarly, tuple operations like concat, splicing, etc. are not
+useful in the H context. The one property used is containment, i.e.,
+is one string a substring of another? This is all we need.
 
 ---------------
 Bill Kay
@@ -2187,7 +2247,7 @@ https://math.ryerson.ca/~bkay/gist_propo.pdf,  "Hey Bill, what’s the
 			this way is an oriented k-graph. ..."
 ---------------
 k-uniform HGs -- with ordered edges? Does not seem that way a
-	"k-tuple" in this paper appearts to be just a set of size k.
+	"k-tuple" in this paper appears to be just a set of size k.
 Called "independence sets" in the lit.
   ~/ErdosSetsOfIndependentEdgesOfAHypergraph1976-42.pdf
 	~/Bollobas.pdf
@@ -2222,7 +2282,7 @@ Found some pretty recent papers on this:
 ~/OuvrardAdjacencyAndTensorRepresentationInGeneralHypergraphs.pdf
 
 This is a good overview of the various reps, and in particular
-develops the vairous forms of the adjacency tensor, i.e., Tijk = 1 iff
+develops the various forms of the adjacency tensor, i.e., Tijk = 1 iff
 nodes ni, nj, and nk form an edge.
 
 There are various ways to get it to behave properly for hypergraphs
@@ -2284,12 +2344,12 @@ delete another, the former's success acting as an inhibitor of the
 latter, i.e., it won't even get tested.
 
 This is a form of if-then-else. For instance we can pass a rule that
-operates on leaves down the tree, and each succuss of an
+operates on leaves down the tree, and each success of an
 intermediate-node rule deletes the leaf-based rule, thus forestalling
 testing.
 
 When the deleting rule fails -- because the node is not intermediate
--- the perecuted rule gets a chance at last, and will succeed because
+-- the persecuted rule gets a chance at last, and will succeed because
 now it's being applied to a leaf.
 
 ----------------------------------------------------------
@@ -2327,9 +2387,60 @@ boosts efficiency:
 
 Failure rate is now higher! 
 
-Also, we can now use this behavior to control more easily circulr rule
+Also, we can now use this behavior to control more easily circular rule
 propagation, where when we come around to the starting node no edges
 are added, and thus the rule does not continue to propagate, and the
-rul eis deleted from the starting node, thus forestalling more
+rule is deleted from the starting node, thus forestalling more
 redunndant testing. See the new cas- rules in fft.lisp.
+
+----------------------------------------------------------
+2/13/24 -- Brief foray into quotient sets, pasting maps, genus, and Euler characteristic
+
+An initial look into this area. Inspired by the idea that if you take
+a recursive rule and "paste" an add edge back to a matching pred edge
+(the recursive loop), then the set of rule edges should form an asc
+with at least one hole (at least genus 1). The intuition here is that
+a "flat" rule can be laid out in a manner that's "planar" wrt its
+dimension d but non-planar when edges are pasted together, as in
+making a cylinder or moebius strip. The pasting thus requires
+dimension d+1 to be "planar". Thus a conjecture is that recursion
+always increases the genus of an asc.
+
+Experiments on forms of rules to look at Euler characteristic and
+genus are in test.lisp. Look for "Brief foray into quotient sets..."
+
+I tried using various tools to look at the resulting 2d triangulation
+of these ASCs, but these don't seem to help much, and I need more
+automation and better graphics tools. Used Gephi to look at some
+constructions, but it's pretty awful. Dotty was bad too, but now
+there is not much for gv out there.
+
+The formulas for Euler characteristic (chi) don't seem to be
+consistent in the literature, i.e., I keep getting off-by-one (or two)
+sorts of deltas wrt expectations for chi and the genus (g). The
+formula relating g and chi differs if the surface is orientable vs
+non-orientable, and determining that does not look easy.
+
+Oliver Knill, The energy of a simplicial complex, ~/KnillEnergySimplicialComplex.pdf.
+BUT desired formulas only appear in this summary, the full paper for which I cannot access:
+	https://www.sciencedirect.com/science/article/abs/pii/S0024379520302019
+
+Bjarke Hammersholt Roune and Eduardo Saenz-De-Cabez´On, Complexity And
+Algorithms For Euler Characteristic Of Simplicial Complexes,
+~/RouneAlgsForEulerCharOfSimplicialComplexes.pdf.
+
+Notes from a Stanford course, looks worth pursuing:
+	~/SimplicialComplexesInComputationalTopology.pdf
+	
+The Implementation of the Colored Abstract Simplicial Complex and Its
+Application to Mesh Generation,  Christopher T. Lee, John B. Moody,
+Rommie E. Amaro, J. Andrew Mccammon, And Michael J. Holst, University
+of California San Diego, CA,
+https://dl.acm.org/doi/fullHtml/10.1145/3321515.
+
+Description of chi, table and pics of polyhedra, mobius strips, ASCs, etc:
+	https://en.wikipedia.org/wiki/Euler_characteristic
+
+Closed vs open surfaces (related to genus formula):
+	https://en.wikipedia.org/wiki/Surface_(topology)#Closed_surfaces
 

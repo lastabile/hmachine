@@ -15,4 +15,4 @@
 (defun version-compile-file (file warnings)
   (compile-file file))
 
-(defvar *cl-type* ::sbcl)
+(defvar *cl-type* :sbcl)

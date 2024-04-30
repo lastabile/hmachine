@@ -1,6 +1,3 @@
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; Fundamental macros
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -26,6 +23,32 @@
 
 (defmacro $nocomment (&rest e)
   `(let () ,@e))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Print-tags
+;;
+;; Use old-fashioned short notation ptag and chk -- want a quick way to add these checks.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defvar *print-tags* nil)
+
+(let ((tag-list nil))
+  (defun get-tag-list ()		;; Set of tags accumulated at macroexpand- (i.e., compile-) time. 
+	tag-list)
+  (defmacro chkptag (tag)
+	(let ((tagname (or (and (listp tag) (eq (first tag) 'quote) (second tag)) tag)))
+	  (setq tag-list (union (list tagname) tag-list :test #'equal))
+	  `(and *print-tags*
+			(or (eq *print-tags* t)
+				(memq ,tag *print-tags*)))))
+  (defmacro ptag (tag &rest stuff)
+	(let ((tagname (or (and (listp tag) (eq (first tag) 'quote) (second tag)) tag)))
+	  (setq tag-list (union (list tagname) tag-list :test #'equal))
+	  `(when (and *print-tags*
+				  (or (eq *print-tags* t)
+					  (memq ,tag *print-tags*)))
+		 (print (list ,tag ,@stuff))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Machine and system info
@@ -411,16 +434,15 @@
 	 (length l2)
 	 (length (intersect-with-test l1 l2 :test test))))
 
+;; Calling mod for armed bear extension and using only top-level. Use of mod below should allow optimization to fixnum
+;; only. Note this also works in clisp where they have 24-bit fixnums.
+
 (defun set-hash (l)
   (defr
 	(defl h (l)
-	  (cond
-	   ((null l)
-		0)
-	   ((not (listp l))
-		(sxhash l))
-	   (t
-		(+ (h (first l)) (h (rest l))))))
+	  (if (null l)
+		  0
+		  (mod (+ (sxhash (first l)) (h (rest l)))  most-positive-fixnum)))
 	(h l)))
 
 (let ((set-hash-test-name nil))
@@ -435,6 +457,25 @@
 
 (defun set-subtract (l1 l2 &key (test #'equal))
   (set-difference l1 l2 :test test))
+
+;; Generate all subsets of the elements of l. Lifted from poly.lisp. This is not used in the H-machine proper, but is
+;; useful for calcs when we regard edges as sets, as in euler-char and genus.
+
+(defun subsets (l)
+  (defr
+	(defl within (a l)
+	  (defr
+		(defl within1 (a l)
+		  (let ((r (list (list a))))
+			(dolist (x l)
+			  (setq r (append (list (cons a x)) r)))
+			r))
+		(append l (within1 a l))))
+	(defl subsets1 (l)
+	  (if (null l)
+		  nil
+		  (within (first l) (subsets1 (rest l)))))
+	(cons nil (subsets1 l))))
 
 ;; mapunion and mapsunion, using an optimized internal function named using our old conventions.
 ;; The s in mapsunion means strict, which means return nil if any fcn result is nil
@@ -542,10 +583,10 @@
 ;; Note mapappend defined in hoss.lisp
 ;;
 
-(defun mapcad (fcn list)
+(defun mapcad (fcn xlist)
   (let ((p0 (list nil)))
 	(let ((p p0))
-	  (dolist (l list)
+	  (dolist (l xlist)
 		(let ((v (funcall fcn l)))
 		  (when v
 			(setf (rest p) (list v))
@@ -554,11 +595,18 @@
 		(setf (rest p0) nil)
 		r))))
 
-(defun memq (x l)
-  (member x l :test #'eq))
+(when-cl-type :clisp
+  (defun memq (x l)
+	(member x l :test #'eq)))
 
 (defun memqq (x l)
   (member x l :test (lambda (x y) (and (eq (first x) (first y)) (eq (second x) (second y))))))
+
+;; Useful if want T to represent a universal set of some kind
+
+(defun tmemq (x l)
+  (or (eq l t)
+	  (member x l :test #'eq)))
 
 ;; Accepts an arbitrary number of args of any type and cats their
 ;; printed representations together into a single interned symbol.
@@ -666,7 +714,6 @@
 	  (b (list node) 0)
 	  (hash-table-value-to-list cycle-head-node-hash))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Some basic utils for hash tables
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -695,19 +742,19 @@
 ;; Hash table test defs -- implementation-dependent
 
 (defun hdefine-hash-table-test (equality-fcn hash-fcn)
-  (let ((equality-fcn-name (gensym)))
-	(let ((hash-fcn-name (gensym)))
-	  (setf (symbol-function equality-fcn-name) equality-fcn)
-	  (setf (symbol-function hash-fcn-name) hash-fcn)
-	  (let ((test-name equality-fcn-name))
-		(case (cl-type)
-		  (:clisp
-		   (eval `(define-hash-table-test ,test-name ,equality-fcn-name ,hash-fcn-name)))
-		  (:sbcl
-		   (eval `(define-hash-table-test ,equality-fcn-name ,hash-fcn-name)))
-		  (:abcl
-		   nil)) 
-		test-name))))
+  (if (eq (cl-type) :abcl)
+	  (eval `(define-hash-table-test ,hash-fcn ,equality-fcn))
+	  (let ((equality-fcn-name (gensym)))
+		(let ((hash-fcn-name (gensym)))
+		  (setf (symbol-function equality-fcn-name) equality-fcn)
+		  (setf (symbol-function hash-fcn-name) hash-fcn)
+		  (let ((test-name equality-fcn-name))
+			(case (cl-type)
+			  (:clisp
+			   (eval `(define-hash-table-test ,test-name ,equality-fcn-name ,hash-fcn-name)))
+			  (:sbcl
+			   (eval `(define-hash-table-test ,equality-fcn-name ,hash-fcn-name)))) 
+			test-name)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Gather
@@ -771,17 +818,18 @@
 
 ;;
 ;; Fcn == (lambda (stdout-stream) ...)
+;;
+;; If file is nil use normal stdout
+;;
 
 (defun with-redirected-stdout (file fcn)
-  (with-open-file (s file :direction :output)
-	  (let ((std *standard-output*))
-		(let ((*standard-output* s))
-		  (funcall fcn std)))))
+  (let ((std *standard-output*))
+	(if (null file)
+		(funcall fcn std)
+		(with-open-file (s file :direction :output)
+		  (let ((*standard-output* s))
+			(funcall fcn std))))))
 
 ;; Local Variables:
-;; eval: (put 'execute-obj 'lisp-indent-function 'defun)
-;; eval: (put 'add-consequent-edges 'lisp-indent-function 'defun)
-;; eval: (put 'dolists 'lisp-indent-function 'defun)
-;; eval: (put 'macrolet 'lisp-indent-function 'defun)
-;; fill-column: 120
+;; eval: (emacs-file-locals)
 ;; End:

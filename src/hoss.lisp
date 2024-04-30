@@ -1,7 +1,7 @@
 ;;
 ;; Hoss -- the H-Machine Object System
 ;;
-;;					Note Hoss is not an acronym
+;;		Like Hoss on Bonanza, it's simple but effective and sometimes elegant.
 ;;
 
 (let ((class-info (make-hash-table :test #'equal)))
@@ -55,6 +55,27 @@
 	(defmacro ! (fcn &rest args)
 	  `(funcall (funcall ,(first fcn) ',(second fcn)) (list ,@args))))
 
+;; Experiment: 
+;; Basic multi-value let that simply binds vars to successive members of a list.
+;; Only supports a single binding clause.
+;;
+;; (mlet (((x y z) '(1 2 3)))
+;;   (list x y z)) => (1 2 3)
+;;
+
+(defmacro mlet (clause &rest body)
+  (let ((clause (first clause)))
+	(let ((init-var (gensym)))
+	  `(let ((,init-var ,(second clause)))
+		 ,(mlet-fcn init-var (first clause) 0 body)))))
+
+(defun mlet-fcn (init-var bound-vars index body)
+  (if (null bound-vars)
+	  `(progn ,@body)
+		(let ((var (first bound-vars)))
+		  `(let ((,var (nth ,index ,init-var)))
+			 ,(mlet-fcn init-var (rest bound-vars) (+ index 1) body)))))
+
 (defmacro defc (class-name superclass-name make-args body)
   (if (and (not (eq class-name 'top-obj))
 		   (null superclass-name))
@@ -75,9 +96,9 @@
 		(let ((a (intern (subseq x 0 (or (search "." x) (length x))))))
 		  (let ((b (intern (subseq x (or (plus1 (search "." x)) (length x))))))
 			(funcall cont a b)))))
-	(defl subst-dot-form (e)			;; Dot syntax crap. (x.y z) => (! (x y) z)
+	(defl old-subst-dot-form (e)			;; Dot syntax crap. (x.y z) => (! (x y) z)
 	  e)
-	(defl new-subst-dot-form (e)		;; Perf? Testing shows that with no symbol processing it's a wash
+	(defl subst-dot-form (e)		;; Perf? Testing shows that with no symbol processing it's a wash
 	  (cond
 	   ((and (listp e)
 			 (symbolp (first e))
@@ -165,6 +186,7 @@
 		 (defun ,(intern (format nil "MAKE-~a" class-name)) (,@inherited-make-args)
 		   ;; (add-make-call ',class-name)													;; Activate this to record class stats
 		   (let ((method-lookup-hash (make-hash-table :test #'eq :size 257)))
+			 (declare (optimize (speed 3)))
 			 (let ((self ,(process-class (get-inheritance-chain class-name))))
 			   (! (self set-self) self)
 			   (! (self init))
@@ -192,7 +214,9 @@
 			  ;; subst-match
 			  ;; infer-root-rule-var check-rule-edges check-obj-containment
 			  ;; all-matches
-			  ;; all-matches-aux  
+			  ;; all-matches-aux
+			  ;; all-matches-aux2
+			  ;; subst-match
 			  ;; get-root-vars
 			  ;; get-rule-components
 			  ;; infer-root-var
@@ -227,15 +251,15 @@
 			  ;; add-edge
 			  ;; rule-status-add-edge
 			  ;; define-rule
-			  ;; is-queued
+			  ;; queued
 			  ;; get-top-n
 			  ;; cross-aux2 is defun'ed
 			  ;; matched-edges
 			  ;; e-filter-by-common-nodes
 			  ;; rule-has-failed-enough
-;;			  queue-node
+			  ;; queue-node
 			  ;; push-tail
-;;			  pop-head
+			  ;; pop-head
 			  ;; push-head
 			  ;; pop-tail
 			  ;; remove

@@ -1,87 +1,66 @@
-;; grep list-to-edge-elem-node *.lisp | egrep -v '\.[0-9]'
 
-;; Prototype for the "canonical" fft test loop. Note should clean up
-;; the others in this file.  As of the veriosn checked in 8/11/20,
-;; this supports tree.lisp (local rules); commented-out (x is
-;; treetopobj levels ,n) is needed for globaltree.lisp
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;
+;; Standard fft tests
+;;;;;;;;;;;;;;;;;;;;;
+
+;; Basic test/benchmark, with deltas and rule-30
 
 (let ((n 3))
-  (let ((i 0))
-	(defr
-	  (defl gv ()
-		(let ((d (make-dumper)))
-		  (let ((filename (format nil "~a~4,'0d" "pic" i)))
-			(let ((filename-gv (format nil "~a.gv" filename)))
-			  (setq i (+ i 1))
-			  (! (d set-graph) g)
-			  (! (d dump-gv-edges) filename-gv
-				 :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t
-				 :attrs '(
-						  ;; These are the standard attrs to show:
+  (with-redirected-stdout (and t "fftout")
+	(lambda (s)
+	  (setq g (make-fft-test))
+	  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
+	  ;; (! (g trace-rule) 'cas-next)
+	  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
+		(time (! (g run) n))))))
 
-						  fft-hb 
-						  ;; fft-hb fft-comb odd  even  rule30val rule-30-next up delta3 delta3-rand d next-color
-						  
-						  ;; These are common extras:
-						  ;; zero d-casz center-up next casz-ref casz-ref1 copy-array-struct
-						  ;; These I played with using the animation:
-						  ;; fft-hb rule
-						  ))
-			  (! (d gv-to-image) filename :n2 t :file-type :jpg)))))
-	  (let ()
-		(clear-counters)
-		(clear-perf-stats)
-		(setq g (make-foundation))  
-		(! (g read-rule-file) "fft.lisp")
-		;; (! (g read-rule-file) "new-fft.lisp")			;; See this file for description of this experiment
-		;; (! (g read-rule-file) "fft-const-rules.lisp")
-		(! (g read-rule-file) "tree.lisp") ;;; 8/11/20 -- Fixed issues with this and it should hold as the default now
-		;; (read-rule-file "globaltree.lisp")
-		(! (g read-rule-file) "rule30.lisp")
-		(! (g read-rule-file) "fft-delta.lisp")
-		;; (! (g read-rule-file) "display-rules.lisp")
-		;; (! (g read-rule-file) "fft-display-rules.lisp")
-		;; (! (g add-natural-number-edges) 50)		;; Need this if expand rule-30 to 50 (or beyond)
-		(! (g define-rule) `(rule
-							 (name init)
-							 (attach-to global-node)
-							 (pred
-							  (global-node rule ?r)
-							  (?r name init))
-							 (add
-							  (print init)
-							  (r level ,(* 1 n))
-							  (r rule-30-top)
-							  ;; (x is treetopobj levels ,n)		;; Supports global-tree.lisp
-							  ;; (x is treetopobj l ,n)				;; Supports tree.lisp
-							  (tree-rule x ,n)
-							  (x fft-top) ;; An experiment in symbol-free matching, for max locality. Works, but slow. See fft-top-rule
-							  ;; (x n1)
-							  ;; (n1 n2)
-							  ;; (n2 n3)
-							  (x fft xfft)
-							  (x level ,n)
-							  (x color navajowhite)
-							  (x rand r)
-							  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
-							  (x local-rule-pool local-rule-pool-node)
-							  (r local-rule-pool local-rule-pool-node)
-							  (queue x r)
-							  )
-							 (del
-							  (global-node rule ?this-rule))))
-		;; (! (g break-rule) 'fft-comb-rule-next 'ace-new-edges (lambda () (gv)))
-		;; (! (g break-rule) 'fft-rule 'ace-new-edges (lambda () (gv)))
-		(let ((fcn (lambda (xstdout)
-					 (timer 'main
-					   (lambda ()
-						 (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node))))))))
-		  (time
-		   (if t
-			   (funcall fcn nil)
-			   (with-redirected-stdout "fft.txt" fcn))))))))
+;; Using a freq graph fed back in 
 
+(let ((n 4))
+  (with-redirected-stdout (and t "fftout")
+	(lambda (s)
+	  (setq g (make-fft-test))
+	  (let ((*print-tags* (and nil '(eq1 #|eq2|# eq3))))
+		(time (! (g run) n))
+		(perf-stats)
+		(setq f (make-rule-freq-graph :src-graph g))
+		(print 'freq-run)
+		(setq g (make-fft-test))
+		(time (! (g run) n :rule-freq-graph f))
+		(perf-stats)))))
 
+;; Pure fft -- no deltas, rule-30, or colors. Mainly a test rather than a benchmark and useful when need to diagnose
+;; issues.
+
+(let ((n 3))
+  (with-redirected-stdout (and t "fftout")
+	(lambda (s)
+	  (setq g (make-pure-fft-test))
+	  (let ((*print-tags* (and nil t)))
+		(time (! (g run) n))))))
 
 ;; 8/3/23 parameterize tree-rule and fft-rule
 
@@ -223,8 +202,10 @@
 
 ;; Performance loop, making a log fftperf we can scan
 ;;
-;; I've only let it run to 2^8, since higher looked like it would take
-;; several hours. 2^8 took about 7700 seconds.
+;; I've only let it run to 2^8, since higher looked like it would take several hours. 2^8 took about 7700 seconds.
+;;
+;; 1/20/24: Update: Ran a loop (having made since the above note a lot of perf improvements, and moved to rosencrantz),
+;; and 2^8 => 721.8317 sec! 2^9 bombed with lisp out of space.
 
 (let ()
   (defr
@@ -419,20 +400,9 @@
   ;; (! (d laptop-gv-to-svg) "all-edges")
 )
 
-(with-open-file (s "xxx" :direction :output)
-  (let ((et (! ((! (g get-edge-to-trace)) as-list))))
-	(dolist (e et)
-	  (let ((edge (first e)))
-		(dolist (r (second e))
-		  (when (eq (first r) 'add)
-			(print-object (list edge r) s)
-			(terpri s)))))
-	nil))
-
-;; Standard full trace file
+;; Full trace file, table dump
 
 (with-open-file (s "xxxet" :direction :output)
-  (format s "********** edge-to-trace~%")
   (let ((et (! ((! (g get-edge-to-trace)) as-list))))
 	(dolist (e et)
 	  (let ((edge (first e)))
@@ -440,85 +410,86 @@
 		  (print-object (list edge r) s)
 		  (terpri s))))
 	nil)
-  (format s "********** edge-to-pred~%")
-  (let ((et (! ((! (g get-edge-to-pred)) as-list))))
-	(dolist (e et)
-	  (let ((edge (first e)))
-		(dolist (r (second e))
-		  (print-object (list edge r) s)
-		  (terpri s))))
-	nil)
-  (format s "********** edge-to-add~%")
-  (let ((et (! ((! (g get-edge-to-add)) as-list))))
-	(dolist (e et)
-	  (let ((edge (first e)))
-		(dolist (r (second e))
-		  (print-object (list edge r) s)
-		  (terpri s))))
-	nil))
+)
 
-;; Pred trace
-
-(with-open-file (s "xxxep" :direction :output)
-  (let ((et (! ((! (g get-edge-to-pred)) as-list))))
-	(dolist (e et)
-	  (let ((edge (first e)))
-		(dolist (r (second e))
-		  (print-object (list edge r) s)
-		  (terpri s))))
-	nil))
-
-;; Sort by seqno
+;; Full trace file, sort by seqno
 
 (with-open-file (s "xxx" :direction :output)
   (let ((*print-pretty* nil))
-	(let ((et (! ((! (g get-edge-to-trace)) as-list))))
-	  (let ((flatlist nil))
-		(dolist (e et)
-		  (let ((edge (first e)))
-			(dolist (r (second e))
-			  (setq flatlist (cons (list edge r) flatlist)))))
-		(let ((flatlist (sort flatlist 
-							  (lambda (x y)
-								(< (if (eq (first (second x)) 'tested) (third (second x)) (second (second x)))
-								   (if (eq (first (second y)) 'tested) (third (second y)) (second (second y))))))))
-		  (dolist (x flatlist)
-			(let ((e (first x)))
-			  (let ((e (mapcar (lambda (n) (if (eq (! (g hget) n 'type) 'rule) (list n (! (g hget) n 'name)) n)) e)))
-				(print (cons e (rest x)) s)))))
-		nil))))
+	(let ((flatlist (! ((! (g get-edge-to-trace)) get-flatlist))))
+	  (dolist (entry flatlist)
+		(let ((edge (first entry)))
+		  (let ((event (second entry)))
+			(let ((event-abbrev (list
+								 (et-entry-type event)
+								 (et-entry-trace-seqno event)
+								 (et-entry-rule-seqno event)
+								 (et-entry-rule-edge event)
+								 (et-entry-rule-node event)
+								 (et-entry-rule-name event)
+								 (et-entry-obj-node event))))
+			  (print (cons edge event-abbrev) s)))))))
+	nil)
 
-;; True if a given node has always failed testing under a given rule
+;; Add an added-by relation for the first (or all) instance(s) of a node added in seq order
+;; Add a pred-of relation for the first (or all) instance(s) of a node added in seq order
 
-(defun failed (g node rule-name)
-  (let ((rule (first (! (g hget-inverse-all) rule-name 'name))))
-	(when rule
-	  (when (! (g superqets) (list node))
-		(let ((trace (! (g get-edge-to-trace-flatlist))))
-		  (block b
-			(let ((failed nil))
-			  (dolist (y trace)
-				(let ((x (second y)))
-				  (let ((op (first x)))
-					(cond
-					 ((eq op 'pred)
-					  (let ((pred-obj (fifth x)))
-						(let ((pred-rule (third x)))
-						  (when (and (equal node pred-obj)
-									 (equal rule pred-rule))
-							(return-from b nil)))))
-					 ((eq op 'tested)
-					  (let ((tested-obj (sixth x)))
-						(let ((tested-rule (fourth x)))
-						  (when (and (equal node tested-obj)
-									 (equal rule tested-rule))
-							(let ((status (second x)))
-							  (when (eq status :no-new-edges)
-								(return-from b nil))
-							  (when (eq status :failed)
-								(setq failed t)))))))))))
-			  failed)))))))
+(let ((flatlist (! ((! (g get-edge-to-trace) get-flatlist)))))
+  (dolist (entry flatlist)
+	(let ((edge (first entry)))
+	  (let ((event (second entry)))
+		(let ((type (et-entry-type event)))
+		  (when (eq type :add)
+			(let ((rule-node (et-entry-rule-node event)))
+			  (let ((rule-name (et-entry-rule-name event)))
+				(! (g add-edge) `(,rule-name shape rectangle))
+				(! (g add-edge) `(,rule-name color mistyrose))
+				(dolist (node edge)
+				  (when (or t (not (! (g qet-exists) `(,node added-by))))
+					(! (g add-edge) `(,node added-by ,rule-name)))))))
+		  (when (eq type :pred)
+			(let ((rule-node (et-entry-rule-node event)))
+			  (let ((rule-name (et-entry-rule-name event)))
+				(dolist (node edge)
+				  (when (or t (not (! (g qet-exists) `(,node pred-of))))
+					(! (g add-edge) `(,node pred-of ,rule-name)))))))))))
+  nil)
 
+;; Table of node -> rules-which-added-an-edge-with-this-node and rules-which-had-this-node-in-a-pred
+
+(dotimes (i 7)
+
+(let ((n i))
+  (with-redirected-stdout (and t "fftout")
+	(lambda (s)
+	  (setq g (make-fft-test))
+	  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
+	  ;; (! (g trace-rule) 'cas-next)
+	  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
+		(time (! (g run) n :rule-30-levels 0))))))
+
+(let ((et (! ((! (g get-edge-to-trace)) as-list))))
+  (let ((m (make-sur-map)))
+	(let ((m1 (make-sur-map)))
+	  (dolist (e et)
+		(let ((edge (first e)))
+		  (let ((entries (second e)))
+			(when (member '(add pred del) entries :test (lambda (items y) (block b (dolist (x items) (when (eq x (first y)) (return-from b t))) nil)))
+			  (dolist (node edge)
+				(dolist (entry entries)
+				  (! (m insert) node (fourth entry))
+				  ;; (! (m insert) node entry)
+				  ))))))
+	  (let ((nodes (! (m inputs))))
+		(dolist (node nodes)
+		  (let ((rule-names (! (m lookup) node)))
+			(! (m1 insert) rule-names node))))
+	  (setq x m)
+	  (setq y m1)
+	  (print (list 'xxx i (length (! (y as-list)))))
+	  nil)))
+
+)
 
 (dolist (n (! (g get-all-nodes))) (when (failed g n 'ev-init) (! (g add-edge) (list n 'color 'green))))
 
@@ -587,8 +558,8 @@
 	  ;; (! (g trace-rule) 'fe-0-rule)
 	  (timer 'main
 		(lambda ()
-		  (! (g execute-obj) 'global-node :cont (lambda (m s e) nil))
-		  (! (g execute-obj) 0 :cont (lambda (m s e) nil))
+		  (! (g execute-obj) 'global-node :cont (lambda (&rest x) nil))
+		  (! (g execute-obj) 0 :cont (lambda (&rest x) nil))
 		  (! (g execute-queue) :rule-mode :local-only)
 
 		  ;; (! (g execute-global-all-objs-loop)) ;; Temp! until we get queuing work right.
@@ -674,8 +645,11 @@
   (! (d dump-gv-edges) "rule30.gv" :attrs '(rule-30-next up center-up rule30val))
   (! (d gv-to-image) "rule30"))
 
-(let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "xtree.gv" :attrs 
-											   '(aup next tree-next zero max ev od)))
+(let ((d (make-dumper)))
+  (! (d set-graph) g)
+  (! (d dump-gv-edges) "tree.gv" :rules nil :attrs 
+	 '(aup next tree-next zero max ev od))
+  (! (d gv-to-image) "tree"))
 
 (let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "fe.gv" :attrs 
 											   '(sigma even-func fe copied-from  next-color)))		   
@@ -685,7 +659,7 @@
 											   :omitted-rules '(color-circle-data)
 											   :omitted-attrs '(copy-rule-rule copy-rule-rule-pred copy-rule-rule-pred-elem copy-rule-rule-add copy-rule-rule-add-elem)))
 
-(let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "x4.gv" :attrs '(fft fft-hb fft-comb odd even copy-array-struct zero) :rules '(add-parent ev-init od-next ev-next ev-od-obj-rule is tree-next-zero-rule tree-next-rule tree-loop-rule tree-top-order-rule tree-top-propagate-rule tree-elem-rule tree-zero-rule tree-max-rule tree-rule treeobj-rule even-next odd-next even-zero odd-zero self-cycle odd-new even-new copy-array-struct-next copy-array-struct-next-sing copy-array-struct-zero copy-array-struct-new fft-comb-rule-next-sing fft-comb-rule-next fft-comb-rule-zero fft-rule-zero fft-rule)))
+(let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "x4.gv" :attrs '(fft fft-hb fft-comb odd even copy-array-struct zero) :rules '(add-parent ev-init od-next ev-next ev-od-obj-rule is tree-next-level0-rule tree-next-rule tree-loop-rule tree-top-order-rule tree-top-propagate-rule tree-elem-rule tree-zero-rule tree-max-rule tree-rule treeobj-rule even-next odd-next even-zero odd-zero self-cycle odd-new even-new copy-array-struct-next copy-array-struct-next-sing copy-array-struct-zero copy-array-struct-new fft-comb-rule-next-sing fft-comb-rule-next fft-comb-rule-zero fft-rule-zero fft-rule)))
 
 ;; 4/28 Used this to create the complete fft-rule figure, fft-8-just-fft-rules.gv
 (let ((d (make-dumper :omit-unmatched-rules t :emit-labels t :emit-legend nil))) (! (d set-graph) g)(! (d dump-gv-edges) "xfft.gv" :rules t :attrs '( fft-comb fft-hb  odd even  d d-casz) :omitted-rules '(color-circle-data print-gc6 print-gc1 print-gc2 print-gc3 print-gc4 print-gc5 nil rule-30-rule-gen rule-30-zero-rule-gen rule-30-max-rule-gen rule-30-next1 rule-30-next2 rule-30-next3 rule-30-center rule-30-center-loop rule-30-loop rule-30-top rule-30-top-propagate rule-30-data add-rule color-color print-gc-rule display-data data switch-room-obj-rule odd-even-weave weave-next-rule fft-delta-init even-tree-max std-notes inverse-data gen-inverse fft-rule-opt fft-rule-opt-display fft-rule) :omitted-attrs '(color in-node-color two-input-op)))
@@ -719,7 +693,7 @@
 				tree-next-rule 
 				fft-comb-rule-zero 
 				copy-array-struct-zero 
-				tree-next-zero-rule 
+				tree-next-level0-rule 
 				fft-rule 
 				fft-rule-zero 
 				odd-next 
@@ -1159,7 +1133,7 @@
 				  ((?X N1065) (?N DISPLAY-DATA) (T T)) 
 				  ((?X N1089) (?N COLOR-CIRCLE-DATA) (T T)) 
 				  ((?X N1150) (?N COLOR-TREE) (T T)) 
-				  ((?X N1198) (?N TREE-NEXT-ZERO-RULE) (T T)) 
+				  ((?X N1198) (?N TREE-NEXT-LEVEL0-RULE) (T T)) 
 				  ((?X N1204) (?N TREE-NEXT-RULE) (T T)) 
 				  ((?X N1218) (?N TREE-LOOP-RULE) (T T)) 
 				  ((?X N1227) (?N TREE-TOP-ORDER-RULE) (T T)) 
@@ -2084,7 +2058,8 @@ Gerry S
   (clear-counters)
   (clear-perf-stats)
   (setq g (make-rule-30-test))
-  (time (! (g run) n :print-tags (and nil '(me4 ace4 pop-head queue-node)))))
+  (let ((*print-tags* (and nil '(me4 ace4 pop-head queue-node))))
+	(time (! (g run) n))))
 
 ;; Reasonably important test of "animation", where we make a series of
 ;; jpg files at a set of breakpoints, in this case after each
@@ -2109,9 +2084,9 @@ Gerry S
 	;; (! (g break-rule) 'xis 'ace-new-edges (lambda () (gv)))
 	;; (! (g break-rule) 'xis-not 'del-consequent-edges (lambda () (gv)))
 	(with-redirected-stdout "x"
-							(lambda (xstdout)
-							  (time (! (g run) n :print-tags (and nil '(me4 ace4 pop-head queue-node))))))))
-
+	  (lambda (xstdout)
+		(let ((*print-tags* (and nil '(me4 ace4 pop-head queue-node))))
+		  (time (! (g run) n)))))))
 
 (ca-to-svg "y.svg" 101 30 :colorized t)
 
@@ -2138,7 +2113,7 @@ Gerry S
 	(! (d gv-to-image) "rule30")))
 
 (let ()
-  (let ((n 3))
+  (let ((n 10))
 	(setq g (make-rule-30-test))
 	(time (with-redirected-stdout "y1"
 								  (lambda (std)
@@ -2154,11 +2129,11 @@ Gerry S
 											  rule-30-next-rule-0-0-0   
 											  rule-30-next-rule-1-0-1   
 											  rule-30-next-rule-0-1-0   
-											  ;; rule-30-zero-rule-1-1     
-											  ;; rule-30-center            
-											  ;; rule-30-max-rule-1-1      
-											  ;; rule-30-max-rule-0-1
-											  ;; rule-30-top
+											  rule-30-zero-rule-1-1     
+											  rule-30-center            
+											  rule-30-max-rule-1-1      
+											  rule-30-max-rule-0-1
+											  rule-30-top
 											  ;; init
 											  ;; is-0-param-xrule          
 											  ;; is-not-xrule              
@@ -2181,7 +2156,7 @@ Gerry S
 											  ;; std-notes                 
 											  ;; color-color             
 											  )))
-			 ;; :nodes '(level sigma rule-30-next rule-30-top)
+			 :nodes-fcn (lambda (edge) (or nil (intersect edge '(level sigma rule-30-next rule-30-top center-up))))
 			 ))
   (! (x read-rule-file) "edge-trace-trim-rules.lisp")
   (time (with-redirected-stdout "y2"
@@ -2194,8 +2169,8 @@ Gerry S
 								  (! (x execute-global-all-objs-loop)))))
   (let ((d (make-dumper)))
 	(! (d set-graph) x)
-	(! (d dump-gv-edges) "y.gv" :rules nil :emit-legend nil :attrs '(p a pe pr #| d r an pn q e rn |#))
-	(! (d gv-to-image) "y"))
+	(! (d dump-gv-edges) "y.gv" :rules nil :emit-legend nil :attrs '(p a #| pe pr d r an pn q e rn |#))
+	(! (d gv-to-image) "y" :edit-svg t))
   )
 
 
@@ -2296,11 +2271,20 @@ color-color
 
 
 (let ()
-  (let ((n 10))
-	(setq g (make-rule-30-test))
-	(time (with-redirected-stdout "y1"
-								  (lambda (std)
-									(! (g run) n)))))
+  (if nil
+	(let ((n 10))
+	  (setq g (make-rule-30-test))
+	  (time (with-redirected-stdout "y1"
+			  (lambda (std)
+				(! (g run) n)))))
+	(let ((n 3))
+	  (with-redirected-stdout (and t "fftout")
+		(lambda (s)
+		  (setq g (make-fft-test))
+		  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
+		  ;; (! (g trace-rule) 'cas-next)
+		  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
+			(time (! (g run) n)))))))
   (setq x (! (g edge-trace-rule-graph)))
   (let ((d (make-dumper)))
 	(! (d set-graph) x)
@@ -2308,7 +2292,8 @@ color-color
 	   :rules nil 
 	   :emit-legend nil
 	   :attrs '(r)
-	   :omitted-attrs '(xis 
+	   :omitted-attrs '(xis
+						add-inverse-is-elem-of
 						;; rule-30-next-rule-1-1-1 
 						;; rule-30-next-rule-1-1-0 
 						;; rule-30-next-rule-1-0-1
@@ -2410,7 +2395,7 @@ color-color
 											   ;; tree-top-order-rule 
 											   ;; tree-loop-rule 
 											   tree-next-rule 
-											   ;; tree-next-zero-rule 
+											   ;; tree-next-level0-rule 
 											   fft-top-rule 
 											   fft-rule 
 											   fft-rule-zero 
@@ -2534,7 +2519,7 @@ color-color
 
 ;; Tree tests
 
-(let ((n 3))
+(let ((n 4))
   (clear-counters)
   (clear-perf-stats)
   (setq g (make-foundation))
@@ -2554,10 +2539,14 @@ color-color
   (time
    (timer 'main
 	 (lambda ()
-	   (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node)))))))))))
-	   ))))
+	   (let ((*print-tags* (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node))))
+		 (! (g execute-global-all-objs-loop)))))))
 
-(let ((d (make-dumper))) (! (d set-graph) g)(! (d dump-gv-edges) "y1.gv" :rules nil :attrs '(aup next tree-next zero max)))
+(let ((d (make-dumper)))
+  (! (d set-graph) g)
+  (! (d dump-gv-edges) "tree.gv" :rules nil :attrs 
+	 '(aup next tree-next zero max))
+  (! (d gv-to-image) "tree"))
 
 ;; Make a run of a tree and get edge-trace-rule-graph
 
@@ -2581,7 +2570,8 @@ color-color
   (time
    (timer 'main
 	 (lambda ()
-	   (! (g execute-global-all-objs-loop) :print-tags (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node) '(ace5) )))))
+	   (let ((*print-tags* (and nil '(me4 ace4 #| ace5 ace6 |# pop-head queue-node) '(ace5))))
+		 (! (g execute-global-all-objs-loop))))))
   ($nocomment
    (let ()
 	 (setq z (! (g edge-trace-rule-graph)))
@@ -2611,7 +2601,7 @@ color-color
 														 tree-top-order-rule
 														 tree-loop-rule
 														 tree-next-rule
-														 tree-next-zero-rule
+														 tree-next-level0-rule
 														 ))))
 				:trim-dangling-adds-and-preds nil
 				))
@@ -3411,6 +3401,430 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 
 
 
+;; Armed bear abcl crap
+
+;; "c:/Program Files/Java/jdk-21/bin/java.exe" -jar c:/Users/lstabile/abcl-src-1.9.2/abcl/dist/abcl.jar
+
+(load "ht.lisp")
+(load-interp)
+
+(let ()
+  (load-interp)
+  (hcompile "base-utils")
+  (hcompile "utils")
+  (hcompile "file-utils")
+  (hcompile "hoss")
+  (hcompile "top-obj")
+  (hcompile "h")
+  (hcompile "dumper")
+  )
+
+
+(defun load-interp (&key (warnings nil))
+  (hiload "base-utils")
+  (hiload "utils")
+  (hiload "file-utils")
+  (hiload "hoss")
+  (hiload "top-obj")
+  (hiload "h")
+  (hiload "dumper")
+  nil)
+
+(let ()
+  (hcload "base-utils")
+  (hcload "utils")
+  (hcload "file-utils")
+  (hcload "hoss")
+  (hcload "top-obj")
+  (hcload "h")
+  (hcload "dumper")
+)
+
+;; "not" tests
+
+;; Should just get a single print, (XXX X2 57)
+;;
+;; Note we add a real edge, even though we just need to see the
+;; print. This is due to a bug in use of the triggered table in ace,
+;; where we skip it if there are no real added edges. Will fix
+;; someday.
+;;
+(let ()
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-objgraph))
+  (! (g define-rule) `(rule
+							 (name xxx)
+							 (pred
+							  (?x a ?y)
+							  (?nn1 new-node sn1))
+							 (not
+							  (?x z))
+							 (add
+							  (print xxx ?x ?y)
+							  (?x b ?nn1))))
+  (mapc (lambda (e) (! (g add-edge) e))
+		'((x1 a 42)
+		  (x2 a 57)
+		  (x1 z)))
+  (! (g execute-global-all-objs-loop))) 
+
+
+;;
+;; Rule seq freq tests
+;;
+;; No longer keep an explcit rule seq, but construct forms of it from the edge-to-trace info.
+;;
+
+(let ((flatlist (!((!(g get-edge-to-trace)) get-flatlist))))
+  (let ((map (make-sur-map)))
+	(let ((prev-entry nil))
+	  (dolist (item flatlist)
+		(let ((entry (second item)))
+		  (when (eq (et-entry-type entry) :add)
+			(if (null prev-entry)
+				(setq prev-entry entry)
+				(when (not (and (eq (et-entry-rule-node entry) (et-entry-rule-node prev-entry))
+								(eq (et-entry-obj-node entry) (et-entry-obj-node prev-entry))))
+				  (let ((pair (list (et-entry-rule-name prev-entry) (et-entry-rule-name entry))))
+					(let ((prev-node (et-entry-obj-node prev-entry)))
+					  (let ((node (et-entry-obj-node entry)))
+						(! (map insert) pair (list prev-node node (! (g path) prev-node node)))
+						(setq prev-entry entry))))))))))
+	map))
+
+
+
+
+
+
+
+
+
+
+
+
+(let ()
+  ;; (setq x (make-rule-freq-graph :src-graph g))
+  (setq x (make-rule-freq-graph))
+  (! (x add-edge) '(a freq .5 b))
+  (! (x add-edge) '(b freq .5 a))
+  (! (x add-edge) '(b freq .5 c))
+  (! (x add-edge) '(b freq .5 d))
+  (! (x add-edge) '(d freq .5 a))
+  (! (x add-edge) '(d freq .5 e))
+  (! (x add-edge) '(e freq .5 b))
+  ;; (setq y (! (x spanning-dag) 'init))
+  (setq y (! (x spanning-dag) 'a))
+  (let ((d (make-dumper)))
+	(! (d set-graph) y)
+	(! (d dump-gv-edges) "x.gv")
+	(! (d gv-to-image) "x")
+	))
+
+
+
+
+
+
+(let ()
+  (setq f (lambda (n)
+			(memq n '(
+					  ;; INIT
+					   ;; RULE-30-DATA
+					   ;; RULE-30-CENTER-OBJ-RULE
+					   ;; RULE-30-CENTER-MOD
+					   ;; RULE-30-MAX-PRUNE-OPT-GEN
+					   ;; RULE-30-MAX-RULE-GEN
+					   ;; RULE-30-ZERO-PRUNE-GEN
+					   ;; RULE-30-ZERO-RULE-GEN
+					   ;; RULE-30-NEXT-RULE-GEN
+					   ;; TREEOBJ-RULE-2
+					   ;; TREEOBJ-RULE
+					   TREE-TOP-RULE
+					   ;; TREE-RULE-OPT
+					   ;; FFT-RULE-OPT-2-RULE-NAMES
+					   ;; FFT-RULE-OPT-RULE-NAMES
+					   ;; TREE-ELEM-RULE-MOD
+					   ;; CAS-RULE-MOD
+					   ;; EV-OD-OPT
+					   ;; EV-INIT-GEN
+					   ;; COLOR-CIRCLE-DATA
+					   ;; XIS-GEN
+					   ;; INVERSE-DATA
+					   ;; STD-NOTES
+					   ;; BASIC-DISPLAY-DATA
+					   ;; DATA
+					   ;; FFT-RULE-OPT
+					   ;; EV-OD-OBJ-RULE
+					   ;; COLOR-COLOR
+					   RULE-30-TOP
+					   TREE-RULE
+					   FFT-RULE
+					   FFT-TOP-RULE
+					   FFT-RULE-DELTA2
+					   ;; RULE-30-MAX-PRUNE-OPT
+					   ;; RULE-30-NEXT-RULE-OPT
+					   ;; XIS
+					   ;; GEN-INVERSE
+					   TREE-TOP-ORDER-RULE
+					   TREE-MAX-RULE
+					   TREE-NEXT-RULE
+					   WEAVE-NEXT-RULE
+					   RULE-30-CENTER
+					   RULE-30-ZERO-RULE-1-1
+					   TREE-ZERO-RULE
+					   ;; XIS-NOT
+					   RULE-30-NEXT-RULE-1-1-1
+					   RULE-30-ZERO-PRUNE
+					   RULE-30-MAX-RULE-1-1
+					   RULE-30-MAX-PRUNE
+					   TREE-ELEM-RULE
+					   TREE-LEAF-RULE
+					   FFT-RULE-ZERO
+					   RULE-30-NEXT-RULE-1-1-0
+					   ADD-INVERSE-IS-ELEM-OF
+					   TREE-NEXT-LEVEL0-ZERO-RULE
+					   TREE-ELEM-ZERO-RULE
+					   CAS-NEW
+					   TREE-NEXT-LEVEL0-RULE
+					   RULE-30-NEXT-RULE-1-0-0
+					   CAS-NEXT
+					   EV-INIT
+					   OD-NEXT
+					   TREE-LOOP-RULE
+					   ODD-NEW
+					   EV-NEXT
+					   EVEN-NEW
+					   RULE-30-NEXT-RULE-0-0-1
+					   CAS-ZERO
+					   ODD-NEXT
+					   ODD-ZERO
+					   EVEN-NEXT
+					   RULE-30-MAX-PRUNE-RULES-ADDED
+					   RULE-30-MAX-RULE-0-1
+					   EVEN-ZERO
+					   FFT-COMB-RULE-ZERO
+					   FFT-COMB-RULE-NEXT
+					   RULE-30-NEXT-RULE-1-0-1
+					   RULE-30-NEXT-RULE-0-1-1
+					   LEVEL-ZERO-RULE
+					   RULE-30-NEXT-RULE-0-1-0
+					   RULE-30-CENTER-LOOP
+					   FFT-RULE-DELTA4
+					   RULE-30-NEXT-RULE-0-0-0
+					  FFT-RULE-DELTA3
+					  ))))
+  nil)
+
+;;;;;;;; Rule-stat tests
+
+(! (g rule-stats) :sort 1 :filter (lambda (max-expand-len max-env-size) (and (= max-expand-len 0) (< max-env-size 3))))
+
+(! (g rule-stats)
+   :sort 4
+   :filter (lambda (max-expand-len max-env-size) (and (= max-expand-len 0) (< max-env-size 4)))
+   :columns '(name tested new-e max-env-size max-expand-len efficiency%))
+
+;; Using rslambda:
+
+(! (g rule-stats)
+   :sort 4
+   :filter (rslambda (and (= max-expand-len 0) (< max-env-size 4)))
+   :columns '(name tested new-e max-env-size max-expand-len efficiency%))
+
+;; One approach to adding an "or" clause to rules
+;;
+;; Interesting experiment, adding an "or" by copying and modifying a rule with an "or" notation. In this case we make
+;; two xxx copies, one with a and one with b, instead of the original a-or-b. Also rules are generated which delete the
+;; old a-or-b. A crude experiment but illustrates the technique.
+
+(let ()
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-objgraph))
+  (! (g read-rule-file) "copy-rule.lisp")
+  (! (g define-rule) '(rule
+					   (name xxx)
+					   (local)
+					   (pred
+						(?x a-or-b ?y)
+						(?z c 42))
+					   (add
+						(print xxx ?x ?y ?z))))
+  (! (g define-rule) '(rule
+					   (name yyy)
+					   (local)
+					   (pred
+						(?r type rule)
+						(?r pred ?u a-or-b ?v)
+						(?rc1 new-node sn1)
+						(?rc2 new-node sn2))
+					   (add
+						(print yyy ?r ?rc1 ?rc2)
+						(?rc1 pred ?x a ?y)
+						(?rc2 pred ?x b ?y)
+						(?r copy-rule ?rc1)
+						(?r copy-rule ?rc2)
+						(?rc1 rule (rule
+									(name (rc1 ?rc1))
+									(pred
+									 (?rc1 pred ?u1 a-or-b ?v1))
+									(add
+									 (print rc1 ?rc1))
+									(del
+									 (?rc1 pred ?u1 a-or-b ?v1))))
+						(?rc2 rule (rule
+									(name (rc2 ?rc2))
+									(pred
+									 (?rc2 pred ?u1 a-or-b ?v1))
+									(add
+									 (print rc2 ?rc2))
+									(del
+									 (?rc2 pred ?u1 a-or-b ?v1)))))))
+
+  (mapc (lambda (edge) (! (g add-edge) edge))
+		`(
+		  (global-rule-pool-node grp-rule ,(! (g query) '((?r name copy-rule-rule)) '?r))
+		  (,(! (g query) '((?r name xxx)) '?r) rule ,(! (g query) '((?r name yyy)) '?r))
+		  ))
+  ;; (! (g trace-rule) 'yyy)
+  (! (g execute-global-all-objs-loop))
+  )
+
+
+;;;;;;;;;;;;;;;;;;;;
+;; 2/13/24
+;; Experimemnts with Euler characteristic and genus. See doc.txt for links and other discussion, "Brief foray into
+;; quotient sets..."
+;;
+;; This code gets all rules and expands each into an asc, with an xform which can be tailored for different reductions,
+;; e.g. to three-element edges only, remove prints, etc.
+;;
+;; Two forms of euler char calc are used, one by Oliver Knill and the other by Bjarke Roune. They should be equivalent
+;; and doing both was a good check.
+;;;;;;;;;;;;;;;;;;;;
+
+(let ()
+  (setq rule-sets nil)
+  (defr
+	(defl xform-edges (edges)
+	  (let ((r nil))
+		(dolist (edge edges)
+		  (when (and (not (equal edge '(global-node local-rule-pool local-rule-pool-node)))
+					 ;; (eq (second edge) 'pred)
+					 (= (length edge) 5)
+					 (not (equal (rest edge) '(type rule)))
+					 (not (eq (second edge) 'name))
+					 (not (memq 'print edge))
+					 )
+			(setq r (cons edge r))))
+		r))
+	(defl num-sets-of-len (asc len)
+	  (let ((s 0))
+		(dolist (set asc)
+		  (when (= (length set) len)
+			(setq s (+ s 1))))
+		s))
+	(defl max-len (asc)
+	  (let ((s 0))
+		(dolist (set asc)
+		  (let ((l (length set)))
+			(when (> l s)
+			  (setq s l))))
+		s))
+	(defun euler-char (asc)		;; Roune formula ;; asc is a set of sets (list of lists)
+	  (let ((m (max-len asc)))
+		(let ((e 0))
+		  (let ((c 1))
+			(dotimes (i (+ m 1))
+			  (setq e (+ e (* c (num-sets-of-len asc i))))
+			  (setq c (* -1 c))))
+		  (- e))))
+	
+	(defun euler-char2 (asc)	;; Knill formula
+	  (let ((omegas (mapcar (lambda (set) (expt -1 (- (length set) 1)))
+							asc)))
+		(let ((r 0))
+		  (dolist (x omegas)
+			(setq r (+ r x)))
+		  r)))
+	(let ((rules (! (g query) '((?r type rule)(?r name ?n)) '(?r))))
+	  (dolist (rule rules)
+		(let ((rule-name (! (g hget) rule 'name)))
+		  (when (and rule-name (memq rule-name '(weave-next-rule weave-next-rule-paste)))
+			(print rule-name)
+			(let ((rule-edges
+				   (! (g query) `((?r type rule)(?r name ,rule-name)(?r pred ?*p)(?r add ?*a)(?r del ?*d)) :edges)))
+			  (let ((rule-edges (xform-edges rule-edges)))
+				(setq rule-sets (append rule-sets (list rule-edges)))
+				(let ((asc (dedup-list (mapunion (lambda (x) (subsets x)) rule-edges))))
+				  (let ((ec (euler-char asc)))
+					(let ((ec2 (euler-char2 asc)))
+					  (print (list rule-name rule-edges ec ec2 (/ (- 2 ec) 2) (- 2 ec))))))))))))))
+
+;; Making a triangulation graph from the size-3 facets. Pass a new option to dumper to emit a 3-node loop for sized-3
+;; edges.
+
+(let ()
+  (defr
+	(defl f (edges &key gv)
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (setq g (make-objgraph))
+	  (! (g rem-edge) '(global-node local-rule-pool local-rule-pool-node))
+	  (mapc (lambda (x) (! (g add-edge) x)) edges)
+	  (print (! (g euler-char-genus)))
+	  (when gv
+		(let ((d (make-dumper)))
+		  (! (d set-graph) g)
+		  (! (d dump-gv-edges) "x.gv" :rules nil :emit-legend nil :as-2d-asc-facets t :attrs t)
+		  (! (d gv-to-image) "x"))))
+	(f '((1 2 5)(5 2 3)(5 3 6)(3 6 4)(7 1 5)(6 4 8)))		;; Strip
+	(f '((a 2 5)(5 2 3)(5 3 6)(3 6 b)(b a 5)(6 b a)))		;; Mobius
+	(f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b)))		;; Cylinder
+	(f '((1 2 3)(1 3 4)(2 3 4)(1 2 4)))						;; Tetrahedron
+	(f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b) (a 20 50)(50 20 30)(50 30 60)(30 60 a)(b a 50)(60 a b)))	;; Double cylinder
+	(f '(		;; Unfolded torus -- see Munkres page 17
+		 (a1 d1 f)(a1 b1 f)(b1 f c1)(c1 g a3)(a3 g d2)
+		 (d1 f e1)(e1 f i)(f i h)(f g h)(g j h)(i j h)(j g d2)(j e2 d2)
+		 (e1 a2 i)(a2 i b2)(i b2 j)(b2 c2 j)(c2 j a4)(a4 j e2)
+		 ) :gv nil)
+	(f '(		;; Torus
+		 (a d f)(a b f)(b f c)(c g a)(a g d)
+		 (d f e)(e f i)(f i h)(f g h)(g j h)(i j h)(j g d)(j e d)
+		 (e a i)(a i b)(i b j)(b c j)(c j a)(a j e)
+		 ) :gv t)
+	nil))
+
+(length (! (g get-successful-exec-obj-list)))
+
+(dolists ((x y) ((! (g get-successful-exec-obj-list)) (rest (! (g get-successful-exec-obj-list)))))
+	(print (list x y (! (g path) x y) (intersect (! (g get-edges) x) (! (g get-edges) y)))))
+
+
+
+;; rule seq from edge-to-trace flatlist
+
+(let ((f (!(((!(g get-edge-to-trace)))) get-flatlist)))
+  (let ((map (make-sur-map)))
+	(let ((prev-entry nil))
+	  (dolist (item f)
+		(let ((node-or-edge (first item)))
+		  (let ((entry (second item)))
+			(when (eq (et-entry-type entry) :add)
+			  (cond
+				((null prev-entry)
+				 (setq prev-entry entry))
+				((not (and (eq (et-entry-rule-node entry) (et-entry-rule-node prev-entry))
+						   (eq (et-entry-obj-node entry) (et-entry-obj-node prev-entry))))
+				 (let ((pair (list (et-entry-rule-name prev-entry) (et-entry-rule-name entry))))
+				   (let ((prev-node (et-entry-obj-node prev-entry)))
+					 (let ((node (et-entry-obj-node entry)))
+					   (! (map insert) pair (list prev-node node))
+					   (setq prev-entry entry)))))))))))
+	(! (map as-list))))
+
 
 
 ;;
@@ -3427,3 +3841,6 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 
 (! (g query) '((?r1 type rule)(?r1 name ?n1)(?r2 type rule)(?r2 name ?n2)(?r1 attach-to ?u)(?r1 pred ?x ?a ?y)(?r2 add ?z ?a ?t)))
 
+;; Local Variables:
+;; eval: (emacs-file-locals)
+;; End:

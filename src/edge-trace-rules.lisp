@@ -120,7 +120,8 @@
     (?r shape ?cur-shape)
 	(?r color ?cur-color)
 	(?r style ?cur-style)
-	(?r label ?cur-label))
+	(?r label ?cur-label)
+	(?r generic-done))
  (add
   (print rule-30-next-color-rule ?r ?n  ?cur-shape ?cur-color ?cur-style ?new-shape ?new-color ?new-style)
   (?r shape ?new-shape)
