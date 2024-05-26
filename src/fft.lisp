@@ -328,7 +328,7 @@
   (?nn1 new-node sn1))
  (add
   (print cas-new ?this-obj ?root-var ?a ?a1 ?e0 ?e1 ?nn1)
-  (print cas-new1 ?nn1 ?e0)
+  ;; (print cas-new1 ?nn1 ?e0)
   (?nn1 is-elem-of ?a1)
   (?a1 elem ?nn1)
   (?nn1 ref ?e0)
@@ -349,7 +349,23 @@
  (add
   (print cas-zero ?this-obj ?root-var ?a ?a1 ?e0 ?ae0)
   (?ae0 zero)
+  (?ae0 cas-zero)
   )
+ (del
+  (?this-obj rule ?this-rule)))
+
+(rule
+ (name cas-loop-done)
+ (local)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?ae0 zero)
+  (?ae0 is-elem-of ?a1)
+  (?ae1 is-elem-of ?a1)
+  (?ae1 next ?ae0))
+ (add
+  (print cas-loop-done ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1)
+  (print cas-loop-done1 ?a1))
  (del
   (?this-obj rule ?this-rule)))
 
@@ -388,6 +404,8 @@
   (?cas-new name cas-new)
   (?p lrp-rule ?cas-next)
   (?cas-next name cas-next)
+  (?p lrp-rule ?cas-loop-done)
+  (?cas-loop-done name cas-loop-done)
   )
  (add
   (print cas-rule-mod)
@@ -395,6 +413,7 @@
   (?cas-new add ?e1 rule ?cas-new)
   (?cas-new del ?e0 rule ?cas-new)
   (?cas-new add ?e1 rule ?cas-zero)
+  (?cas-zero add ?ae0 rule ?cas-loop-done)
   ;; (?cas-next del ?ae1 rule ?cas-next)		;; Can't del the rule from here yet! Removed 1/9/24 when did "sequential" tree rules
   ;; (?cas-next del ?e1 rule ?cas-zero)
   )
