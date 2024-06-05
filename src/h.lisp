@@ -111,6 +111,8 @@
 ;; 							 )
 ;; 						   nil))))
 ;;
+;; multi-types -- Allow the attribute "type" to take on multi values, which means using memq instead of eq in the code.
+;;					Discharged 6/4/24
 
 (defc graph nil nil
   (let ((size 63)) ;; 1021
@@ -150,43 +152,6 @@
 				  (add-subqets edge)
 				  edge)
 				e))))
-
-	  ;; 1/18/24 -- Did this for abcl, which seems to have a compilation bug in dolist. This uses a hand-coded
-	  ;; tail-recursive doloop fcn. At this point I'm not pursuing abcl.
-
-	  ($comment
-	   (defm add-edge (edge) ;; For truth-and-beauty, the only way nodes get added is via add-edge
-		 (defr
-		   (defl add-node (node pos edge)
-			 (let ()
-			   (! (nodelist insert) node edge)
-			   (let ((pos-hash (gethash node nodeposlist)))
-				 (when (null pos-hash)
-				   (setq pos-hash (make-hash-table :test #'equal))
-				   (setf (gethash node nodeposlist) pos-hash))
-				 (let ((pos-edge-hash (gethash pos pos-hash)))
-				   (when (null pos-edge-hash)
-					 (setq pos-edge-hash (make-hash-table :test #'equal))
-					 (setf (gethash pos pos-hash) pos-edge-hash))
-				   (setf (gethash edge pos-edge-hash) edge)))
-			   ($comment (log-stat 'node-dim (length (get-edges node))))
-			   node))
-		   (defl doloop (e i)
-			 (if (null e)
-				 nil
-				 (let ()
-				   (add-node (first e) i edge)
-				   (doloop (rest e) (+ i 1)))))
-		   (let ((e (gethash edge edgelist)))
-			 (if (null e)
-				 (let ()
-				   ($comment (log-stat 'edge-size (length edge)))
-				   (setf (gethash edge edgelist) edge)
-				   (doloop edge 0)
-				   (add-subqets edge)
-				   edge)
-				 e))))
-	   )
 
 	  (defm edge-exists (edge)
 		(and (gethash edge edgelist) t))
@@ -1633,7 +1598,7 @@
 	  (defm get-rule-neighborhood (nodes)
 		(let ((r nil))
 		  (dolist (node nodes)
-			(when (eq (hget node 'type) 'rule)
+			(when (memq 'rule (hget-all node 'type))
 			  (setq r (append (hget-inverse-all node 'rule) r))))
 		  r))
 		
@@ -1778,7 +1743,7 @@
 				  
 				  (defl check-rule-components-cache (edge)
 					(let ((node (first edge)))
-					  (when (eq (hget node 'type) 'rule)
+					  (when (memq 'rule (hget-all node 'type))
 						(invalidate-rule-components-cache-entry node))))
 
 				  (defl print-info (p env)
@@ -2394,7 +2359,9 @@
 											(print (list 'am3 (hget rule-node 'name) obj-node root-var))))
 										(when envlist
 										  (when (chkptag 'am2)
-											(print (list 'am2 (hget rule-node 'name) obj-node root-var envlist)))
+											($comment (print (list 'am2 (hget rule-node 'name) obj-node root-var envlist)))
+											(print (list 'am2 (hget rule-node 'name) obj-node root-var (length envlist) (let ((g (intern (symbol-name (gensym))))) (set g envlist) g)))
+											)
 										  (dolist (env envlist)
 											(let ((env-info (list root-var env)))
 											  (setf (gethash env-info h) env-info)))
@@ -2687,7 +2654,7 @@
 				(let ((rule-name (second clause)))
 				  (let ((rule-nodes
 						 (mapcan (lambda (node)
-								   (when (eq (hget node 'type) 'rule)
+								   (when (memq 'rule (hget-all node 'type))
 									 (list node)))
 								 (mapcar (lambda (edge)
 										   (first edge))
@@ -2779,6 +2746,9 @@
 					  (dolist (clause (rest rule-expr))
 						(let ((clause-type (first clause)))
 						  (cond
+							((eq clause-type 'type)
+							 (let ((type (second clause)))
+							   (pushe (add-edge (list rule 'type type)))))
 						   ((eq clause-type 'name)
 							(let ((rule-name (second clause)))
 							  (if (not (listp rule-name))
@@ -3366,7 +3336,7 @@
 												  (cond
 													((eq kind :add)
 													 (! (g add-edge) (list rule-node 'a edge-node))
-													 (when (eq (! (g1 hget) (first edge) 'type) 'rule)
+													 (when (memq 'rule (! (g1 hget-all) (first edge) 'type))
 													   (let ((rule-name2 (! (g1 hget) (first edge) 'name)))
 														 (let ((rule-node2 (or (first (! (g hget-inverse-all) rule-name2 'name))
 																			   (symcat rule-name2 '-- seqno))))
@@ -3858,7 +3828,7 @@
 		  (defl symbol< (x y) (string< (symbol-name x) (symbol-name y)))
 		  (defl node-descr (node) ;; Dig out some properties heuristically for a bit of extra info in stats		   
 			(let ((x (! (graph hget) node 'name)))
-			  (let ((x (or x (! (graph hget) node 'type))))
+			  (let ((x (or x (! (graph hget-all) node 'type))))
 				x)))
 		  (defl div (x y)
 			(if (= y 0) 0 (/ x y)))
@@ -5054,11 +5024,11 @@
 	(defm init ()
 	  (objgraph-init))))
 
-(defc foundation base-graph nil
+(defc foundation base-graph (&key (nat 20))
   (let ()
 	(defm init ()
 	  (base-graph-init)
-	  (add-natural-number-edges 20)
+	  (add-natural-number-edges nat)
 	  (read-rule-file "foundation.lisp"))))
 
 (defc rule-30-test foundation nil

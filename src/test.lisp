@@ -34,7 +34,7 @@
 	  (setq g (make-fft-test))
 	  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
 	  ;; (! (g trace-rule) 'cas-next)
-	  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
+	  (let ((*print-tags* (and nil '(am2 #|succ-path|#)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
 
 ;; Using a freq graph fed back in 
@@ -548,8 +548,8 @@
 	(let ((*print-pretty* nil))
 	  (clear-counters)
 	  (clear-perf-stats)
-	  (setq g (make-foundation)) ;; Can alternatively say base-graph here, but foundation provides display colors, etc.
-	  (! (g add-natural-number-edges) nat)
+	  (setq g (make-foundation :nat nat)) ;; Can alternatively say base-graph here, but foundation provides display colors, etc.
+	  ;; (! (g add-natural-number-edges) nat)
 	  (! (g read-rule-file) "fe.lisp")
 	  (! (g read-rule-file) "copy-rule.lisp")
 	  (! (g addraw) 0 'rule (! (g query) '((?x name fe-0-rule)) '?x))
@@ -566,7 +566,8 @@
 		  ))))
 
   ($nocomment
-   (f 20))								;; The basic single run
+   (let ((*print-tags* (and nil '(am2))))   ;; am2 produces too much output
+	 (f 20)))								;; The basic single run
 
   ;; Perf runs
   ;; Nat to 100
@@ -3393,7 +3394,7 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 
 
 (dolist (x (sort (mapcar (lambda (node)
-						   (list node (length (! (g get-edges) node)) (! (g hget) node 'type)))
+						   (list node (length (! (g get-edges) node)) (! (g hget-all) node 'type)))
 						 (! (g get-all-nodes)))
 				 (lambda (x y) (> (second x) (second y)))))
   (print x))

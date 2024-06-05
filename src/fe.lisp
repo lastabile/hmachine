@@ -39,6 +39,7 @@
  (name fwd-fe-rule)
  (local)
  (root-var ?n)
+ (type blah)		;; Keep this as a test of handling multiplw types
  (pred
   (?n sigma ?m)
   (?n even-func ?o)

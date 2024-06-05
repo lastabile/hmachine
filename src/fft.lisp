@@ -355,21 +355,6 @@
   (?this-obj rule ?this-rule)))
 
 (rule
- (name cas-loop-done)
- (local)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 zero)
-  (?ae0 is-elem-of ?a1)
-  (?ae1 is-elem-of ?a1)
-  (?ae1 next ?ae0))
- (add
-  (print cas-loop-done ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1)
-  (print cas-loop-done1 ?a1))
- (del
-  (?this-obj rule ?this-rule)))
-
-(rule
  (name cas-next)
  (local)
  ;; (root-var ?e0)
@@ -393,6 +378,66 @@
   (?this-obj rule ?this-rule)
   ))
 
+;;
+;; Cas verify rules
+;;
+;; These need to go sequentially around the loop and signal done when the loop is closed
+;;
+
+(rule
+ (name cas-verify-zero)
+ (type verifier)
+ (local)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?ae0 is-elem-of ?a1)
+  (?ae1 is-elem-of ?a1)
+  (?ae0 zero)
+  (?ae0 next ?ae1))
+ (add
+  (print cas-verify-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1)
+  (?ae0 verify-next ?ae1))
+ (del
+  (?this-obj rule ?this-rule)))
+
+(rule
+ (name cas-verify-next)
+ (type verifier)
+ (local)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?ae0 is-elem-of ?a1)
+  (?ae1 is-elem-of ?a1)
+  (?ae2 is-elem-of ?a1)
+  (?ae0 verify-next ?ae1)
+  (?ae1 next ?ae2))
+ (add
+  (print cas-verify-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?ae2)
+  (?ae1 verify-next ?ae2))
+ (del
+  (?this-obj rule ?this-rule)
+  ))
+
+(rule
+ (name cas-verify-loop-done)
+ (type verifier)
+ (local)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?ae0 zero)
+  (?ae0 is-elem-of ?a1)
+  (?ae1 is-elem-of ?a1)
+  (?ae1 verify-next ?ae0))
+ (add
+  (print cas-verify-loop-done ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1)
+  (?a1 loop-done))
+ (del
+  (?this-obj rule ?this-rule)))
+
+;;
+;; End cas verify rules
+;;
+
 (rule
  (name cas-rule-mod)
  (attach-to global-node)
@@ -405,7 +450,9 @@
   (?p lrp-rule ?cas-next)
   (?cas-next name cas-next)
   (?p lrp-rule ?cas-loop-done)
-  (?cas-loop-done name cas-loop-done)
+  (?cas-verify-loop-done name cas-verify-loop-done)
+  (?cas-verify-zero name cas-verify-zero)
+  (?cas-verify-next name cas-verify-next)
   )
  (add
   (print cas-rule-mod)
@@ -413,7 +460,10 @@
   (?cas-new add ?e1 rule ?cas-new)
   (?cas-new del ?e0 rule ?cas-new)
   (?cas-new add ?e1 rule ?cas-zero)
+  (?cas-new add ?nn1 rule ?cas-verify-next)
   (?cas-zero add ?ae0 rule ?cas-loop-done)
+  (?cas-zero add ?ae0 rule ?cas-verify-zero)
+  (?cas-zero add ?ae0 rule ?cas-verify-next)
   ;; (?cas-next del ?ae1 rule ?cas-next)		;; Can't del the rule from here yet! Removed 1/9/24 when did "sequential" tree rules
   ;; (?cas-next del ?e1 rule ?cas-zero)
   )

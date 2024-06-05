@@ -68,6 +68,7 @@
  (root-var ?y)
  (pred
   (?r copy-rule ?y)
+  (?r type ?t)
   (?r name ?name)
   (?r root-var ?x-root-var)
   (?r std-var-level ?l)
@@ -77,8 +78,8 @@
   (?r not ?*rest-not)
   )
  (add
-  (print copy-rule-rule ?root-var ?this-obj ?this-rule ?name ?r ?y rest-pred= ?*rest-pred rest-add= ?*rest-add rest-del= ?*rest-del rest-not= ?*rest-not)
-  (?y type rule)
+  (print copy-rule-rule ?root-var ?this-obj ?this-rule ?name ?r ?y ?t rest-pred= ?*rest-pred rest-add= ?*rest-add rest-del= ?*rest-del rest-not= ?*rest-not)
+  (?y type ?t)
   (?y name ?name)
   (?y root-var ?x-root-var)
   (?y std-var-level ?l)
