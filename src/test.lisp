@@ -32,10 +32,40 @@
   (with-redirected-stdout (and t "fftout")
 	(lambda (s)
 	  (setq g (make-fft-test))
-	  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
+	  ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
 	  ;; (! (g trace-rule) 'cas-next)
 	  (let ((*print-tags* (and nil '(am2 #|succ-path|#)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
+
+
+;; See below initial test of "animation." Doing that here for fft.
+
+(let ((i 0))
+  (defun gv ()
+	(let ((d (make-dumper)))
+	  (let ((filename (format nil "~a~4,'0d" "pic" i)))
+		(let ((filename-gv (format nil "~a.gv" filename)))
+		  (setq i (+ i 1))
+		  (! (d set-graph) g)
+		  (! (d dump-gv-edges) filename-gv
+			 :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes nil
+			 :attrs t
+			 :attrs-fcn (lambda (e) (or (memq (second e) '(next zero cas-zero))
+										(and (eq (second e) 'rule)
+											 (memq (! (g hget) (third e) 'name) '(cas-new cas-zero cas-next)))))
+			 :omitted-attrs nil)
+		  (! (d gv-to-image) filename :n2 t :file-type :jpg)))))
+  (let ((n 3))
+	(clear-counters)
+	(clear-perf-stats)
+	(setq g (make-fft-test))
+	(! (g break-rule) 'cas-new 'ace-new-edges (lambda (trace-info) (gv)))
+	(! (g break-rule) 'cas-zero 'ace-new-edges (lambda (trace-info) (gv)))
+	(! (g break-rule) 'cas-next 'ace-new-edges (lambda (trace-info) (gv)))
+	(with-redirected-stdout "x"
+	  (lambda (xstdout)
+		(let ((*print-tags* (and nil '(me4 ace4 pop-head queue-node))))
+		  (time (! (g run) n)))))))
 
 ;; Using a freq graph fed back in 
 
@@ -463,7 +493,7 @@
   (with-redirected-stdout (and t "fftout")
 	(lambda (s)
 	  (setq g (make-fft-test))
-	  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
+	  ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
 	  ;; (! (g trace-rule) 'cas-next)
 	  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n :rule-30-levels 0))))))
@@ -2081,9 +2111,9 @@ Gerry S
 	(clear-counters)
 	(clear-perf-stats)
 	(setq g (make-rule-30-test))
-	(! (g break-rule) 'rule-30-center 'ace-new-edges (lambda () (gv)))
-	;; (! (g break-rule) 'xis 'ace-new-edges (lambda () (gv)))
-	;; (! (g break-rule) 'xis-not 'del-consequent-edges (lambda () (gv)))
+	(! (g break-rule) 'rule-30-center 'ace-new-edges (lambda (trace-info) (gv)))
+	;; (! (g break-rule) 'xis 'ace-new-edges (lambda (trace-info) (gv)))
+	;; (! (g break-rule) 'xis-not 'del-consequent-edges (lambda (trace-info) (gv)))
 	(with-redirected-stdout "x"
 	  (lambda (xstdout)
 		(let ((*print-tags* (and nil '(me4 ace4 pop-head queue-node))))
@@ -2282,7 +2312,7 @@ color-color
 	  (with-redirected-stdout (and t "fftout")
 		(lambda (s)
 		  (setq g (make-fft-test))
-		  ;; (! (g break-rule) 'weave-next-rule t (lambda () (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
+		  ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
 		  ;; (! (g trace-rule) 'cas-next)
 		  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
 			(time (! (g run) n)))))))

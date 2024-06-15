@@ -203,7 +203,7 @@
 					(set-gv-attr n 'fontname 'arial)
 					(set-gv-attr n 'style 'filled)
 
-					(when (eq (! (g hget) n 'type) 'rule)
+					(when (memq 'rule (! (g hget-all) n 'type))
 					  (let ((name (! (g hget) n 'name)))
 						(set-gv-attr n 'label name)
 						(set-gv-attr n 'shape 'rectangle)
@@ -388,7 +388,7 @@
 									(let ((edge-color (! (g hget) prop 'edge-color)))
 									  (let ((edge-color-string ""))
 										(dolist (r (list in-node out-node))
-										  (when (eq (! (g hget) r 'type) 'rule)
+										  (when (memq 'rule (! (g hget-all) r 'type))
 											(let ((n (! (g hget) r 'name)))
 											  (when (member n omitted-attrs :test #'eq)
 												(return-from b nil))

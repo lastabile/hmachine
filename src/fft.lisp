@@ -238,15 +238,12 @@
   (?ae0 ref ?e0)
   (?e0 zero)
   (?a local-rule-pool ?p)
-  (?p lrp-rule ?cas-zero)
-  (?cas-zero name cas-zero)
   (?p lrp-rule ?cas-new)
   (?cas-new name cas-new)
   )
  (add
   (print even-zero ?this-obj ?a ?a1 ?ae0 ?e0)
   (?ae0 zero)
-  (?ae0 rule ?cas-zero)
   (?ae0 rule ?cas-new)
   )
  (del
@@ -269,15 +266,12 @@
   (?e0 next ?e1)
   (?e0 zero)
   (?a local-rule-pool ?p)
-  (?p lrp-rule ?cas-zero)
-  (?cas-zero name cas-zero)
   (?p lrp-rule ?cas-new)
   (?cas-new name cas-new)
   )
  (add
   (print odd-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?e0)
   (?ae0 zero)
-  (?ae0 rule ?cas-zero)
   (?ae0 rule ?cas-new)
   )
  (del
@@ -328,7 +322,6 @@
   (?nn1 new-node sn1))
  (add
   (print cas-new ?this-obj ?root-var ?a ?a1 ?e0 ?e1 ?nn1)
-  ;; (print cas-new1 ?nn1 ?e0)
   (?nn1 is-elem-of ?a1)
   (?a1 elem ?nn1)
   (?nn1 ref ?e0)
@@ -339,7 +332,7 @@
 (rule
  (name cas-zero)
  (local)
- ;; (root-var ?e0)
+ (root-var ?e0)
  (pred
   (?a copy-array-struct ?a1)
   (?e0 is-elem-of ?a)
@@ -357,7 +350,7 @@
 (rule
  (name cas-next)
  (local)
- ;; (root-var ?e0)
+ (root-var ?ae0)
  (pred
   (?a copy-array-struct ?a1)
   (?ae0 is-elem-of ?a1)
@@ -378,66 +371,6 @@
   (?this-obj rule ?this-rule)
   ))
 
-;;
-;; Cas verify rules
-;;
-;; These need to go sequentially around the loop and signal done when the loop is closed
-;;
-
-(rule
- (name cas-verify-zero)
- (type verifier)
- (local)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 is-elem-of ?a1)
-  (?ae1 is-elem-of ?a1)
-  (?ae0 zero)
-  (?ae0 next ?ae1))
- (add
-  (print cas-verify-zero ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1)
-  (?ae0 verify-next ?ae1))
- (del
-  (?this-obj rule ?this-rule)))
-
-(rule
- (name cas-verify-next)
- (type verifier)
- (local)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 is-elem-of ?a1)
-  (?ae1 is-elem-of ?a1)
-  (?ae2 is-elem-of ?a1)
-  (?ae0 verify-next ?ae1)
-  (?ae1 next ?ae2))
- (add
-  (print cas-verify-next ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1 ?ae2)
-  (?ae1 verify-next ?ae2))
- (del
-  (?this-obj rule ?this-rule)
-  ))
-
-(rule
- (name cas-verify-loop-done)
- (type verifier)
- (local)
- (pred
-  (?a copy-array-struct ?a1)
-  (?ae0 zero)
-  (?ae0 is-elem-of ?a1)
-  (?ae1 is-elem-of ?a1)
-  (?ae1 verify-next ?ae0))
- (add
-  (print cas-verify-loop-done ?this-obj ?root-var ?a ?a1 ?ae0 ?ae1)
-  (?a1 loop-done))
- (del
-  (?this-obj rule ?this-rule)))
-
-;;
-;; End cas verify rules
-;;
-
 (rule
  (name cas-rule-mod)
  (attach-to global-node)
@@ -449,21 +382,18 @@
   (?cas-new name cas-new)
   (?p lrp-rule ?cas-next)
   (?cas-next name cas-next)
-  (?p lrp-rule ?cas-loop-done)
-  (?cas-verify-loop-done name cas-verify-loop-done)
-  (?cas-verify-zero name cas-verify-zero)
-  (?cas-verify-next name cas-verify-next)
   )
  (add
   (print cas-rule-mod)
   (?cas-new add ?nn1 rule ?cas-next)
+  
   (?cas-new add ?e1 rule ?cas-new)
   (?cas-new del ?e0 rule ?cas-new)
-  (?cas-new add ?e1 rule ?cas-zero)
-  (?cas-new add ?nn1 rule ?cas-verify-next)
-  (?cas-zero add ?ae0 rule ?cas-loop-done)
-  (?cas-zero add ?ae0 rule ?cas-verify-zero)
-  (?cas-zero add ?ae0 rule ?cas-verify-next)
+
+  (?cas-next add ?e1 rule ?cas-zero)
+  (?cas-next del ?e0 rule ?cas-zero)
+  (?cas-next add ?e1 rule-order ?cas-next ?cas-zero)
+
   ;; (?cas-next del ?ae1 rule ?cas-next)		;; Can't del the rule from here yet! Removed 1/9/24 when did "sequential" tree rules
   ;; (?cas-next del ?e1 rule ?cas-zero)
   )
@@ -483,8 +413,6 @@
   (?even-new name even-new)
   (?p lrp-rule ?odd-new)
   (?odd-new name odd-new)
-  (?p lrp-rule ?cas-zero)
-  (?cas-zero name cas-zero)
   (?p lrp-rule ?cas-new)
   (?cas-new name cas-new)
   )
@@ -492,7 +420,6 @@
   (print tree-elem-rule-mod)
   (?tree-elem-rule add ?x rule ?even-new)
   (?tree-elem-rule add ?x rule ?odd-new)
-  ;; (?tree-elem-zero-rule add ?x rule ?cas-zero)
   (?tree-elem-zero-rule add ?x rule ?cas-new)
   )
  (del

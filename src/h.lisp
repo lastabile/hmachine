@@ -1911,10 +1911,10 @@
 	  (defm untrace-rule (rule-name)
 		(rem-edge `(rule-trace ,rule-name)))
 
-	  (defm break-rule (rule-name &optional (key t) (thunk nil))
+	  (defm break-rule (rule-name &optional (key t) (fcn nil))
 		(add-edge `(rule-trace ,rule-name))
 		(add-edge `(rule-break ,rule-name))
-		(add-edge `(rule-break-info ,rule-name ,key ,thunk)))
+		(add-edge `(rule-break-info ,rule-name ,key ,fcn)))
 
 	  (defm unbreak-rule (rule-name)
 		(rem-edge `(rule-break ,rule-name)))
@@ -1930,29 +1930,31 @@
 	  ;; whose prefix is (rule-break <rule-name>). The rest of that edge is then a set of directives, options, and info
 	  ;; for controlling the break.
 	  ;;
-	  ;; We only do an actual trace if the break form is not present; i.e., break take priority. And at this point we
+	  ;; We only do an actual trace if the break form is not present; i.e., break takes priority. And at this point we
 	  ;; have no further options for trace.
 	  ;;
 
-	  (defm check-rule-trace (rule-name &optional l)
-		(let ((r (edge-exists `(rule-trace ,rule-name))))
-		  (when r
-			(let ((b (edge-exists `(rule-break ,rule-name))))
-			  (if b
-				  (let ((break-info (rest (rest (first (get-edges-from-subqet `(rule-break-info ,rule-name)))))))
-					(let ((key (first break-info)))
-					  (let ((thunk (second break-info)))
-						(cond
-						 ((and (not (null thunk))
-							   (or (eq key t)
-								   (eq key (first l))))
-						  (funcall thunk))
-						 ((or (eq key t)
-							  (eq key (first l)))
-						  (let ((msg (format nil "rule-break ~a ~a ~a" rule-name b l)))
-							(cerror "xxx" msg)))))))
-				  (when l
-					(print `(rule-trace ,@l))))))))
+	  (defm check-rule-trace (rule-name &optional trace-info)
+		(let ((l trace-info))
+		  (let ((r (edge-exists `(rule-trace ,rule-name))))
+			(when r
+			  (let ((b (edge-exists `(rule-break ,rule-name))))
+				(if b
+					(let ((break-info (rest (rest (first (get-edges-from-subqet `(rule-break-info ,rule-name)))))))
+					  (let ((key (first break-info)))
+						(let ((fcn (second break-info)))
+						  (cond
+						   ((and (not (null fcn))
+								 (or (eq key t)
+									 (eq key (first l))))
+							(funcall fcn l))
+						   ((or (eq key t)
+								(eq key (first l)))
+							(let ((msg (format nil "rule-break ~a ~a ~a" rule-name b l)))
+							  (cerror "xxx" msg)))))))
+					(when l
+					  (print `(rule-trace ,@l))))))
+			r)))
 
 	  (defm get-rule-stats ()	;; With the advent of the pass-through next, this should only be for debug
 		rule-stats)
