@@ -252,11 +252,11 @@
 				(let ((ne (create-node-entry n)))
 				  (node-entry-name ne)))
 
-			  (defl get-format (n)
+			  (defl get-format (n &key as-prop)
 				(let ()
 				  (let ((ne (! (node-map lookup-one) n)))
 					(let ((gv-attr-info-list (! ((node-entry-gv-attr-map ne) as-list))))
-					  (let ((r (format nil "\"~a\" [" (node-entry-name ne))))
+					  (let ((r (if as-prop (format nil "[") (format nil "\"~a\" [" (node-entry-name ne)))))
 						(let ((comma ""))
 						  (dolist (gv-attr-info gv-attr-info-list)
 							(let ((attr (first gv-attr-info)))
@@ -379,6 +379,7 @@
 							  (let ((prop (second v)))
 								(create-node-entry in-node)
 								(create-node-entry out-node)
+								(create-node-entry prop :as-prop t)
 								(let ((out-node (if (or (and separate-number-nodes  (numberp out-node))
 														(! (g hget) out-node 'separate-display-node))
 													(clone-node-entry out-node)
@@ -386,7 +387,7 @@
 								  (create-node-entry prop :do-not-emit t)
 								  (let ((prop-label (get-gv-attr prop 'label)))
 									(let ((edge-color (! (g hget) prop 'edge-color)))
-									  (let ((edge-color-string ""))
+									  (let ((edge-attr-string ""))
 										(dolist (r (list in-node out-node))
 										  (when (memq 'rule (! (g hget-all) r 'type))
 											(let ((n (! (g hget) r 'name)))
@@ -405,11 +406,21 @@
 															r rule-entry-node)))))))
 										(when (eq prop 'note)
 										  (set-gv-attr out-node 'shape 'rectangle))
+										(setq edge-attr-string (get-format prop :as-prop t))
+										#|
 										(when edge-color
-										  (setq edge-color-string (format nil ",color=~a" edge-color)))
+										(setq edge-attr-string (concatenate 'string edge-attr-string (format nil ",color=~a" edge-color))))
+										|#
 										(if emit-labels
-											(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
-													in-node out-node prop-label edge-color-string)
+											
+											#| (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
+															  in-node out-node prop-label edge-attr-string) |#
+
+											(format s "\"~a\" -> \"~a\"              ~a~%" 
+															  in-node out-node edge-attr-string)
+
+
+											
 											(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
 													in-node out-node "" edge-color-string)))))))))))
 

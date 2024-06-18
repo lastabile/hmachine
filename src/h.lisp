@@ -916,7 +916,6 @@
 		(edge-to-trace (make-edge-to-trace))
 		(std-vars (make-std-vars))
 		(rule-stats nil)
-		(node-stats nil)
 		(expand-edges-visit-hash (make-hash-table :test #'equal))
 		(successful-exec-obj-list nil)
 		)
@@ -928,7 +927,6 @@
 	  (defm init ()
 		(! (env-triggered-table set-graph) self)
 		(setq rule-stats (make-rule-stats self))
-		(setq node-stats (make-node-stats self))
 		;; Would be nice to get rid of auto-add of this edge     auto-add-gnlrp
 		(addraw global-node 'local-rule-pool local-rule-pool)
 		nil)
@@ -1125,17 +1123,6 @@
 				  (let ((r (funcall thunk)))
 					(when r
 					  (while thunk))))
-				(defl exec-obj-stat (match-status)
-				  (! (node-stats update-tested) node)
-				  (when (memq match-status '(:new-edges :no-new-edges))
-					(! (node-stats update-matched) node))
-				  (cond
-				   ((eq match-status :new-edges)
-					(! (node-stats update-new-edges) node))
-				   ((eq match-status :no-new-edges)
-					(! (node-stats update-not-new-edges) node))
-				   ((eq match-status :failed)
-					(! (node-stats update-failed) node))))
 				(defl get-all-rules ()
 				  (let ((rules (hget-all node 'rule)))
 					(let ((rule-orders (mapcad (lambda (x) (when (equal (first x) node) (intersect (rest (rest x)) rules))) (get-edges-from-subqet `(,node rule-order)))))
@@ -1192,8 +1179,7 @@
 					  (when global-rule-pool
 						(let ((global-rules (dedup-rules (hget-all global-rule-pool 'grp-rule))))
 						  (dolist (rule global-rules)
-							(m-and-e rule node))))))))
-				(exec-obj-stat match-status))
+							(m-and-e rule node)))))))))
 			  (when (chkptag 'eo2)
 				(when (eq match-status :new-edges)
 				  (let ((evaled-rule-names (mapcar (lambda (rule-node) (hget rule-node 'name)) evaled-rules)))
@@ -1940,6 +1926,29 @@
 			(when r
 			  (let ((b (edge-exists `(rule-break ,rule-name))))
 				(if b
+					(let ((break-info-list (get-edges-from-subqet `(rule-break-info ,rule-name))))
+					  (dolist (break-info break-info-list)
+						(let ((key (third break-info)))
+						  (let ((fcn (fourth break-info)))
+							(cond
+							  ((and (not (null fcn))
+									(or (eq key t)
+										(eq key (first l))))
+							   (funcall fcn l))
+							  ((or (eq key t)
+								   (eq key (first l)))
+							   (let ((msg (format nil "rule-break ~a ~a ~a" rule-name b l)))
+								 (cerror "xxx" msg))))))))
+					(when l
+					  (print `(rule-trace ,@l))))))
+			r)))
+
+	  (defm old-check-rule-trace (rule-name &optional trace-info)
+		(let ((l trace-info))
+		  (let ((r (edge-exists `(rule-trace ,rule-name))))
+			(when r
+			  (let ((b (edge-exists `(rule-break ,rule-name))))
+				(if b
 					(let ((break-info (rest (rest (first (get-edges-from-subqet `(rule-break-info ,rule-name)))))))
 					  (let ((key (first break-info)))
 						(let ((fcn (second break-info)))
@@ -1970,9 +1979,6 @@
 
 	  (defm get-matched (rule-node)
 		(! (rule-stats get-matched) rule-node))
-
-	  (defm node-stats ()
-		node-stats)
 
 	  ;; Calls (cont <edge-creation-status> <match-status> <new-edges> <matched-edges> <deleted-edges>)
 	  ;; 
@@ -2100,6 +2106,7 @@
 								))))
 						(let ()
 						  (setq match-status :failed)
+						  (check-rule-trace rule-name (list 'match-and-execute-rule-failed rule-node rule-name obj-node))
 						  (! (rule-stats update-failed) rule-node)
 						  (! (edge-to-trace insert-en) obj-node :failed rule-node rule-name obj-node)
 						  ))))
@@ -3790,134 +3797,6 @@
 			  nil)))
 
 		))))
-
-(defstruct node-stats-entry
-  (tested 0)
-  (matched 0)
-  (new-edges 0)
-  (not-new-edges 0)
-  (failed 0))
-
-(defc node-stats nil (graph)
-  (let ((node-stats-table (make-sur-map))
-		(all-nodes-tested 0)
-		(all-nodes-new-edges 0))
-	(let ((x (let ((*print-level* 1))
-			   (let ((*print-length* 1))
-				 ;; (show-stack)		;; Good technique!
-				 )
-			   nil)))
-
-	  (defm get-entry (node)
-		(let ((entry (! (node-stats-table lookup-one) node)))
-		  (when (null entry)
-			(setq entry (make-node-stats-entry))
-			(! (node-stats-table insert) node entry))
-		  entry))
-
-	  (defm node-stats (&key (sort-colno 0) (nodes nil))
-		(defr
-		  (defl node-comp (x y)
-			(let ((x (nth sort-colno x))
-				  (y (nth sort-colno y)))
-			  (cond
-			   ((and (numberp x) (numberp y))
-				(> x y))
-			   ((and (symbolp x) (symbolp y))
-				(symbol< x y))
-			   ((and (stringp x) (stringp y))
-				(string< x y)))))
-		  (defl symbol< (x y) (string< (symbol-name x) (symbol-name y)))
-		  (defl node-descr (node) ;; Dig out some properties heuristically for a bit of extra info in stats		   
-			(let ((x (! (graph hget) node 'name)))
-			  (let ((x (or x (! (graph hget-all) node 'type))))
-				x)))
-		  (defl div (x y)
-			(if (= y 0) 0 (/ x y)))
-		  (let ((max-col-0 0))
-			(let ((max-col-1 0))
-			  (let ((info (mapcan (lambda (x)
-									(let ((e (get-entry x)))
-									  (let ((x-descr (node-descr x)))
-										(setq max-col-0 (max max-col-0 (length (format nil "~a" x))))
-										(setq max-col-1 (max max-col-1 (length (format nil "~a" x-descr))))
-										(list (list x
-													x-descr
-													(node-stats-entry-tested e)
-													(node-stats-entry-matched e)
-													(node-stats-entry-new-edges e)
-													(node-stats-entry-not-new-edges e)
-													(node-stats-entry-failed e)
-													(div (* (float (node-stats-entry-new-edges e)) 100) (float (node-stats-entry-tested e)))
-													(div (* (float (node-stats-entry-not-new-edges e)) 100) (float (node-stats-entry-tested e)))
-													(div (* (float (node-stats-entry-failed e)) 100) (float (node-stats-entry-tested e))))))))
-								  (or nodes (! (node-stats-table inputs))))))
-				(let ((info (sort info #'node-comp)))
-				  (let ((s 10))
-					(let ((m (+ max-col-0 max-col-1 2)))
-					  (let ((args (list (+ max-col-0 (* s 0)) (+ m (* s 0)) (+ m (* s 1)) (+ m (* s 2)) (+ m (* s 3)) (+ m (* s 4)) (+ m (* s 5)) (+ m 6 (* s 6)) (+ m 8 (* s 7)) (+ m 10 (* s 8)))))
-						(apply #'format t "~%0~vt1~vt2~vt3~vt4~vt5~vt6~vt7~vt8~vt9~vt10" args)
-						(apply #'format t "~%node~vtname~vttested~vtmatched~vtnew-e~vtnot-new-e~vtfailed~vtefficiency%~vtredundancy%~vtfailure%~%" args)
-						(dolist (x info)
-						  (format t "~%~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~a~vt~,2f~vt~,2f~vt~,2f"
-								  (nth 0 x) (+ max-col-0 (* s 0))
-								  (nth 1 x) (+ m (* s 0))
-								  (nth 2 x) (+ m (* s 1))
-								  (nth 3 x) (+ m (* s 2))
-								  (nth 4 x) (+ m (* s 3))
-								  (nth 5 x) (+ m (* s 4))
-								  (nth 6 x) (+ m (* s 5))
-								  (nth 7 x) (+ m 6 (* s 6))
-								  (nth 8 x) (+ m 8 (* s 7))
-								  (nth 9 x)))))))))
-			nil)))
-
-	  (defm update-tested (node)
-		(gstat 'eo-tested (lambda (x y) (+ x y)) (lambda () 1))
-		(let ((entry (get-entry node)))
-		  (setf (node-stats-entry-tested entry) (+ (node-stats-entry-tested entry) 1)))
-		(setq all-nodes-tested (+ all-nodes-tested 1))
-		nil)
-
-	  (defm update-matched (node)
-		(gstat 'eo-matched (lambda (x y) (+ x y)) (lambda () 1))
-		(let ((entry (get-entry node)))
-		  (setf (node-stats-entry-matched entry) (+ (node-stats-entry-matched entry) 1)))
-		nil)
-
-	  (defm get-matched (node)
-		(let ((entry (get-entry node)))
-		  (node-stats-entry-matched entry)))
-
-	  (defm update-failed (node)
-		(gstat 'eo-failed (lambda (x y) (+ x y)) (lambda () 1))
-		(let ((entry (get-entry node)))
-		  (setf (node-stats-entry-failed entry) (+ (node-stats-entry-failed entry) 1)))
-		nil)
-
-	  ;; These two methods update the counts for executions which either
-	  ;; produce new edges, or not (the latter can be match failures or
-	  ;; already-matched without new edges being produced).
-	  ;;
-	  ;; The numbers can be computed from tested, matched, and new-edges
-	  ;; however these methods need to be their own calls in order to
-	  ;; drive the filter. [Filter removed 4/5/16. This comment is
-	  ;; useful rationale.]
-
-	  (defm update-new-edges (node)
-		(gstat 'eo-matched-new-edges (lambda (x y) (+ x y)) (lambda () 1))
-		(let ((entry (get-entry node)))
-		  (setf (node-stats-entry-new-edges entry) (+ (node-stats-entry-new-edges entry) 1)))
-		(setq all-nodes-new-edges (+ all-nodes-new-edges 1))
-		nil)
-
-	  (defm update-not-new-edges (node)
-		(gstat 'eo-matched-not-new-edges (lambda (x y) (+ x y)) (lambda () 1))
-		(let ((entry (get-entry node)))
-		  (setf (node-stats-entry-not-new-edges entry) (+ (node-stats-entry-not-new-edges entry) 1)))
-		nil)
-
-	  )))
 
 ;; Belongs in subst-match, moved outside for perf.
 
