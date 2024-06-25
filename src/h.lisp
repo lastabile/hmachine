@@ -1912,36 +1912,44 @@
 	  ;; the form (rule-trace <rule-name>) is always added, and it is very fast to check for a fixed edge. So we check
 	  ;; for this first and only go further if this edge is found.
 	  ;;
-	  ;; Then look for an edge of the form (rule-break <rule-name>). If this is found we will then look for another edge
-	  ;; whose prefix is (rule-break <rule-name>). The rest of that edge is then a set of directives, options, and info
-	  ;; for controlling the break.
+	  ;; So if (rule-trace <rule-name>) is found we then look for an edge of the form (rule-break <rule-name>). If this
+	  ;; is found we will then look for yet another edge whose prefix is (rule-break <rule-name>). The rest of that edge
+	  ;; is then an info list, the trace info, a set of directives and options for controlling the trace/break.
+	  ;;
+	  ;; The interpretation of the info is that the first element is a key, a symbol, used to specify that an action
+	  ;; should be triggered via the break info.  The remainder is a key- (ie, context-) specific list of info; if any
+	  ;; member of this list is a function, it is called as a thunk to resolve the value. So the info is only returned
+	  ;; lazily, ie only evaluated if a break is actually detected.
 	  ;;
 	  ;; We only do an actual trace if the break form is not present; i.e., break takes priority. And at this point we
 	  ;; have no further options for trace.
 	  ;;
 
 	  (defm check-rule-trace (rule-name &optional trace-info)
-		(let ((l trace-info))
-		  (let ((r (edge-exists `(rule-trace ,rule-name))))
-			(when r
-			  (let ((b (edge-exists `(rule-break ,rule-name))))
-				(if b
-					(let ((break-info-list (get-edges-from-subqet `(rule-break-info ,rule-name))))
-					  (dolist (break-info break-info-list)
-						(let ((key (third break-info)))
-						  (let ((fcn (fourth break-info)))
-							(cond
-							  ((and (not (null fcn))
-									(or (eq key t)
-										(eq key (first l))))
-							   (funcall fcn l))
-							  ((or (eq key t)
-								   (eq key (first l)))
-							   (let ((msg (format nil "rule-break ~a ~a ~a" rule-name b l)))
-								 (cerror "xxx" msg))))))))
-					(when l
-					  (print `(rule-trace ,@l))))))
-			r)))
+		(defr
+		  (defl resolve-lazy-values (l)
+			(mapcar (lambda (x) (if (functionp x) (funcall x) x)) l))
+		  (let ((l trace-info))
+			(let ((r (edge-exists `(rule-trace ,rule-name))))
+			  (when r
+				(let ((b (edge-exists `(rule-break ,rule-name))))
+				  (if b
+					  (let ((break-info-list (get-edges-from-subqet `(rule-break-info ,rule-name))))
+						(dolist (break-info break-info-list)
+						  (let ((key (third break-info)))
+							(let ((fcn (fourth break-info)))
+							  (cond
+							   ((and (not (null fcn))
+									 (or (eq key t)
+										 (eq key (first l))))
+								(funcall fcn (resolve-lazy-values l)))
+							   ((or (eq key t)
+									(eq key (first l)))
+								(let ((msg (format nil "rule-break ~a ~a ~a" rule-name b (resolve-lazy-values l))))
+								  (cerror "xxx" msg))))))))
+					  (when l
+						(print `(rule-trace ,@(resolve-lazy-values l)))))))
+			  r))))
 
 	  (defm old-check-rule-trace (rule-name &optional trace-info)
 		(let ((l trace-info))
@@ -2106,7 +2114,8 @@
 								))))
 						(let ()
 						  (setq match-status :failed)
-						  (check-rule-trace rule-name (list 'match-and-execute-rule-failed rule-node rule-name obj-node))
+						  (check-rule-trace rule-name (list 'match-and-execute-rule-failed rule-node rule-name obj-node
+															(lambda () (all-matches rule-node obj-node :do-partial-match t))))
 						  (! (rule-stats update-failed) rule-node)
 						  (! (edge-to-trace insert-en) obj-node :failed rule-node rule-name obj-node)
 						  ))))
@@ -2335,64 +2344,68 @@
 						  (return scan-edges)))))
 				  (values max-sum result)))))))
 
-	  (defm all-matches (rule-node obj-node &key use-all-matches-aux2) ;; all-var-mod -- not right now [5/18/23 -- not sure what this means]
-		(! (self do-all-matches) rule-node obj-node use-all-matches-aux2))
+	  ;; all-var-mod -- not right now [5/18/23 -- not sure what this means]
+	  
+	  (defm all-matches (rule-node obj-node &key use-all-matches-aux2 do-partial-match)
+		(! (self do-all-matches) rule-node obj-node use-all-matches-aux2 do-partial-match))
 
 	  (defr
 		(defl all-matches-hash-equal (x y)
 		  (and (equal (first x) (first y))
 			   (env-equal (second x) (second y))))
+		(defl partial-match (rulegraph obj-node root-vars)
+		  (dolist (root-var root-vars)
+			(let ((*print-tags* t)) ;; s15
+			  (! (rulegraph subst-match) self obj-node root-var))))
 		(let ((hash-test-name (hdefine-hash-table-test #'all-matches-hash-equal #'set-hash)))
-		  (defm do-all-matches (rule-node obj-node use-all-matches-aux2)
+		  (defm do-all-matches (rule-node obj-node use-all-matches-aux2 do-partial-match)
 			(timer 'all-matches
 			  (lambda ()
-				(defr
-				  (defl all-matches-hash-equal (x y)
-					(and (equal (first x) (first y))
-						 (env-equal (second x) (second y))))
-				  (let ((rulegraph (! ((get-rule-components rule-node) pred-rulegraph))))
-					(let ((root-vars (get-root-vars rule-node)))
-					  (let ((h (make-hash-table :size 7 :test hash-test-name)))
-						(let ((possible-match-fcn (possible-match-fcn rule-node obj-node rulegraph)))
-						  (when possible-match-fcn
-							(block b
-							  (dolist (root-var root-vars)
-								(let ((poss-match (funcall possible-match-fcn root-var)))
-								  (when (chkptag 'am1)
-									(print (list 'am1 (hget rule-node 'name) obj-node poss-match root-var)))
-								  (when poss-match
-									(let ()
-									  (let ((envlist (all-matches-aux rulegraph obj-node root-var :use-all-matches-aux2 use-all-matches-aux2)))
-										(when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
-										  (when (chkptag 'am3)
-											(print (list 'am3 (hget rule-node 'name) obj-node root-var))))
-										(when envlist
-										  (when (chkptag 'am2)
-											($comment (print (list 'am2 (hget rule-node 'name) obj-node root-var envlist)))
-											(print (list 'am2 (hget rule-node 'name) obj-node root-var (length envlist) (let ((g (intern (symbol-name (gensym))))) (set g envlist) g)))
-											)
-										  (dolist (env envlist)
-											(let ((env-info (list root-var env)))
-											  (setf (gethash env-info h) env-info)))
-										  ;; (return-from b nil)  ;; To bail or not to bail, that is the question. Today we bail.
-										  ;; global-change -- no don't bail, get all root vars 
-										  ;; 5/18/23 -- Keep don't-bail, as dealing with root vars seems fundamental.
-										  )))))))))
-						(when (not (= (hash-table-count h) 0))
-						  (let ((std-var-level (or (hget rule-node 'std-var-level) 0)))
-							(let ((envlist nil))
-							  (let ((std-bindings `((,(! (std-vars var-base-to-var) '?this-rule std-var-level) ,rule-node)
-													(,(! (std-vars var-base-to-var) '?this-rule-name std-var-level) ,(hget rule-node 'name))
-													(,(! (std-vars var-base-to-var) '?this-obj std-var-level) ,obj-node))))
-								(maphash (lambda (k v)
-										   (let ((root-var (first v))
-												 (env (second v)))
-											 (setq envlist (cons (append `(,@std-bindings
-																		   (,(! (std-vars var-base-to-var) '?root-var std-var-level) ,root-var))
-																		 env)
-																 envlist))))
-										 h)
-								envlist)))))))))))))
+				(let ((rulegraph (! ((get-rule-components rule-node) pred-rulegraph))))
+				  (let ((root-vars (get-root-vars rule-node)))
+					(if do-partial-match
+						(partial-match rulegraph obj-node root-vars)
+						(let ((h (make-hash-table :size 7 :test hash-test-name)))
+						  (let ((possible-match-fcn (possible-match-fcn rule-node obj-node rulegraph)))
+							(when possible-match-fcn
+							  (block b
+								(dolist (root-var root-vars)
+								  (let ((poss-match (funcall possible-match-fcn root-var)))
+									(when (chkptag 'am1)
+									  (print (list 'am1 (hget rule-node 'name) obj-node poss-match root-var)))
+									(when poss-match
+									  (let ()
+										(let ((envlist (all-matches-aux rulegraph obj-node root-var :use-all-matches-aux2 use-all-matches-aux2)))
+										  (when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
+											(when (chkptag 'am3)
+											  (print (list 'am3 (hget rule-node 'name) obj-node root-var))))
+										  (when envlist
+											(when (chkptag 'am2)
+											  ($comment (print (list 'am2 (hget rule-node 'name) obj-node root-var envlist)))
+											  (print (list 'am2 (hget rule-node 'name) obj-node root-var (length envlist) (let ((g (intern (symbol-name (gensym))))) (set g envlist) g)))
+											  )
+											(dolist (env envlist)
+											  (let ((env-info (list root-var env)))
+												(setf (gethash env-info h) env-info)))
+											;; (return-from b nil)  ;; To bail or not to bail, that is the question. Today we bail.
+											;; global-change -- no don't bail, get all root vars 
+											;; 5/18/23 -- Keep don't-bail, as dealing with root vars seems fundamental.
+											)))))))))
+						  (when (not (= (hash-table-count h) 0))
+							(let ((std-var-level (or (hget rule-node 'std-var-level) 0)))
+							  (let ((envlist nil))
+								(let ((std-bindings `((,(! (std-vars var-base-to-var) '?this-rule std-var-level) ,rule-node)
+													  (,(! (std-vars var-base-to-var) '?this-rule-name std-var-level) ,(hget rule-node 'name))
+													  (,(! (std-vars var-base-to-var) '?this-obj std-var-level) ,obj-node))))
+								  (maphash (lambda (k v)
+											 (let ((root-var (first v))
+												   (env (second v)))
+											   (setq envlist (cons (append `(,@std-bindings
+																			 (,(! (std-vars var-base-to-var) '?root-var std-var-level) ,root-var))
+																		   env)
+																   envlist))))
+										   h)
+								  envlist)))))))))))))
 
 	  ;; To disable subst-match for testing, rename this method to something and rename all-matches-aux2 to
 	  ;; all-matches-aux
@@ -3862,11 +3875,11 @@
 		(let ((doloop-cnt 0))
 		  (let ((last-env-chain nil)) ;; Save the env-chain and ks whenever we enter the doloop. Last one should also be largest such env.
 			(let ((last-ks nil))
-			  (let () #| ((ks-with-existing-edges (make-sur-map :input-test #'equalp :res-test #'equalp))) |#		;; partial-match-info
+			  (let ((ks-with-existing-edges (make-sur-map :input-test #'equalp :res-test #'equalp))) #| () |#		;; partial-match-info
 				(defm subst-match (objgraph obj-node root-var &key (rule-name (name)))	;; rule-name arg for tracing purposes
 				  (macrolet ((xprint (tag &rest x)
-							   nil
-							   ;; `(ptag ,tag ,@x)
+									 ;; nil
+									 `(ptag ,tag ,@x)
 							   ))
 					(timer 'subst-match
 					  (lambda ()
@@ -3981,7 +3994,7 @@
 										(return-from b nil))))
 								  t))
 							  (defl x-edges-exist (ks) ;; partial-match-info  Use this version to store the partial match info
-								($comment
+								($nocomment
 								 (block b
 								   (let ((kes nil))
 									 (let ((r t))
@@ -4019,7 +4032,7 @@
 								(if (check-consts ks)
 									(let ()
 									  (xprint 's4 env-chain doloop-cnt)
-									  (when (edges-exist ks)
+									  (when (x-edges-exist ks)
 										(xprint 's2 env-chain doloop-cnt)
 										(setf (gethash env-chain envs) env-chain) ;; Tests show we can get dups so hash table is needed
 										nil))
@@ -4040,10 +4053,10 @@
 									(xprint 's16 doloop-cnt)
 									(let ((new-node-env (get-new-node-env)))
 									  (let ((envs-list (hash-table-value-to-list envs)))
-										($comment (when (null envs-list) ;; partial-match-info 
-													(xprint 's12 rule-name root-var obj-node
-															(mapcar (lambda (k) (k-orig-pred k)) ks)
-															(! (ks-with-existing-edges inputs)))))
+										($nocomment (when (null envs-list) ;; partial-match-info 
+													  (xprint 's12 rule-name root-var obj-node
+															  (mapcar (lambda (k) (k-orig-pred k)) ks)
+															  (! (ks-with-existing-edges inputs)))))
 										(when (null envs-list)
 										  (xprint 's13 last-env-chain)
 										  ;; partial-match-info
