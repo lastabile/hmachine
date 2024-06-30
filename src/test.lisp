@@ -33,7 +33,7 @@
 	(lambda (s)
 	  (setq g (make-fft-test))
 	  ;; (! (g trace-rule) 'cas-next)
-	  (let ((*print-tags* (and nil '(s0 s15 #|am2 succ-path|#)))) ;; use (get-tag-list) to see all compiled tags
+	  (let ((*print-tags* (and t '(subst-match-fail)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
 
 ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))

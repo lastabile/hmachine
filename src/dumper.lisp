@@ -243,7 +243,6 @@
 				(let ((ne (! (node-map lookup-one) n)))
 				  (! ((node-entry-gv-attr-map ne) lookup-one) attr)))
 
-
 			  (defl prepend-node-name (n l)
 				(let ((ne (create-node-entry n)))
 				  (setf (node-entry-name ne) (symcat l '- (node-entry-name ne)))

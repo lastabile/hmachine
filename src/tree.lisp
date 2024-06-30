@@ -1,47 +1,6 @@
 
-;; 1/9/24
-;;
-;; Added this tree-next-level0-zero-rule rule and modified others to get a purely sequential rule triggering of the
-;; "next" relation. This includes tree-loop-rule, so when that runs we know the tree is "done."
-;;
-;; This is in service of finding good sequential models. It's not the best thing for parallelism and illustrates the
-;; trade-offs. Note the rule efficiency goes down just a little.
+;; 6/28/24 See archive/tree.6.28.24.lisp for the sequential model, from which we've now pulled back.
 
-(rule
- (name tree-next-level0-zero-rule)
- (local)
- (pred
-  (?x0 l 0)
-  (?x0 zero)
-  (?x1 l 0)
-  (?x0 tree-next ?x1))
- (add
-  (print tree-next-level0-zero-rule ?this-obj ?x0 ?x1)
-  (?x0 next ?x1)
-  )
- (del
-  (?this-obj rule ?this-rule)))
-
-(rule
- (name tree-next-level0-rule)
- (local)
- (pred
-  (?x0 l 0)
-  (?x1 l 0)
-  (?x2 l 0)
-  (?x0 next ?x1)
-  (?x1 tree-next ?x2))
- (add
-  (print tree-next-level0-rule ?this-obj ?x0 ?x1 ?x2)
-  (?x1 next ?x2)
-  )
- (del
-  (?this-obj rule ?this-rule)))
-
-;; This is the original tree-next-level0-rule before the sequential change noted above. Note we just depend on tree-next
-;; not prev nexts.
-
-(comment
 (rule
  (name tree-next-level0-rule)
  (local)
@@ -55,7 +14,6 @@
   )
  (del
   (?this-obj rule ?this-rule)))
-)
 
 (rule
  (name tree-next-rule)
@@ -110,7 +68,6 @@
   (?x l 0)
   (?y max)
   (?y l 0)
-  (?y0 next ?y) 						;; Added to conform to sequential model
   )
  (add
   (print tree-loop-rule ?this-obj ?x ?y ?root-var)
@@ -141,8 +98,7 @@
   (?tree-loop-rule name tree-loop-rule)
   (?rp lrp-rule ?tree-elem-zero-rule)
   (?tree-elem-zero-rule name tree-elem-zero-rule)
-  (?rp lrp-rule ?tree-next-level0-zero-rule)
-  (?tree-next-level0-zero-rule name tree-next-level0-zero-rule))
+  )
  (add
   (print tree-top-order-rule ?this-obj ?x ?y ?p)
   (?x top ?p)
@@ -152,7 +108,6 @@
   (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
-  (?x rule ?tree-next-level0-zero-rule)
   ;; (?x rule ?tree-top-propagate-rule)
   ;; (?y rule ?tree-top-propagate-rule)
   (?y rule ?tree-max-rule)
@@ -228,15 +183,14 @@
   (?tree-loop-rule name tree-loop-rule)
   (?p rule ?tree-elem-zero-rule)
   (?tree-elem-zero-rule name tree-elem-zero-rule)
-  (?p rule ?tree-next-level0-zero-rule)
-  (?tree-next-level0-zero-rule name tree-next-level0-zero-rule))
+  )
  (add
   (print tree-zero-rule ?this-obj ?x ?y ?p)
   (?x zero)
   (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
-  (?x rule ?tree-next-level0-zero-rule))
+  )
  (del
   (?p rule ?tree-zero-rule)
   (?p rule ?tree-loop-rule)
@@ -313,13 +267,14 @@
   (exec ?nn1 ?nn2)
   ))
 
-(rule
+(rule						
  (name tree-leaf-rule)
  (local)
  (pred
   (?x l 0))
  (add
-  (print tree-leaf-rule ?x)))
+  (print tree-leaf-rule ?x)
+  (?x tree-leaf-rule-done)))  ;; Not triggered because no adds?
 
 ;; 8/28/23 This model has been successful here, as the combo of tree-rule and tree-elem-rule, with deletion and rule
 ;; ordering, as below, causes tree-elem-rule to have 100% efficiency. Few rules do.
@@ -403,8 +358,6 @@
   (?tree-next-rule name tree-next-rule)
   ;; (?p lrp-rule ?tree-elem-rule)
   ;; (?tree-elem-rule name tree-elem-rule)
-  ;; (?p lrp-rule ?tree-next-level0-rule)
-  ;; (?tree-next-level0-rule name tree-next-level0-rule)
   )
  (add
   (print treeobj-rule)

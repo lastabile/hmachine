@@ -56,6 +56,13 @@
 ;;						 9/24/23 Added code to calc and print unmatched preds on failure. Still just for test. See tags
 ;;						 below; need to adjust them and delete older code.
 ;;
+;;						 6/26/24 Removed partial-match code from subst-match. Further efforts on partial match info will
+;;						 be via the old all-matches-aux.
+;;
+;;						 6/27/24 subst-matrch now has a tag 'subst-match-fail which dumps detailed info on the
+;;						 failures. Perf not reduced too much. Leave this log-style stuff like this for now to see if it
+;;						 helps with debugging or anything else.
+;;
 ;; better-root-var -- 5/2/23 Detect root var use and set designated root vars via heuristic.
 ;;					  10/10/23  Turned off for now as if appears to be just as fast or faster, and
 ;;							    higher efficiency, without the heuristic. It's also simpler for further
@@ -2115,7 +2122,7 @@
 						(let ()
 						  (setq match-status :failed)
 						  (check-rule-trace rule-name (list 'match-and-execute-rule-failed rule-node rule-name obj-node
-															(lambda () (all-matches rule-node obj-node :do-partial-match t))))
+															(lambda () (all-matches rule-node obj-node))))
 						  (! (rule-stats update-failed) rule-node)
 						  (! (edge-to-trace insert-en) obj-node :failed rule-node rule-name obj-node)
 						  ))))
@@ -2346,66 +2353,60 @@
 
 	  ;; all-var-mod -- not right now [5/18/23 -- not sure what this means]
 	  
-	  (defm all-matches (rule-node obj-node &key use-all-matches-aux2 do-partial-match)
-		(! (self do-all-matches) rule-node obj-node use-all-matches-aux2 do-partial-match))
+	  (defm all-matches (rule-node obj-node &key use-all-matches-aux2)
+		(! (self do-all-matches) rule-node obj-node use-all-matches-aux2))
 
 	  (defr
 		(defl all-matches-hash-equal (x y)
 		  (and (equal (first x) (first y))
 			   (env-equal (second x) (second y))))
-		(defl partial-match (rulegraph obj-node root-vars)
-		  (dolist (root-var root-vars)
-			(let ((*print-tags* t)) ;; s15
-			  (! (rulegraph subst-match) self obj-node root-var))))
 		(let ((hash-test-name (hdefine-hash-table-test #'all-matches-hash-equal #'set-hash)))
-		  (defm do-all-matches (rule-node obj-node use-all-matches-aux2 do-partial-match)
+		  (defm do-all-matches (rule-node obj-node use-all-matches-aux2)
 			(timer 'all-matches
 			  (lambda ()
 				(let ((rulegraph (! ((get-rule-components rule-node) pred-rulegraph))))
 				  (let ((root-vars (get-root-vars rule-node)))
-					(if do-partial-match
-						(partial-match rulegraph obj-node root-vars)
-						(let ((h (make-hash-table :size 7 :test hash-test-name)))
-						  (let ((possible-match-fcn (possible-match-fcn rule-node obj-node rulegraph)))
-							(when possible-match-fcn
-							  (block b
-								(dolist (root-var root-vars)
-								  (let ((poss-match (funcall possible-match-fcn root-var)))
-									(when (chkptag 'am1)
-									  (print (list 'am1 (hget rule-node 'name) obj-node poss-match root-var)))
-									(when poss-match
-									  (let ()
-										(let ((envlist (all-matches-aux rulegraph obj-node root-var :use-all-matches-aux2 use-all-matches-aux2)))
-										  (when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
-											(when (chkptag 'am3)
-											  (print (list 'am3 (hget rule-node 'name) obj-node root-var))))
-										  (when envlist
-											(when (chkptag 'am2)
-											  ($comment (print (list 'am2 (hget rule-node 'name) obj-node root-var envlist)))
-											  (print (list 'am2 (hget rule-node 'name) obj-node root-var (length envlist) (let ((g (intern (symbol-name (gensym))))) (set g envlist) g)))
-											  )
-											(dolist (env envlist)
-											  (let ((env-info (list root-var env)))
-												(setf (gethash env-info h) env-info)))
-											;; (return-from b nil)  ;; To bail or not to bail, that is the question. Today we bail.
-											;; global-change -- no don't bail, get all root vars 
-											;; 5/18/23 -- Keep don't-bail, as dealing with root vars seems fundamental.
-											)))))))))
-						  (when (not (= (hash-table-count h) 0))
-							(let ((std-var-level (or (hget rule-node 'std-var-level) 0)))
-							  (let ((envlist nil))
-								(let ((std-bindings `((,(! (std-vars var-base-to-var) '?this-rule std-var-level) ,rule-node)
-													  (,(! (std-vars var-base-to-var) '?this-rule-name std-var-level) ,(hget rule-node 'name))
-													  (,(! (std-vars var-base-to-var) '?this-obj std-var-level) ,obj-node))))
-								  (maphash (lambda (k v)
-											 (let ((root-var (first v))
-												   (env (second v)))
-											   (setq envlist (cons (append `(,@std-bindings
-																			 (,(! (std-vars var-base-to-var) '?root-var std-var-level) ,root-var))
-																		   env)
-																   envlist))))
-										   h)
-								  envlist)))))))))))))
+					(let ((h (make-hash-table :size 7 :test hash-test-name)))
+					  (let ((possible-match-fcn (possible-match-fcn rule-node obj-node rulegraph)))
+						(when possible-match-fcn
+						  (block b
+							(dolist (root-var root-vars)
+							  (let ((poss-match (funcall possible-match-fcn root-var)))
+								(when (chkptag 'am1)
+								  (print (list 'am1 (hget rule-node 'name) obj-node poss-match root-var)))
+								(when poss-match
+								  (let ()
+									(let ((envlist (all-matches-aux rulegraph obj-node root-var :use-all-matches-aux2 use-all-matches-aux2)))
+									  (when (null envlist) ;; This means a false positive: possible-match was true, but real match failed.
+										(when (chkptag 'am3)
+										  (print (list 'am3 (hget rule-node 'name) obj-node root-var))))
+									  (when envlist
+										(when (chkptag 'am2)
+										  ($comment (print (list 'am2 (hget rule-node 'name) obj-node root-var envlist)))
+										  (print (list 'am2 (hget rule-node 'name) obj-node root-var (length envlist) (let ((g (intern (symbol-name (gensym))))) (set g envlist) g)))
+										  )
+										(dolist (env envlist)
+										  (let ((env-info (list root-var env)))
+											(setf (gethash env-info h) env-info)))
+										;; (return-from b nil)  ;; To bail or not to bail, that is the question. Today we bail.
+										;; global-change -- no don't bail, get all root vars 
+										;; 5/18/23 -- Keep don't-bail, as dealing with root vars seems fundamental.
+										)))))))))
+					  (when (not (= (hash-table-count h) 0))
+						(let ((std-var-level (or (hget rule-node 'std-var-level) 0)))
+						  (let ((envlist nil))
+							(let ((std-bindings `((,(! (std-vars var-base-to-var) '?this-rule std-var-level) ,rule-node)
+												  (,(! (std-vars var-base-to-var) '?this-rule-name std-var-level) ,(hget rule-node 'name))
+												  (,(! (std-vars var-base-to-var) '?this-obj std-var-level) ,obj-node))))
+							  (maphash (lambda (k v)
+										 (let ((root-var (first v))
+											   (env (second v)))
+										   (setq envlist (cons (append `(,@std-bindings
+																		 (,(! (std-vars var-base-to-var) '?root-var std-var-level) ,root-var))
+																	   env)
+															   envlist))))
+									   h)
+							  envlist))))))))))))
 
 	  ;; To disable subst-match for testing, rename this method to something and rename all-matches-aux2 to
 	  ;; all-matches-aux
@@ -3872,199 +3873,174 @@
 
 	(let ((envs (make-hash-table :size 63 :test #'equal)))
 	  (let ((qet-edge-len-cache (make-sur-map)))
-		(let ((doloop-cnt 0))
-		  (let ((last-env-chain nil)) ;; Save the env-chain and ks whenever we enter the doloop. Last one should also be largest such env.
-			(let ((last-ks nil))
-			  (let ((ks-with-existing-edges (make-sur-map :input-test #'equalp :res-test #'equalp))) #| () |#		;; partial-match-info
-				(defm subst-match (objgraph obj-node root-var &key (rule-name (name)))	;; rule-name arg for tracing purposes
-				  (macrolet ((xprint (tag &rest x)
-									 ;; nil
-									 `(ptag ,tag ,@x)
-							   ))
-					(timer 'subst-match
-					  (lambda ()
-						(let ((g objgraph))
-						  (let ((use-singleton-qets (and (! (self has-single-const-preds))
-														 (not (is-var-name root-var)))))
+		(let ((pred-status (make-hash-table :test #'equal))) ;; :matched, :unmatched, :not-tested)
+		  (let ((doloop-cnt 0))
+			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
+			  (macrolet ((xprint (tag &rest x)
+						   ;; nil
+						   `(ptag ,tag ,@x)
+						   ))
+				(timer 'subst-match
+				  (lambda ()
+					(let ((g objgraph))
+					  (let ((use-singleton-qets (and (! (self has-single-const-preds))
+													 (not (is-var-name root-var)))))
+						(defr
+						  (defl init-pred-status (ks)
+							(dolist (k ks)
+							  (setf (gethash (k-orig-pred k) pred-status) (list :untested))))
+						  (defl print-pred-status (tag)
+							(print (list tag))
+							(maphash (lambda (k v)
+									   (print (list tag obj-node root-var rule-name k v)))
+									 pred-status))
+						  (defl make-ks ()
+							(let ((preds (second (! (g filter-new-node-pred-edges) (get-preds)))))
+							  (mapcar (lambda (pred)
+										(make-k :pred pred 
+												:pred-info (mapcar (lambda (node) (if (is-var-name node) 'v 'd)) pred)
+												:orig-pred pred))
+									  preds)))
+						  (defl get-new-node-env ()
+							(let ((new-node-preds (first (! (g filter-new-node-pred-edges) (get-preds)))))
+							  (mapcar (lambda (new-node-pred) (list (first new-node-pred) (third new-node-pred))) new-node-preds))) ;; dump-sn
+						  ;; Splits l at vars and returns a list of subseqs at those var boundaries
+						  ;; E.g. (filter-vars-to-qets '(1 2 ?x 3 4 ?y 5 6 ?z)) => ((1 2) (3 4) (5 6))
+						  ;;
+						  ;; !! Fcn name and logic cloned in possible-match-fcn !!
+						  (defl filter-vars-to-qets (pred pred-info)
 							(defr
-							  (defl make-ks ()
-								(let ((preds (second (! (g filter-new-node-pred-edges) (get-preds)))))
-								  (mapcar (lambda (pred)
-											(make-k :pred pred 
-													:pred-info (mapcar (lambda (node) (if (is-var-name node) 'v 'd)) pred)
-													:orig-pred pred))
-										  preds)))
-							  (defl get-new-node-env ()
-								(let ((new-node-preds (first (! (g filter-new-node-pred-edges) (get-preds)))))
-								  (mapcar (lambda (new-node-pred) (list (first new-node-pred) (third new-node-pred))) new-node-preds))) ;; dump-sn
-							  ;; Splits l at vars and returns a list of subseqs at those var boundaries
-							  ;; E.g. (filter-vars-to-qets '(1 2 ?x 3 4 ?y 5 6 ?z) => ((1 2) (3 4) (5 6))
-							  ;;
-							  ;; !! Fcn name and logic cloned in possible-match-fcn !!
-							  (defl filter-vars-to-qets (pred pred-info)
-								(defr
-								  (defl is-var (node node-info)
-									(and (is-var-name node)
-										 (eq node-info 'v)))
-								  (defl doloop (l i c r)
-									(if (null l)
-										(append r (when c (list c)))
-										(if (is-var (first l) (first i))
-											(doloop (rest l) (rest i) nil (append r (when c (list c))))
-											(doloop (rest l) (rest i) (append c (list (first l))) r))))
-								  (doloop pred pred-info  nil nil)))
-							  (defl check-consts (ks) ;; T if all preds have only consts, no vars
-								(block b
-								  (dolist (k ks)
-									(when (memq 'v (k-pred-info k))
-									  (return-from b nil)))
-								  t))
-							  (defl check-const (k)
-								(not (memq 'v (k-pred-info k))))
-							  (defl subst (ks env) ;; Returns new ks
-								(mapcar (lambda (k)
-										  (let ((pred (k-pred k)))
-											(let ((pred-info (k-pred-info k)))
-											  (let ((pred-info-list (mapcar (lambda (node pred-info-node)
-																			  (if (eq pred-info-node 'v)
-																				  (let ((val (env-lookup node env :idempotent nil)))
-																					(if val
-																						(list val 'd)
-																						(list node pred-info-node)))
-																				  (list node pred-info-node)))
-																			pred pred-info)))
-												(make-k :pred (mapcar (lambda (x) (first x)) pred-info-list)
-														:pred-info (mapcar (lambda (x) (second x)) pred-info-list)
-														:orig-pred (k-orig-pred k))))))
-										ks))
-							  (defl find-min-edges-k (ks)
-								(let ((n 1e38))
-								  (let ((min-k nil))
-									(dolist (k ks)
+							  (defl is-var (node node-info)
+								(and (is-var-name node)
+									 (eq node-info 'v)))
+							  (defl doloop (l i c r)
+								(if (null l)
+									(append r (when c (list c)))
+									(if (is-var (first l) (first i))
+										(doloop (rest l) (rest i) nil (append r (when c (list c))))
+										(doloop (rest l) (rest i) (append c (list (first l))) r))))
+							  (doloop pred pred-info  nil nil)))
+						  (defl check-consts (ks) ;; T if all preds have only consts, no vars
+							(block b
+							  (dolist (k ks)
+								(when (memq 'v (k-pred-info k))
+								  (return-from b nil)))
+							  t))
+						  (defl check-const (k)
+							(not (memq 'v (k-pred-info k))))
+						  (defl subst (ks env) ;; Returns new ks
+							(mapcar (lambda (k)
 									  (let ((pred (k-pred k)))
 										(let ((pred-info (k-pred-info k)))
-										  (when (not (check-const k))
-											(let ((qets (filter-vars-to-qets pred pred-info)))
-											  (let ((len nil))
-												(if (> (length qets) 1)		;; If more than one qet cannot just add; need to find size of union
-													(let ()
-													  (setq len (! (qet-edge-len-cache lookup-one) qets))
-													  (when (null len)
-														(let ((new-edges (mapunion (lambda (qet)
-																					 (when (or use-singleton-qets (> (length qet) 1))
-																					   (! (g get-edges-from-subqet) qet))) qets)))
-														  (when new-edges
-															(setq len (length new-edges))
-															(! (qet-edge-len-cache insert-one) qets len)))))
-													(let ((qet (first qets)))		;; One or zero qets
-													  (when qet
-														(setq len (! (g count-edges-from-subqet) qet)))))
-												(when (and len (< len n))
-												  (setq n len)
-												  (setq min-k k))))))))
-									(xprint 's11 min-k)
-									min-k)))
-							  (defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
-								(defr
-									(defl find-var-binding (env)
-									  (block b
-										(dolist (binding env)
-										  (when (is-var-name (first binding))
-											(return-from b (list binding))))
-										nil))
-									(let ((k-to-match (find-min-edges-k ks)))
-									  (let ((k k-to-match))
-										(when k
-										  (let ((pred (k-pred k)))
-											(let ((pred-info (k-pred-info k)))
-											  (let ((qets (filter-vars-to-qets pred pred-info)))
-												(let ((new-edges (mapunion (lambda (qet)
-																			 (when (or use-singleton-qets (> (length qet) 1))
-																			   (! (g get-edges-from-subqet) qet))) qets)))
-												  (let ((r (mapcad (lambda (edge)
-																	 (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
-																   new-edges)))
-													(xprint 's9 pred new-edges r)
-													r))))))))))
-							  (defl edges-exist (ks) ;; All pred edges need to exist
+										  (let ((pred-info-list (mapcar (lambda (node pred-info-node)
+																		  (if (eq pred-info-node 'v)
+																			  (let ((val (env-lookup node env :idempotent nil)))
+																				(if val
+																					(list val 'd)
+																					(list node pred-info-node)))
+																			  (list node pred-info-node)))
+																		pred pred-info)))
+											(make-k :pred (mapcar (lambda (x) (first x)) pred-info-list)
+													:pred-info (mapcar (lambda (x) (second x)) pred-info-list)
+													:orig-pred (k-orig-pred k))))))
+									ks))
+						  (defl find-min-edges-k (ks)
+							(let ((n 1e38))
+							  (let ((min-k nil))
+								(dolist (k ks)
+								  (let ((pred (k-pred k)))
+									(let ((pred-info (k-pred-info k)))
+									  (when (not (check-const k))
+										(let ((qets (filter-vars-to-qets pred pred-info)))
+										  (let ((len nil))
+											(if (> (length qets) 1) ;; If more than one qet cannot just add; need to find size of union
+												(let ()
+												  (setq len (! (qet-edge-len-cache lookup-one) qets))
+												  (when (null len)
+													(let ((new-edges (mapunion (lambda (qet)
+																				 (when (or use-singleton-qets (> (length qet) 1))
+																				   (! (g get-edges-from-subqet) qet))) qets)))
+													  (when new-edges
+														(setq len (length new-edges))
+														(! (qet-edge-len-cache insert-one) qets len)))))
+												(let ((qet (first qets))) ;; One or zero qets
+												  (when qet
+													(setq len (! (g count-edges-from-subqet) qet)))))
+											(when (and len (< len n))
+											  (setq n len)
+											  (setq min-k k))))))))
+								(xprint 's11 min-k)
+								min-k)))
+						  (defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
+							(defr
+							  (defl find-var-binding (env)
 								(block b
-								  (dolist (k ks)
+								  (dolist (binding env)
+									(when (is-var-name (first binding))
+									  (return-from b (list binding))))
+								  nil))
+							  (let ((k-to-match (find-min-edges-k ks)))
+								(let ((k k-to-match))
+								  (when k
 									(let ((pred (k-pred k)))
-									  (when (not (! (g edge-exists) pred))
-										(return-from b nil))))
-								  t))
-							  (defl x-edges-exist (ks) ;; partial-match-info  Use this version to store the partial match info
-								($nocomment
-								 (block b
-								   (let ((kes nil))
-									 (let ((r t))
-									   (dolist (k ks)
-										 (let ((pred (k-pred k)))
-										   (if (not (! (g edge-exists) pred))
-											   (setq r nil)
-											   (setq kes (append kes (list k))))))
-									   (when (not r)
-										 (! (ks-with-existing-edges insert-one) kes kes))
-									   r)))))
-							  ;; partial-match-info
-							  ;; Get list of original-preds and reduced preds such that the reduced preds still have
-							   ;; vars. Not clear exaclty what we need here yet.
-							  (defl unmatched-preds (ks)
-								(list
-								 (mapcad (lambda (k)
-										   (let ((pred (k-pred k)))
-											 (let ((pred-info (k-pred-info k)))
-											   (when (memq 'v pred-info) ;; If we find a v we know we're not resolved.
-												 (k-orig-pred k)))))
-										 ks)
-								 (mapcad (lambda (k)
-										   (let ((pred (k-pred k)))
-											 (let ((pred-info (k-pred-info k)))
-											   (when (memq 'v pred-info) ;; If we find a v we know we're not resolved.
-												 pred))))
-										 ks)))
-							  (defl doloop (lvl cnt ks env-chain)
-								(xprint 's1 ks lvl cnt doloop-cnt)
-								(xprint 's14 env-chain)
-								(setq doloop-cnt (+ doloop-cnt 1))
-								(setq last-env-chain env-chain)
-								(setq last-ks ks)
-								(if (check-consts ks)
-									(let ()
-									  (xprint 's4 env-chain doloop-cnt)
-									  (when (x-edges-exist ks)
-										(xprint 's2 env-chain doloop-cnt)
-										(setf (gethash env-chain envs) env-chain) ;; Tests show we can get dups so hash table is needed
-										nil))
-									(let ((new-envs (match ks)))
-									  (xprint 's10 new-envs)
-									  (let ((i 0))
-										(dolist (new-env new-envs)
-										  (let ((ks (subst ks new-env)))
-											(doloop (+ lvl 1) i ks (append new-env env-chain))
-											(setq i (+ i 1))))))))
-							  (let ((env `((,root-var ,obj-node))))
-								(xprint 's0 rule-name root-var obj-node)
-								(! (qet-edge-len-cache clear))					;; !!!!!!!!!!!! Clearing cache
-								(let ((ks (make-ks)))
-								  (let ((ks (subst ks env)))
-									(clrhash envs)
-									(doloop 0 0 ks env)
-									(xprint 's16 doloop-cnt)
-									(let ((new-node-env (get-new-node-env)))
-									  (let ((envs-list (hash-table-value-to-list envs)))
-										($nocomment (when (null envs-list) ;; partial-match-info 
-													  (xprint 's12 rule-name root-var obj-node
-															  (mapcar (lambda (k) (k-orig-pred k)) ks)
-															  (! (ks-with-existing-edges inputs)))))
-										(when (null envs-list)
-										  (xprint 's13 last-env-chain)
-										  ;; partial-match-info
-										  ;; Call unmatched-preds, even though we may not print the result, as it represents
-										  ;; overhead we will likely incur if we adopt a partial-match model
-										  (let ((up (unmatched-preds last-ks)))
-											(xprint 's15 obj-node rule-node rule-name up)))
-										(mapcar (lambda (env) (append env new-node-env)) envs-list)))))))))))))))))))
+									  (let ((pred-info (k-pred-info k)))
+										(let ((qets (filter-vars-to-qets pred pred-info)))
+										  (let ((new-edges (mapunion (lambda (qet)
+																	   (when (or use-singleton-qets (> (length qet) 1))
+																		 (! (g get-edges-from-subqet) qet))) qets)))
+											(let ((r (mapcad (lambda (edge)
+															   (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
+															 new-edges)))
+											  #|
+											  (when (eq (gethash (k-orig-pred k) pred-status) :untested)
+											  (setf (gethash (k-orig-pred k) pred-status) (if r :matched :unmatched)))
+											  |#
+											  (setf (gethash (k-orig-pred k) pred-status) (append (gethash (k-orig-pred k) pred-status) (list (if r :matched :unmatched))))
+											  (xprint 's9 pred new-edges r)
+											  r))))))))))
+						  (defl edges-exist (ks) ;; All pred edges need to exist
+							(block b
+							  (dolist (k ks)
+								(let ((pred (k-pred k)))
+								  (when (not (! (g edge-exists) pred))
+									(return-from b nil))))
+							  t))
+						  (defl doloop (lvl cnt ks env-chain)
+							(xprint 's1 ks lvl cnt doloop-cnt)
+							(xprint 's14 env-chain)
+							(setq doloop-cnt (+ doloop-cnt 1))
+							(if (check-consts ks)
+								(let ()
+								  (xprint 's4 env-chain doloop-cnt)
+								  (when (edges-exist ks)
+									(xprint 's2 env-chain doloop-cnt)
+									(setf (gethash env-chain envs) env-chain) ;; Tests show we can get dups so hash table is needed
+									nil))
+								(let ((new-envs (match ks)))
+								  (xprint 's10 new-envs)
+								  (let ((i 0))
+									(dolist (new-env new-envs)
+									  (let ((ks (subst ks new-env)))
+										(doloop (+ lvl 1) i ks (append new-env env-chain))
+										(setq i (+ i 1))))))))
+						  (let ((env `((,root-var ,obj-node))))
+							(xprint 's0 rule-name root-var obj-node)
+							(! (qet-edge-len-cache clear)) ;; !!!!!!!!!!!! Clearing cache
+							(clrhash pred-status)
+							(let ((global-ks (make-ks)))
+							  (let ((ks (make-ks)))
+								(init-pred-status ks)
+								(let ((ks (subst ks env)))
+								  (clrhash envs)
+								  (doloop 0 0 ks env)
+								  (xprint 's16 doloop-cnt)
+								  (let ((new-node-env (get-new-node-env)))
+									(let ((envs-list (hash-table-value-to-list envs)))
+									  (when (null envs-list)
+										(let ((fail-tag 'subst-match-fail))
+										  (when (chkptag fail-tag)
+											(print-pred-status fail-tag))))
+									  (mapcar (lambda (env) (append env new-node-env)) envs-list))))))))))))))))))
 
 	;; Also in objgraph (as-is)
 	;;

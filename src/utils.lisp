@@ -91,14 +91,6 @@
 			   me-efficiency
 			   me-redundancy
 			   me-failure
-			   eo-tested
-			   eo-matched
-			   eo-failed
-			   eo-matched-new-edges
-			   eo-matched-not-new-edges
-			   eo-efficiency
-			   eo-redundancy
-			   eo-failure
 			   execute-all-objs
 			   match-and-execute-rule
 			   all-matches
@@ -235,27 +227,6 @@
 				  (setf (gethash 'me-efficiency perf-hash) eff)
 				  (setf (gethash 'me-redundancy perf-hash) red)
 				  (setf (gethash 'me-failure perf-hash) fail)))
-
-			  ;; eo (execute-obj) stats
-			  (let ((eff (make-timerec :type 'gen))
-					(red (make-timerec :type 'gen))
-					(fail (make-timerec :type 'gen)))
-				(let ((new-edges (timerec-sum (or (gethash 'eo-matched-new-edges perf-hash) (make-timerec))))
-					  (not-new-edges (timerec-sum (or (gethash 'eo-matched-not-new-edges perf-hash) (make-timerec))))
-					  (tested (timerec-sum (or (gethash 'eo-tested perf-hash) (make-timerec))))
-					  (matched (timerec-sum (or (gethash 'eo-matched perf-hash) (make-timerec)))))
-				  (setf (timerec-sum eff) (div (float new-edges) (float tested)))
-				  (setf (timerec-count eff) 1)
-
-				  (setf (timerec-sum red) (div (float not-new-edges) (float tested)))
-				  (setf (timerec-count red) 1)
-
-				  (setf (timerec-sum fail) (div (float (- tested matched)) (float tested)))
-				  (setf (timerec-count fail) 1)
-
-				  (setf (gethash 'eo-efficiency perf-hash) eff)
-				  (setf (gethash 'eo-redundancy perf-hash) red)
-				  (setf (gethash 'eo-failure perf-hash) fail)))
 
 			  (let ((m 0)
 					(d 14))
