@@ -28,12 +28,12 @@
 
 ;; Basic test/benchmark, with deltas and rule-30
 
-(let ((n 3))
+(let ((n 5))
   (with-redirected-stdout (and t "fftout")
 	(lambda (s)
 	  (setq g (make-fft-test))
 	  ;; (! (g trace-rule) 'cas-next)
-	  (let ((*print-tags* (and t '(subst-match-fail)))) ;; use (get-tag-list) to see all compiled tags
+	  (let ((*print-tags* (and nil '(subst-match-fail)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
 
 ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
@@ -482,6 +482,54 @@
 			  (print (cons edge event-abbrev) s)))))))
 	nil)
 
+;; Node trace file, sort by node, then rule name, then seqno
+
+(with-open-file (s "xxx" :direction :output)
+  (let ((*print-pretty* nil))
+	(let ((entries (! ((! (g get-edge-to-trace)) get-flatlist))))
+	  (let ((entries (mapcad (lambda (entry)
+							   (let ((node-or-edge (first entry)))
+								 (let ((et-entry (second entry)))
+								   (when (and (is-node node-or-edge)
+											  (memq (et-entry-type et-entry) '(:no-new-edges :new-edges :failed)))
+									 entry))))
+							 entries)))
+		(let ((entries
+			   (sort entries
+					 (lambda (entry1 entry2)
+					   (let ((node1 (first entry1)))
+						 (let ((node-str1 (format nil "~a" node1)))
+						   (let ((et-entry1 (second entry1)))
+							 (let ((rule-name1 (et-entry-rule-name et-entry1)))
+							   (let ((rule-name-str1 (format nil "~a" rule-name1)))
+								 (let ((seqno1 (et-entry-trace-seqno et-entry1)))
+								   (let ((node2 (first entry2)))
+									 (let ((node-str2 (format nil "~a" node2)))
+									   (let ((et-entry2 (second entry2)))
+										 (let ((rule-name2 (et-entry-rule-name et-entry2)))
+										   (let ((rule-name-str2 (format nil "~a" rule-name2)))
+											 (let ((seqno2 (et-entry-trace-seqno et-entry2)))
+											   (if (string= node-str1 node-str2)
+												   (if (string= rule-name-str1 rule-name-str2)
+													   (< seqno1 seqno2)
+													   (string< rule-name-str1 rule-name-str2))
+												   (string< node-str1 node-str2))))))))))))))))))
+		  (let ((cur-node nil))
+			(let ((cur-rule-name nil))
+			  (dolist (entry entries)
+				(let ((node (first entry)))
+				  (let ((et-entry (second entry)))
+					(let ((rule-name (et-entry-rule-name et-entry)))
+					  (when (not (equal rule-name cur-rule-name))
+						(terpri s)
+						(setq cur-rule-name rule-name))
+					  (when (not (equal node cur-node))
+						(terpri s)
+						(terpri s)
+						(setq cur-node node)))))
+				(print-object entry s)
+				(terpri s)))))))))
+								
 ;; Add an added-by relation for the first (or all) instance(s) of a node added in seq order
 ;; Add a pred-of relation for the first (or all) instance(s) of a node added in seq order
 

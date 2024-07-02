@@ -851,7 +851,7 @@
 		  var-cache)))))
 
 (defstruct et-entry
-  type			;; :add :pred :del :edge-to-add :edge-to-pred :queued :already-queued :dequeued :failed :no-new-edges
+  type			;; :add :pred :del :edge-to-add :edge-to-pred :queued :already-queued :dequeued :failed :no-new-edges :new-edges
   trace-seqno
   rule-seqno
   rule-edge
@@ -2101,7 +2101,8 @@
 									  (setq match-status :no-new-edges)
 									  (! (rule-stats update-not-new-edges) rule-node)))
 								(cond
-								 ((eq match-status :new-edges)
+								  ((eq match-status :new-edges)
+								   (! (edge-to-trace insert-en) obj-node :new-edges rule-node rule-name obj-node)
 								  (dolist (mne-entry matched-and-new-edges-per-env)
 									(let ((matched-edges (first mne-entry)))
 									  (let ((new-edges (second mne-entry)))
@@ -3877,8 +3878,8 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
 			  (macrolet ((xprint (tag &rest x)
-						   ;; nil
-						   `(ptag ,tag ,@x)
+						   nil
+						   ;; `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
