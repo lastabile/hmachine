@@ -90,7 +90,11 @@
 			 (?n rule ?fwd-fe-rule)
 			 (?n rule ?this-rule))))
   |#
-))
+  )
+ (del
+  ;; (?this-obj rule ?this-rule) ;; This is efficient and all that but let's keep everything in place for display
+  )
+ )
 
 (rule
  (name fe-0-rule)
@@ -109,5 +113,5 @@
   (0 copy-rule-rule ?copy-rule-rule)
   (0 rule ?fwd-fe-rule))
  (del
-  ;; (?this-obj rule ?this-rule) ;; This is efficient and all that but let's keep everything in place for dispplay
+  ;; (?this-obj rule ?this-rule) ;; This is efficient and all that but let's keep everything in place for display
   ))
