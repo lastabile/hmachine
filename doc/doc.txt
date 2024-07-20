@@ -2444,3 +2444,13 @@ Description of chi, table and pics of polyhedra, mobius strips, ASCs, etc:
 Closed vs open surfaces (related to genus formula):
 	https://en.wikipedia.org/wiki/Surface_(topology)#Closed_surfaces
 
+----------------------------------------------------------
+7/17/24 -- Major change in keeping stats and so forth
+
+Archived in archive/h.7.17.24.lisp. Also archived test.lisp Removed
+from h.lisp succ-rule-freq, rule-freq-graph, failure-handling
+experiment, successful-exec-obj-list, freq-obj-queue, failed-queue.
+
+Generally, I need a new approach to the optimization algorithm, and
+I'm cleaning out some of the stats to try to clear the thought
+process.

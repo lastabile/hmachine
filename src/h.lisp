@@ -1,4 +1,9 @@
+;;
 ;; Issue tags:
+;;
+;;  Archived 7/17/24 -- prior to removing succ-rule-freq, rule-freq-graph, failure-handling experiment,
+;;                      successful-exec-obj-list, freq-obj-queue, failed-queue.  See doc.txt, look for this archive
+;;                      date.
 ;;
 ;;  global-change -- Getting rid of the exposed global rule pool.
 ;;					 5/18/23 -- This is pretty much done, and the tag discharged. A couple of tags left below, and in
@@ -241,7 +246,10 @@
 			  (lambda ()
 				(let ((cache count-edges-from-subqet-cache))
 				  (let ((count (gethash subqet cache)))
-					(or count
+					(if count
+						(timer 'count-edges-from-subqet-cached
+						  (lambda ()
+							count))
 						(let ((map count-edges-from-subqet-hash))
 						  (clrhash map)
 						  (defr
@@ -256,6 +264,30 @@
 							(setf (gethash subqet cache) count)
 							count))))))))
 		  (defm clear-count-edges-from-subqet-cache (subqet)
+			(remhash subqet count-edges-from-subqet-cache))))
+
+	  (let ((count-edges-from-subqet-hash (make-hash-table :test #'equal :size 256)))
+		(let ((count-edges-from-subqet-cache (make-hash-table :test #'equal :size 256)))
+		  (defm old-count-edges-from-subqet (subqet)
+			(timer 'count-edges-from-subqet
+			  (lambda ()
+				(let ((cache count-edges-from-subqet-cache))
+				  (let ((count (gethash subqet cache)))
+					(or count
+						(let ((map count-edges-from-subqet-hash))
+						  (clrhash map)
+						  (defr
+							(defl g (qet)
+							  (when (edge-exists qet)
+								(setf (gethash qet map) qet))
+							  (let ((sup (superqets qet)))
+								(dolist (qet sup)
+								  (g qet))))
+							(g subqet))
+						  (let ((count (hash-table-count map)))
+							(setf (gethash subqet cache) count)
+							count))))))))
+		  (defm old-clear-count-edges-from-subqet-cache (subqet)
 			(remhash subqet count-edges-from-subqet-cache))))
 
 	  ;; subqet is assumed singleton for now
@@ -868,7 +900,7 @@
 		  (! (et-table insert) edge (make-et-entry :trace-seqno trace-seqno :rule-seqno rule-seqno :type type
 												   :rule-node rule-node :rule-name rule-name :obj-node obj-node))
 		  (setq trace-seqno (+ trace-seqno 1)))
-		;; node event, :queued :already-queued :dequeued :failed :no-new-edges
+		;; node event, :queued :already-queued :dequeued :failed :no-new-edges :new-edges :new-edges-from
 		(defm insert-en (node type rule-node rule-name obj-node)
 		  (! (et-table insert) node (make-et-entry :trace-seqno trace-seqno :rule-seqno rule-seqno :type type
 												   :rule-node rule-node :rule-name rule-name :obj-node obj-node))
@@ -882,6 +914,8 @@
 		  (setq rule-seqno (+ rule-seqno 1)))
 		(defm get-rule-seqno ()
 		  rule-seqno)
+		(defm get-trace-seqno ()
+		  trace-seqno)
 		(defm as-list ()
 		  (! (et-table as-list)))
 		;; Returns the edge trace in flattened, trace-seq order.
@@ -914,7 +948,6 @@
 
 (defc objgraph graph nil
   (let ((obj-queue (make-queue))
-		(freq-obj-queue (make-queue))
 		(global-node 'global-node)
 		(global-rule-pool 'global-rule-pool-node)
 		(local-rule-pool 'local-rule-pool-node)
@@ -924,7 +957,6 @@
 		(std-vars (make-std-vars))
 		(rule-stats nil)
 		(expand-edges-visit-hash (make-hash-table :test #'equal))
-		(successful-exec-obj-list nil)
 		)
 	(let ((hget-key-rest2 (rest hget-key-rest1))
 		  (hget-sup-rest2 (rest hget-sup-rest1))
@@ -937,9 +969,6 @@
 		;; Would be nice to get rid of auto-add of this edge     auto-add-gnlrp
 		(addraw global-node 'local-rule-pool local-rule-pool)
 		nil)
-
-	  (defm get-successful-exec-obj-list ()
-		(reverse successful-exec-obj-list))
 
 	  (defm get-edge-to-trace ()
 		edge-to-trace)
@@ -1026,73 +1055,54 @@
 	  ;;
 	  ;; re-queue-behavior
 
-	  (defm execute-queue (&key once (rule-mode :local-global) (rule-freq-graph nil))
+	  (defm execute-queue (&key once (rule-mode :local-global))
 		(defr
 		  (defl pop-next ()
-			(let ((freq-obj (! (freq-obj-queue pop-head))))
-			  (when freq-obj
-				(when (chkptag 'eq1)
-				  (print (list 'eq1 freq-obj))))
-			  (or freq-obj
-				  (let ((r (! (obj-queue pop-head))))
-					(when (chkptag 'eq4)
-					  (when r
-						(print (list 'eq4 r))))
-					r))))
-		  (block exq
-			(loop
+			(let ((r (! (obj-queue pop-head))))
+			  (when (chkptag 'eq4)
+				(when r
+				  (print (list 'eq4 r))))
+			  r))
+		  (let ((failed-queue-count 0))
+			(block exq
+			  (loop
 
-			 ;; Interesting experiment, i.e., executing as a stack instead
-			 ;; of a queue.  FFT worked, even a bit faster. Number of
-			 ;; exec-all passes 2 instead of three. However seemed to be
-			 ;; more dup of rule execs.
-			 ;; (let ((obj (! (obj-queue pop-tail))))
+			   ;; Interesting experiment, i.e., executing as a stack instead
+			   ;; of a queue.  FFT worked, even a bit faster. Number of
+			   ;; exec-all passes 2 instead of three. However seemed to be
+			   ;; more dup of rule execs.
+			   ;; (let ((obj (! (obj-queue pop-tail))))
 			 
-			 (let ((obj (pop-next)))
-			   (when (null obj)	;; Null means queue empty
-				 (return-from exq nil))
-			   (! (edge-to-trace insert-en) obj :dequeued nil nil nil)
-			   (when (chkptag 'pop-head)
-				 (print (list 'pop-head obj)))
+			   (let ((obj (pop-next)))
+				 (when (null obj) ;; Null means queue empty
+				   (return-from exq nil))
+				 (! (edge-to-trace insert-en) obj :dequeued nil nil nil)
+				 (when (chkptag 'pop-head)
+				   (print (list 'pop-head obj)))
 
-			   ;; Experiment -- see queue-len-graph.gnuplot. Plotted the
-			   ;; queue length, then edited to produce a queue size
-			   ;; printed with each rule test, with a spike to 1000 for
-			   ;; each success. So you can see the pattern of areas
-			   ;; with a high success rate, followed by stretches of
-			   ;; failures. Worth formalizing better at some point.
-			   ;;
-			   ;; (print (list 'qlen (length (! (obj-queue as-list)))))
+				 ;; Experiment -- see queue-len-graph.gnuplot. Plotted the
+				 ;; queue length, then edited to produce a queue size
+				 ;; printed with each rule test, with a spike to 1000 for
+				 ;; each success. So you can see the pattern of areas
+				 ;; with a high success rate, followed by stretches of
+				 ;; failures. Worth formalizing better at some point.
+				 ;;
+				 ;; (print (list 'qlen (length (! (obj-queue as-list)))))
 
-			   (if (functionp obj)
-				   (let ((r (funcall obj)))
-					 (cond
-					   ((or (null r) (eq r :done))
-						nil)
-					   ((eq r :requeue)
-						(queue-node obj))))
-				   (execute-obj obj :rule-mode rule-mode :cont
-								(lambda (m s p r)
-								  (when once
-									(return-from exq nil))
-								  (when (and rule-freq-graph
-											 (eq s :new-edges)
-											 (= (length r) 1))
-									(let ((rule-name (hget (first r) 'name)))
-									  (when rule-name
-										(let ((freq-target-rule-names (mapcar (lambda (x) (fourth x)) (! (rule-freq-graph get-sorted-freqs) rule-name))))
-										  (when freq-target-rule-names
-											(ptag 'eq1 freq-target-rule-names)
-											(dolist (freq-target-rule-name freq-target-rule-names)
-											  (let ((freq-obj (! (obj-queue remove) (lambda (x)
-																					  (ptag 'eq2 x)
-																					  (when (memq freq-target-rule-name (hget-all-list (list x) '(rule name))) x)))))
-												(when freq-obj
-												  (ptag 'eq3 freq-obj)
-												  (! (freq-obj-queue push-tail) freq-obj)
-												  (queue-node freq-obj)))))))))		;; Also push on regular queue -- not really right
-								  (when m		;; If obj exec succeeds, re-queue   re-queue-behavior
-									(queue-node obj))))))))))
+				 (if (functionp obj)
+					 (let ((r (funcall obj)))
+					   (cond
+						((or (null r) (eq r :done))
+						 nil)
+						((eq r :requeue)
+						 (queue-node obj))))
+					 (execute-obj obj :rule-mode rule-mode :cont
+					   (lambda (m s p r f)
+						 ;; (print (list 'eq42  obj (mapcar (lambda (n) (hget n 'name)) r) (mapcar (lambda (n) (hget n 'name)) f)))
+						 (when once
+						   (return-from exq nil))
+						 (when m ;; If obj exec succeeds, re-queue   re-queue-behavior
+						   (queue-node obj)))))))))))
 
 	  ;; An enum "type"
 	  (defm match-status ()
@@ -1107,16 +1117,17 @@
 	  ;; :local-global						- local rules, then global rules  [default]
 	  ;; :all								- Union of attached rules, local rule pool, and global rule pool
 	  ;;
-	  ;; Calls (cont <edge-creation-status> <match-status> <matched-edges> <successful-rules>)
+	  ;; Calls (cont <edge-creation-status> <match-status> <matched-edges> <successful-rules> <failed-rules>)
 	  ;; 
 	  ;; <edge-creation-status> == t if any new edges were created, else nil
 	  ;; <match-status> == (match-status)
 	  ;; <matched-edges> == union of all matches (not split out by env)
 	  ;; <successful-rules> == all rules which resulted in new edges
+  	  ;; <failed-rules> == rules which did not match
 
 	  (defm execute-obj (node &key 
 							  (rule-mode :local-global)
-							  (cont (lambda (m s p r) (list m s))))
+							  (cont (lambda (m s p r f) (list m s))))
 		(timer 'execute-obj
 		  (lambda ()
 			(let ((r nil)
@@ -1139,7 +1150,7 @@
 						  r)))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
-										  (lambda (m s p d)
+										  (lambda (m s n p d)
 											(setq m-and-e-match-status s)
 											(setq matched-edges (hunion matched-edges (mapunion (lambda (edges) edges) p)))
 											(when (or (and (not (eq match-status :new-edges))
@@ -1150,59 +1161,53 @@
 											(when m
 											  (setq r t))
 											d)))
-				(cond
-				 ((eq rule-mode :local-rule-pool-only)
-				  (let ((local-rule-pool (hget node 'local-rule-pool)))
-					(when local-rule-pool
-					  (let ((local-rule-pool-rules (dedup-rules (hget-all local-rule-pool 'lrp-rule))))
-						(dolist (rule local-rule-pool-rules)
-						  (m-and-e rule node))))))
-				 ((eq rule-mode :all)
-				  (let ((rules (hunion (hget-all local-rule-pool 'lrp-rule)
-									   (hunion
-										(hget-all global-rule-pool 'grp-rule)
-										(get-all-rules)))))
-					(dolist (rule rules)
-								(let ((r (m-and-e rule node)))
-								  (setq evaled-rules (cons rule evaled-rules))
-								  (when (eq m-and-e-match-status :new-edges)
-									(setq successful-rules (cons rule successful-rules)))))))
-				 ((or (eq rule-mode :local-only)
-					  (eq rule-mode :local-global))
-				  (let ()
-					(while
-						(lambda ()
-						  (block b
-							(let ((rules (set-subtract (get-all-rules) evaled-rules)))
-							  (dolist (rule rules)
-								(let ((r (m-and-e rule node)))
-								  (setq evaled-rules (cons rule evaled-rules))
-								  (when (eq m-and-e-match-status :new-edges)
-									(setq successful-rules (cons rule successful-rules)))
-								  (when r
-									(return-from b t))))
-							  nil))))
-					(when (not (eq rule-mode :local-only))
-					  (when global-rule-pool
-						(let ((global-rules (dedup-rules (hget-all global-rule-pool 'grp-rule))))
-						  (dolist (rule global-rules)
-							(m-and-e rule node)))))))))
-			  (when (chkptag 'eo2)
-				(when (eq match-status :new-edges)
-				  (let ((evaled-rule-names (mapcar (lambda (rule-node) (hget rule-node 'name)) evaled-rules)))
-					(let ((successful-rule-names (mapcar (lambda (rule-node) (hget rule-node 'name)) successful-rules)))
-					  (print (list 'eo2-1 r match-status matched-edges evaled-rule-names))
-					  (print (list 'eo2-2 'succrules successful-rule-names))
-					  (print (list 'eo2-3 'nrules (length evaled-rules) (length successful-rules)))))))
-			  (when (eq match-status :new-edges)
-				(when (chkptag 'succ-path)
-				  (let ((prev-node (first successful-exec-obj-list)))
-					(let ((x prev-node))
-					  (let ((y node))
-						(let ((p (path x y)))
-						  (print (list 'succ-path (length p) x y p (intersect (get-edges x) (get-edges y)))))))))
-				(setq successful-exec-obj-list (cons node successful-exec-obj-list)))
-			  (funcall cont r match-status matched-edges successful-rules)))))
+				(let ()
+				  (cond
+				   ((eq rule-mode :local-rule-pool-only)
+					(let ((local-rule-pool (hget node 'local-rule-pool)))
+					  (when local-rule-pool
+						(let ((local-rule-pool-rules (dedup-rules (hget-all local-rule-pool 'lrp-rule))))
+						  (dolist (rule local-rule-pool-rules)
+							(m-and-e rule node))))))
+				   ((eq rule-mode :all)
+					(let ((rules (hunion (hget-all local-rule-pool 'lrp-rule)
+										 (hunion
+										  (hget-all global-rule-pool 'grp-rule)
+										  (get-all-rules)))))
+					  (dolist (rule rules)
+						(let ((r (m-and-e rule node)))
+						  (setq evaled-rules (cons rule evaled-rules))
+						  (when (eq m-and-e-match-status :new-edges)
+							(setq successful-rules (cons rule successful-rules)))))))
+				   ((or (eq rule-mode :local-only)
+						(eq rule-mode :local-global))
+					(let ()
+					  (while
+						  (lambda ()
+							(block b
+							  (let ((rules (set-subtract (get-all-rules) evaled-rules)))
+								(dolist (rule rules)
+								  (let ((r (m-and-e rule node)))
+									(setq evaled-rules (cons rule evaled-rules))
+									(when (eq m-and-e-match-status :new-edges)
+									  (setq successful-rules (cons rule successful-rules)))
+									(when r
+									  (return-from b t))))
+								nil))))
+					  (when (not (eq rule-mode :local-only))
+						(when global-rule-pool
+						  (let ((global-rules (dedup-rules (hget-all global-rule-pool 'grp-rule))))
+							(dolist (rule global-rules)
+							  (m-and-e rule node))))))))
+				  (when (chkptag 'eo2)
+					(when (eq match-status :new-edges)
+					  (let ((evaled-rule-names (mapcar (lambda (rule-node) (hget rule-node 'name)) evaled-rules)))
+						(let ((successful-rule-names (mapcar (lambda (rule-node) (hget rule-node 'name)) successful-rules)))
+						  (print (list 'eo2-1 r match-status matched-edges evaled-rule-names))
+						  (print (list 'eo2-2 'succrules successful-rule-names))
+						  (print (list 'eo2-3 'nrules (length evaled-rules) (length successful-rules)))))))
+				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))
+					(funcall cont r match-status matched-edges successful-rules failed-rules))))))))
 
 	  (defm execute-all-objs (&key (rule-mode :local-global))
 		(timer 'execute-all-objs
@@ -1211,7 +1216,7 @@
 				  (r nil))
 			  (dolist (node nodes)
 				(execute-obj node :rule-mode rule-mode :cont
-				  (lambda (m s p r)
+				  (lambda (m s p r f)
 					(when m
 					  (setq r t)))))
 			  r))))
@@ -1229,7 +1234,7 @@
 																				;; doing that for each mode. Ideally
 																				;; these modes go away or just stay for
 																				;; debugging.
-											   (rule-freq-graph nil))
+											   )
 		(let ((i 0)
 			  (no-new-edges-cnt 0))
 		  (defr
@@ -1261,10 +1266,10 @@
 				(lambda ()
 				  (let ((nodes (get-all-nodes)))
 					(dolist (node nodes)
-					  (execute-obj node :rule-mode rule-mode :cont (lambda (m s p r) nil))
+					  (execute-obj node :rule-mode rule-mode :cont (lambda (m s p r f) nil))
 					  (timer 'exec-all-objs-and-queue-exec-queue
 						(lambda ()
-						  (execute-queue :rule-mode queue-rule-mode :rule-freq-graph rule-freq-graph))))))))
+						  (execute-queue :rule-mode queue-rule-mode))))))))
 			(let ()
 			  (block b
 				(loop 
@@ -1272,7 +1277,7 @@
 					 (lambda ()
 					   (log1 'global-node
 							 (lambda ()
-							   (execute-obj 'global-node :rule-mode :local-global :cont (lambda (m s p r) nil))))))
+							   (execute-obj 'global-node :rule-mode :local-global :cont (lambda (m s p r f) nil))))))
 				 (setq no-new-edges-cnt (+ no-new-edges-cnt 1))
 				 (when (= no-new-edges-cnt 3) 
 				   (return-from b nil))
@@ -1281,7 +1286,7 @@
 						 (lambda ()
 						   (log1 'queue
 								 (lambda ()
-								   (execute-queue :rule-mode queue-rule-mode :rule-freq-graph rule-freq-graph)))))))
+								   (execute-queue :rule-mode queue-rule-mode)))))))
 				   (setq no-new-edges-cnt (if no-new-edges (+ no-new-edges-cnt 1) 0))
 				   (when (= no-new-edges-cnt 3)
 					 (return-from b nil)))
@@ -2101,20 +2106,26 @@
 									  (setq match-status :no-new-edges)
 									  (! (rule-stats update-not-new-edges) rule-node)))
 								(cond
-								  ((eq match-status :new-edges)
-								   (! (edge-to-trace insert-en) obj-node :new-edges rule-node rule-name obj-node)
+								 ((eq match-status :new-edges)
+								  (! (edge-to-trace insert-en) obj-node :new-edges rule-node rule-name obj-node)
 								  (dolist (mne-entry matched-and-new-edges-per-env)
 									(let ((matched-edges (first mne-entry)))
 									  (let ((new-edges (second mne-entry)))
-										;; (print (list 'me10 add-list new-edges))
 										(dolist (matched-edge matched-edges)
 										  (! (edge-to-trace insert-et) matched-edge :pred rule-node rule-name obj-node))
-										(dolist (new-edge new-edges)
-										  (! (edge-to-trace insert-et) new-edge :add rule-node rule-name obj-node))
+										(let ((node-table (make-hash-table :test #'equal)))
+										  (dolist (new-edge new-edges)
+											(dolist (node new-edge)
+											  (if (and (not (equal node obj-node))
+													   (null (gethash node node-table)))
+												  (let ()
+													(! (edge-to-trace insert-en) node :new-edges-from rule-node rule-name obj-node)
+													(setf (gethash node node-table) node))))
+											(! (edge-to-trace insert-et) new-edge :add rule-node rule-name obj-node)))
 										(dolists ((matched-edge matched-pred) (matched-edges (second (filter-new-node-pred-edges pred-list))))
-											(! (edge-to-trace insert-er) matched-edge matched-pred :edge-to-pred rule-node rule-name obj-node))
+										  (! (edge-to-trace insert-er) matched-edge matched-pred :edge-to-pred rule-node rule-name obj-node))
 										(dolists ((new-edge add) (new-edges add-list))
-											(! (edge-to-trace insert-er) new-edge add :edge-to-add rule-node rule-name obj-node))))))
+										  (! (edge-to-trace insert-er) new-edge add :edge-to-add rule-node rule-name obj-node))))))
 								 ((eq match-status :no-new-edges)
 								  (! (edge-to-trace insert-en) obj-node :no-new-edges rule-node rule-name obj-node))
 								 ((not (memq match-status (match-status)))
@@ -2130,7 +2141,7 @@
 				(! (edge-to-trace incr-rule-seqno))
 				(when (chkptag 'me4)
 				  (print (list 'me4 obj-node rule-name rule-node r match-status))) ;; This gives us a good addition to the basic output sequence since it shows each rule test
-				(funcall cont r match-status matched-edges-list deleted-edges))))))
+				(funcall cont r match-status new-edges matched-edges-list deleted-edges))))))
 
 	  (defm expand-rule-obj-edges (rule-graph obj-node rule-nodepos root-var)
 		(timer 'expand-rule-obj-edges
@@ -3597,7 +3608,7 @@
 			 (mapcar (lambda (x) (apply #'make-col-info x))
 					 `(
 					   ("node"				"~a~vt"		,(lambda (e) (rule-stats-entry-rule-node e)))
-					   ("name"				"~a~vt"		,(lambda (e) (rule-stats-entry-rule-name e)))
+					   ("name"				"|~a~vt"	,(lambda (e) (rule-stats-entry-rule-name e)))
 					   ("tested"			"~a~vt"		,(lambda (e) (rule-stats-entry-tested e)))
 					   ("matched"			"~a~vt"		,(lambda (e) (rule-stats-entry-matched e)))
 					   ("new-e"				"~a~vt"		,(lambda (e) (rule-stats-entry-new-edges e)))
@@ -3878,8 +3889,8 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
 			  (macrolet ((xprint (tag &rest x)
-						   nil
-						   ;; `(ptag ,tag ,@x)
+								 ;; nil
+								 `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
@@ -3946,59 +3957,63 @@
 													:orig-pred (k-orig-pred k))))))
 									ks))
 						  (defl find-min-edges-k (ks)
-							(let ((n 1e38))
-							  (let ((min-k nil))
-								(dolist (k ks)
-								  (let ((pred (k-pred k)))
-									(let ((pred-info (k-pred-info k)))
-									  (when (not (check-const k))
-										(let ((qets (filter-vars-to-qets pred pred-info)))
-										  (let ((len nil))
-											(if (> (length qets) 1) ;; If more than one qet cannot just add; need to find size of union
-												(let ()
-												  (setq len (! (qet-edge-len-cache lookup-one) qets))
-												  (when (null len)
-													(let ((new-edges (mapunion (lambda (qet)
-																				 (when (or use-singleton-qets (> (length qet) 1))
-																				   (! (g get-edges-from-subqet) qet))) qets)))
-													  (when new-edges
-														(setq len (length new-edges))
-														(! (qet-edge-len-cache insert-one) qets len)))))
-												(let ((qet (first qets))) ;; One or zero qets
-												  (when qet
-													(setq len (! (g count-edges-from-subqet) qet)))))
-											(when (and len (< len n))
-											  (setq n len)
-											  (setq min-k k))))))))
-								(xprint 's11 min-k)
-								min-k)))
+							(timer 'find-min-edges-k
+							  (lambda ()
+								(let ((n 1e38))
+								  (let ((min-k nil))
+									(dolist (k ks)
+									  (let ((pred (k-pred k)))
+										(let ((pred-info (k-pred-info k)))
+										  (when (not (check-const k))
+											(let ((qets (filter-vars-to-qets pred pred-info)))
+											  (let ((len nil))
+												(if (> (length qets) 1) ;; If more than one qet cannot just add; need to find size of union
+													(let ()
+													  (setq len (! (qet-edge-len-cache lookup-one) qets))
+													  (when (null len)
+														(let ((new-edges (mapunion (lambda (qet)
+																					 (when (or use-singleton-qets (> (length qet) 1))
+																					   (! (g get-edges-from-subqet) qet))) qets)))
+														  (when new-edges
+															(setq len (length new-edges))
+															(! (qet-edge-len-cache insert-one) qets len)))))
+													(let ((qet (first qets))) ;; One or zero qets
+													  (when qet
+														(setq len (! (g count-edges-from-subqet) qet)))))
+												(when (and len (< len n))
+												  (setq n len)
+												  (setq min-k k))))))))
+									(xprint 's11 min-k)
+									min-k)))))
 						  (defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
-							(defr
-							  (defl find-var-binding (env)
-								(block b
-								  (dolist (binding env)
-									(when (is-var-name (first binding))
-									  (return-from b (list binding))))
-								  nil))
-							  (let ((k-to-match (find-min-edges-k ks)))
-								(let ((k k-to-match))
-								  (when k
-									(let ((pred (k-pred k)))
-									  (let ((pred-info (k-pred-info k)))
-										(let ((qets (filter-vars-to-qets pred pred-info)))
-										  (let ((new-edges (mapunion (lambda (qet)
-																	   (when (or use-singleton-qets (> (length qet) 1))
-																		 (! (g get-edges-from-subqet) qet))) qets)))
-											(let ((r (mapcad (lambda (edge)
-															   (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
-															 new-edges)))
-											  #|
-											  (when (eq (gethash (k-orig-pred k) pred-status) :untested)
-											  (setf (gethash (k-orig-pred k) pred-status) (if r :matched :unmatched)))
-											  |#
-											  (setf (gethash (k-orig-pred k) pred-status) (append (gethash (k-orig-pred k) pred-status) (list (if r :matched :unmatched))))
-											  (xprint 's9 pred new-edges r)
-											  r))))))))))
+							(timer 'match
+							 (lambda ()
+							   (defr
+								 (defl find-var-binding (env)
+								   (block b
+									 (dolist (binding env)
+									   (when (is-var-name (first binding))
+										 (return-from b (list binding))))
+									 nil))
+								 (let ((k-to-match (find-min-edges-k ks)))
+								   (let ((k k-to-match))
+									 (when k
+									   (let ((pred (k-pred k)))
+										 (let ((pred-info (k-pred-info k)))
+										   (let ((qets (filter-vars-to-qets pred pred-info)))
+											 (let ((new-edges (mapunion (lambda (qet)
+																		  (when (or use-singleton-qets (> (length qet) 1))
+																			(! (g get-edges-from-subqet) qet))) qets)))
+											   (let ((r (mapcad (lambda (edge)
+																  (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
+																new-edges)))
+												 #|
+												 (when (eq (gethash (k-orig-pred k) pred-status) :untested) ;
+												 (setf (gethash (k-orig-pred k) pred-status) (if r :matched :unmatched))) ;
+												 |#
+												 (setf (gethash (k-orig-pred k) pred-status) (append (gethash (k-orig-pred k) pred-status) (list (if r :matched :unmatched))))
+												 (xprint 's9 pred new-edges r)
+												 r))))))))))))
 						  (defl edges-exist (ks) ;; All pred edges need to exist
 							(block b
 							  (dolist (k ks)
@@ -4019,6 +4034,7 @@
 									nil))
 								(let ((new-envs (match ks)))
 								  (xprint 's10 new-envs)
+								  (gstat 'match-num-envs (lambda (x y) (+ x y)) (lambda () (length new-envs)))
 								  (let ((i 0))
 									(dolist (new-env new-envs)
 									  (let ((ks (subst ks new-env)))
@@ -4028,6 +4044,7 @@
 							(xprint 's0 rule-name root-var obj-node)
 							(! (qet-edge-len-cache clear)) ;; !!!!!!!!!!!! Clearing cache
 							(clrhash pred-status)
+							(setq doloop-cnt 0)
 							(let ((global-ks (make-ks)))
 							  (let ((ks (make-ks)))
 								(init-pred-status ks)
@@ -4035,6 +4052,7 @@
 								  (clrhash envs)
 								  (doloop 0 0 ks env)
 								  (xprint 's16 doloop-cnt)
+								  (gstat 'match-doloop-cnt (lambda (x y) (+ x y)) (lambda () doloop-cnt))
 								  (let ((new-node-env (get-new-node-env)))
 									(let ((envs-list (hash-table-value-to-list envs)))
 									  (when (null envs-list)
@@ -4181,82 +4199,6 @@
 		(dolist (add-edge add-edges)
 		  (add-edge add-edge))))))
 
-
-;; src-graph may be nil, in which case we make an empty rule-freq-graph. Typical use case is as a transformer target.
-
-(defc rule-freq-graph objgraph (&key src-graph)
-  (let ()
-	(defm init ()
-	  (defr
-		(defl make-pair-map (flatlist)
-		  (let ((map (make-sur-map)))
-			(let ((prev-entry nil))
-			  (dolist (item flatlist)
-				(let ((entry (second item)))
-				  (when (eq (et-entry-type entry) :add)
-					(if (null prev-entry)
-						(setq prev-entry entry)
-						(when (not (and (eq (et-entry-rule-node entry) (et-entry-rule-node prev-entry))
-										(eq (et-entry-obj-node entry) (et-entry-obj-node prev-entry))))
-						  (let ((pair (list (et-entry-rule-name prev-entry) (et-entry-rule-name entry))))
-							(let ((prev-node (et-entry-obj-node prev-entry)))
-							  (let ((node (et-entry-obj-node entry)))
-								(! (map insert) pair (list prev-node node))
-								(setq prev-entry entry))))))))))
-			map))
-		(defl make-count-map (pair-map)
-		  (let ((map (make-sur-map)))
-			(let ((rule-name-pairs (! (pair-map inputs))))
-			  (dolist (rule-name-pair rule-name-pairs)
-				(let ((rule-name (first rule-name-pair)))
-				  (! (map insert-one) rule-name (+ (or (! (map lookup-one) rule-name) 0)
-												   (length (! (pair-map lookup-one) rule-name-pair)))))))
-			map))
-		(when src-graph
-		  (let ((pair-map (make-pair-map (!((!(src-graph get-edge-to-trace)) get-flatlist))))) ;; (src-graph.get-edge-to-trace.get-flatlist)
-			(print (list 'rfg1 (! (pair-map as-list))))
-			(let ((count-map (make-count-map pair-map)))
-			  (print (list 'rfg2 (! (count-map as-list))))
-			  (dolist (pair (! (pair-map inputs)))
-				(let ((rule-name1 (first pair)))
-				  (let ((rule-name2 (second pair)))
-					(let ((n (length (! (pair-map lookup-one) pair))))
-					  (let ((freq (float (/ n (! (count-map lookup-one) rule-name1)))))
-						(add-edge (list rule-name1 'freq freq rule-name2))))))))))))
-	(defm spanning-dag (root-rule-name)
-	  (let ((new-g (make-rule-freq-graph)))
-		(let ((levels (make-sur-map)))
-		  (let ((init-node root-rule-name))
-			(depth init-node
-				   (lambda (node level)
-					 (! (levels insert-one) node level)
-					 (mapcar (lambda (e) (fourth e))
-							 (get-edges-from-subqet (list node 'freq)))))
-			(depth init-node
-				   (lambda (node level)
-					 (let ((edges (get-edges-from-subqet (list node 'freq))))
-					   (let ((children (mapcar (lambda (e) (fourth e)) edges)))
-						 (dolist (edge edges)
-						   (when (> (! (levels lookup-one) (fourth edge)) level)
-							 (! (new-g add-edge) edge)))
-						 children))))))
-		new-g))
-	(defm xform (&key freq-lt freq-gt freq-top-n (rule-name-fcn (lambda (name) t))) ;; freq-top-n not implememted yet. See prototype test code below in $comment.
-	  (let ((new-g (make-rule-freq-graph)))
-		(dolist (e (get-all-edges))
-		  (let ((p1 (first e)))
-			(let ((p2 (fourth e)))
-			  (let ((freq (third e)))
-				(when (or (funcall rule-name-fcn p1)
-						  (funcall rule-name-fcn p2))
-				  (when (or (and (null freq-lt) (null freq-gt))
-							(and freq-lt (< freq freq-lt))
-							(and freq-gt (> freq freq-gt)))
-					(! (new-g add-edge) e)))))))
-		new-g))
-	;; Get list of targets of rule-name and sort descending by freq
-	(defm get-sorted-freqs (rule-name)
-	  (sort (get-edges-from-subqet (list rule-name 'freq)) (lambda (x y) (> (third x) (third y)))))))
 
 ;; 5/9/23 Finally discovered a clisp method to define a test and hash fcn for a hash table. So we do that below and can
 ;; use CL hash tables. Though this does not seem to be in the CL std, sbcl has a variant (of the same name, slightly
@@ -4940,7 +4882,7 @@
 	  (read-rule-file "rule30.lisp")
 	  (read-rule-file "fft-delta.lisp")
 	  )
-	(defm run (fft-n &key (rule-30-levels fft-n) (rule-freq-graph nil) (rule-mode :local-global))
+	(defm run (fft-n &key (rule-30-levels fft-n) (rule-mode :local-global))
 	  (define-rule `(rule
 					 (name init)
 					 (attach-to global-node)
@@ -4967,7 +4909,7 @@
 	  (add-natural-number-edges (max fft-n rule-30-levels))
 	  (timer 'main
 		(lambda ()
-		  (execute-global-all-objs-loop :rule-freq-graph rule-freq-graph))))))
+		  (execute-global-all-objs-loop))))))
 
 ;; Test of just fft -- no rule-30, deltas, etc.
 
@@ -4980,7 +4922,7 @@
 	  (read-rule-file "fft.lisp")
 	  (read-rule-file "tree.lisp")
 	  )
-	(defm run (fft-n &key (rule-freq-graph nil) (rule-mode :local-global))
+	(defm run (fft-n &key (rule-mode :local-global))
 	  (define-rule `(rule
 					 (name init)
 					 (attach-to global-node)
@@ -5002,7 +4944,7 @@
 	  (add-natural-number-edges fft-n)
 	  (timer 'main
 		(lambda ()
-		  (execute-global-all-objs-loop :rule-freq-graph rule-freq-graph))))))
+		  (execute-global-all-objs-loop))))))
 
 (defc the-graph foundation nil
   (let ()

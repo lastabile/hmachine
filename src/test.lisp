@@ -28,12 +28,12 @@
 
 ;; Basic test/benchmark, with deltas and rule-30
 
-(let ((n 5))
+(let ((n 3))
   (with-redirected-stdout (and t "fftout")
 	(lambda (s)
 	  (setq g (make-fft-test))
 	  ;; (! (g trace-rule) 'cas-next)
-	  (let ((*print-tags* (and nil '(subst-match-fail)))) ;; use (get-tag-list) to see all compiled tags
+	  (let ((*print-tags* (and nil '(s0 s10 s16 #|subst-match-fail|#)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
 
 ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
@@ -52,7 +52,7 @@
 			 :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes nil
 			 :attrs t
 			 :attrs-fcn (lambda (e) (and (not (memq 'rule-break-info e))
-										 (or (memq (second e) '(next zero cas-zero failed))
+										 (or (memq (second e) '(next zero is-elem-of copy-array-struct odd even top failed))
 											 (and (eq (second e) 'rule)
 												  (memq (! (g hget) (third e) 'name) '(cas-new cas-zero cas-next))))))
 			 :omitted-attrs nil)
@@ -71,7 +71,7 @@
 												 (! (g rem-edges) 'failed)
 												 (gv)))
 
-	(! (g break-rule) 'cas-next 'match-and-execute-rule-failed (lambda (trace-info)
+	(! (g break-rule) 'cas-new 'match-and-execute-rule-failed (lambda (trace-info)
 																 (let ((rule-node (second trace-info)))
 																   (let ((rule-name (third trace-info)))
 																	 (let ((obj-node (fourth trace-info)))
@@ -87,21 +87,6 @@
 	  (lambda (xstdout)
 		(let ((*print-tags* (and nil '(me4 ace4 pop-head queue-node))))
 		  (time (! (g run) n)))))))
-
-;; Using a freq graph fed back in 
-
-(let ((n 4))
-  (with-redirected-stdout (and t "fftout")
-	(lambda (s)
-	  (setq g (make-fft-test))
-	  (let ((*print-tags* (and nil '(eq1 #|eq2|# eq3))))
-		(time (! (g run) n))
-		(perf-stats)
-		(setq f (make-rule-freq-graph :src-graph g))
-		(print 'freq-run)
-		(setq g (make-fft-test))
-		(time (! (g run) n :rule-freq-graph f))
-		(perf-stats)))))
 
 ;; Pure fft -- no deltas, rule-30, or colors. Mainly a test rather than a benchmark and useful when need to diagnose
 ;; issues.
@@ -314,7 +299,7 @@
 	(with-open-file (s "fftperf" :direction :output)
 	  (let ((std *standard-output*))
 		(let ((*standard-output* s))
-		  (let ((n 9))
+		  (let ((n 7)) ;; 9
 			(time
 			 (dotimes (i n)
 			   (print (list '************* i) std)
@@ -421,16 +406,16 @@
   )
 
 (let ((d (make-dumper)))
-  (! (d set-graph) g)
-  (! (d dump-gv-edges) "x.gv" :rules t :attrs-fcn
-	 (lambda (e)
-	   (or (intersect e '(
-						  aup next zero max
-						  ))
-		   )))
-  (! (d gv-to-image) "x")
-  ;; (! (d laptop-gv-to-svg) "x")
-  )
+  (let ((g (! (g edge-trace-rule-graph) :rules '(even-new))))
+	(! (d set-graph) g)
+	(! (d dump-gv-edges) "x.gv" :rules nil :attrs-fcn
+	   (lambda (e)
+		 (or (intersect e '(
+							r
+							))
+			 )))
+	(! (d gv-to-image) "x")))
+
  
 (let ((d (make-dumper)))
   (! (d set-graph) g)
@@ -465,7 +450,7 @@
 
 ;; Full trace file, sort by seqno
 
-(with-open-file (s "xxx" :direction :output)
+(with-open-file (s "xxxseq" :direction :output)
   (let ((*print-pretty* nil))
 	(let ((flatlist (! ((! (g get-edge-to-trace)) get-flatlist))))
 	  (dolist (entry flatlist)
@@ -484,51 +469,103 @@
 
 ;; Node trace file, sort by node, then rule name, then seqno
 
-(with-open-file (s "xxx" :direction :output)
-  (let ((*print-pretty* nil))
-	(let ((entries (! ((! (g get-edge-to-trace)) get-flatlist))))
-	  (let ((entries (mapcad (lambda (entry)
-							   (let ((node-or-edge (first entry)))
-								 (let ((et-entry (second entry)))
-								   (when (and (is-node node-or-edge)
-											  (memq (et-entry-type et-entry) '(:no-new-edges :new-edges :failed)))
-									 entry))))
-							 entries)))
-		(let ((entries
-			   (sort entries
-					 (lambda (entry1 entry2)
-					   (let ((node1 (first entry1)))
-						 (let ((node-str1 (format nil "~a" node1)))
-						   (let ((et-entry1 (second entry1)))
-							 (let ((rule-name1 (et-entry-rule-name et-entry1)))
-							   (let ((rule-name-str1 (format nil "~a" rule-name1)))
-								 (let ((seqno1 (et-entry-trace-seqno et-entry1)))
-								   (let ((node2 (first entry2)))
-									 (let ((node-str2 (format nil "~a" node2)))
-									   (let ((et-entry2 (second entry2)))
-										 (let ((rule-name2 (et-entry-rule-name et-entry2)))
-										   (let ((rule-name-str2 (format nil "~a" rule-name2)))
-											 (let ((seqno2 (et-entry-trace-seqno et-entry2)))
-											   (if (string= node-str1 node-str2)
-												   (if (string= rule-name-str1 rule-name-str2)
-													   (< seqno1 seqno2)
-													   (string< rule-name-str1 rule-name-str2))
-												   (string< node-str1 node-str2))))))))))))))))))
-		  (let ((cur-node nil))
-			(let ((cur-rule-name nil))
-			  (dolist (entry entries)
-				(let ((node (first entry)))
-				  (let ((et-entry (second entry)))
-					(let ((rule-name (et-entry-rule-name et-entry)))
-					  (when (not (equal rule-name cur-rule-name))
-						(terpri s)
-						(setq cur-rule-name rule-name))
-					  (when (not (equal node cur-node))
-						(terpri s)
-						(terpri s)
-						(setq cur-node node)))))
-				(print-object entry s)
-				(terpri s)))))))))
+
+(defun xxxnode ()
+  (with-open-file (s "xxxnode1" :direction :output)
+	(let ((*print-pretty* nil))
+	  (let ((entries (! ((! (g get-edge-to-trace)) get-flatlist))))
+		(let ((entries (mapcad (lambda (entry)
+								 (let ((node-or-edge (first entry)))
+								   (let ((et-entry (second entry)))
+									 (when (and (is-node node-or-edge)
+												(memq (et-entry-type et-entry) '(:no-new-edges
+																				 :new-edges
+																				 :new-edges-from
+																				 :failed)))
+									   entry))))
+							   entries)))
+		  (let ((entries
+				 (sort entries
+					   (lambda (entry1 entry2)
+						 (let ((node1 (first entry1)))
+						   (let ((node-str1 (format nil "~a" node1)))
+							 (let ((et-entry1 (second entry1)))
+							   (let ((rule-name1 (et-entry-rule-name et-entry1)))
+								 (let ((rule-name-str1 (format nil "~a" rule-name1)))
+								   (let ((seqno1 (et-entry-trace-seqno et-entry1)))
+									 (let ((node2 (first entry2)))
+									   (let ((node-str2 (format nil "~a" node2)))
+										 (let ((et-entry2 (second entry2)))
+										   (let ((rule-name2 (et-entry-rule-name et-entry2)))
+											 (let ((rule-name-str2 (format nil "~a" rule-name2)))
+											   (let ((seqno2 (et-entry-trace-seqno et-entry2)))
+												 (if (string= node-str1 node-str2)
+													 (if (string= rule-name-str1 rule-name-str2)
+														 (< seqno1 seqno2)
+														 (string< rule-name-str1 rule-name-str2))
+													 (string< node-str1 node-str2))))))))))))))))))
+			(let ((cur-node nil))
+			  (let ((cur-rule-name nil))
+				(dolist (entry entries)
+				  (let ((node (first entry)))
+					(let ((et-entry (second entry)))
+					  (let ((rule-name (et-entry-rule-name et-entry)))
+						(when (not (equal rule-name cur-rule-name))
+						  (terpri s)
+						  (setq cur-rule-name rule-name))
+						(when (not (equal node cur-node))
+						  (format s "----------------------~%")
+						  (setq cur-node node))
+						(format s "~a ~a ~a~%" node (et-entry-type et-entry) rule-name)
+						;; (print-object entry s)(terpri s)
+						)))))))))))
+
+  (with-open-file (s "xxxnode2" :direction :output)
+	(let ((*print-pretty* nil))
+	  (let ((entries (! ((! (g get-edge-to-trace)) get-flatlist))))
+		(let ((entries (mapcad (lambda (entry)
+								 (let ((node-or-edge (first entry)))
+								   (let ((et-entry (second entry)))
+									 (when (and (is-node node-or-edge)
+												(memq (et-entry-type et-entry) '(:no-new-edges
+																				 :new-edges
+																				 :new-edges-from
+																				 :failed)))
+									   entry))))
+							   entries)))
+		  (let ((entries
+				 (sort entries
+					   (lambda (entry1 entry2)
+						 (let ((node1 (first entry1)))
+						   (let ((node-str1 (format nil "~a" node1)))
+							 (let ((et-entry1 (second entry1)))
+							   (let ((rule-name1 (et-entry-rule-name et-entry1)))
+								 (let ((rule-name-str1 (format nil "~a" rule-name1)))
+								   (let ((seqno1 (et-entry-trace-seqno et-entry1)))
+									 (let ((node2 (first entry2)))
+									   (let ((node-str2 (format nil "~a" node2)))
+										 (let ((et-entry2 (second entry2)))
+										   (let ((rule-name2 (et-entry-rule-name et-entry2)))
+											 (let ((rule-name-str2 (format nil "~a" rule-name2)))
+											   (let ((seqno2 (et-entry-trace-seqno et-entry2)))
+												 (if (string= node-str1 node-str2)
+													 (< seqno1 seqno2)
+													 (string< node-str1 node-str2))))))))))))))))))
+			(let ((cur-node nil))
+			  (let ((cur-rule-name nil))
+				(dolist (entry entries)
+				  (let ((node (first entry)))
+					(let ((et-entry (second entry)))
+					  (let ((rule-name (et-entry-rule-name et-entry)))
+						(let ((type (et-entry-type et-entry)))
+						  (when (not (equal node cur-node))
+							(format s "----------------------~%")
+							(setq cur-node node))
+						  (if (eq type :new-edges-from)
+							  (format s "~a ~a ~a ~a~%" node (et-entry-type et-entry) rule-name (et-entry-obj-node et-entry))
+							  (format s "~a ~a ~a~%" node (et-entry-type et-entry) rule-name))
+						  ;; (print-object entry s)
+						  )))))))))))))
 								
 ;; Add an added-by relation for the first (or all) instance(s) of a node added in seq order
 ;; Add a pred-of relation for the first (or all) instance(s) of a node added in seq order
@@ -664,13 +701,13 @@
 		  ;; (! (g execute-global-all-objs-loop)) ;; Temp! until we get queuing work right.
 		  ))))
 
-  ($nocomment
+  ($comment
    (let ((*print-tags* (and nil '(am2))))   ;; am2 produces too much output
 	 (f 20)))								;; The basic single run
 
   ;; Perf runs
   ;; Nat to 100
-  ($comment								;; Perf runs
+  ($nocomment								;; Perf runs
    (with-open-file (s "feperf" :direction :output)
 	 (let ((std *standard-output*))
 	   (let ((*standard-output* s))
@@ -3592,35 +3629,6 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 						(! (map insert) pair (list prev-node node (! (g path) prev-node node)))
 						(setq prev-entry entry))))))))))
 	map))
-
-
-
-
-
-
-
-
-
-
-
-
-(let ()
-  ;; (setq x (make-rule-freq-graph :src-graph g))
-  (setq x (make-rule-freq-graph))
-  (! (x add-edge) '(a freq .5 b))
-  (! (x add-edge) '(b freq .5 a))
-  (! (x add-edge) '(b freq .5 c))
-  (! (x add-edge) '(b freq .5 d))
-  (! (x add-edge) '(d freq .5 a))
-  (! (x add-edge) '(d freq .5 e))
-  (! (x add-edge) '(e freq .5 b))
-  ;; (setq y (! (x spanning-dag) 'init))
-  (setq y (! (x spanning-dag) 'a))
-  (let ((d (make-dumper)))
-	(! (d set-graph) y)
-	(! (d dump-gv-edges) "x.gv")
-	(! (d gv-to-image) "x")
-	))
 
 
 

@@ -161,12 +161,17 @@
  (pred
   (?x top ?t)
   (?x l 0)
-  (?x zero))
+  (?x zero)
+  (?x rule ?tree-loop-rule)
+  (?tree-loop-rule name tree-loop-rule)
+  )
  (add
   (print tree-elem-zero-rule ?this-obj ?t ?x)
   (?x xis ev-od-obj))
  (del
-  (?this-obj rule ?this-rule)))
+  (?this-obj rule ?this-rule)
+  (?x rule ?tree-loop-rule)
+  ))
 
 (rule
  (name tree-zero-rule)
@@ -190,6 +195,7 @@
   (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
+  (?x rule-order ?tree-zero-rule ?tree-elem-zero-rule ?tree-loop-rule)
   )
  (del
   (?p rule ?tree-zero-rule)
@@ -214,7 +220,8 @@
   (print tree-max-rule ?this-obj ?x ?y ?p)
   (?y max)
   (?y rule ?tree-max-rule)
-  (?y rule ?tree-loop-rule)  
+  (?y rule ?tree-loop-rule)
+  (?y rule-order ?tree-max-rule ?tree-loop-rule)
   )
  (del
   (?p rule ?tree-max-rule)

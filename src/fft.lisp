@@ -13,7 +13,7 @@
 						(rule
 						 (name ev-init)
 						 (pred
-						  (?a elem ?e0)
+						  ;; (?a elem ?e0)
 						  (?e0 is-elem-of ?a)
 						  (?e0 zero))
 						 (add
@@ -69,11 +69,23 @@
   (?p lrp-rule ?od-next)
   (?od-next name od-next)
   (?p lrp-rule ?ev-next)
-  (?ev-next name ev-next))
+  (?ev-next name ev-next)
+  (?p lrp-rule ?ev-init)
+  (?ev-init name ev-init)
+  (?p lrp-rule ?even-new)
+  (?even-new name even-new)
+  )
  (add
   (print ev-od-opt)
   (?od-next add ?e1 rule ?ev-next)
-  (?ev-next add ?e1 rule ?od-next))
+  (?ev-next add ?e1 rule ?od-next)
+  (?od-next del ?e1 rule ?ev-init)
+  (?ev-next del ?e1 rule ?ev-init)
+  (?od-next add ?e1 rule-order ?ev-next ?ev-init)
+  (?ev-next add ?e1 rule-order ?od-next ?ev-init)
+  (?ev-next add ?e1 rule ?even-new)
+  (?ev-init add ?e0 rule ?even-new)
+  )
  (del
   (?this-obj rule ?this-rule)))
 
@@ -131,7 +143,7 @@
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
   (?nn1 rule ?odd-new)
-  (?nn1 rule ?this-rule)
+  ;;;; (?nn1 rule ?this-rule)
 
   (?nn1 likes level-zero)		;; Assure level-zero is queued
   )
@@ -143,6 +155,7 @@
 (rule
  (name even-next)
  (local)
+ (root-var ?ae0)
  (pred
   (?a even ?a1)
   (?ae0 is-elem-of ?a1)
@@ -158,7 +171,7 @@
   (print even-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
   (?ae0 next ?ae1))
  (del
-  ;; (?this-obj rule ?this-rule) ;; Back and forth on keeping this in!
+  (?this-obj rule ?this-rule) ;; This can stay in if root-var is specified. 
   ))
 
 (rule
@@ -197,7 +210,7 @@
   (?nn1 rule ?odd-zero)
   (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
-  (?nn1 rule ?even-new)
+  ;;;; (?nn1 rule ?even-new)
   (?nn1 rule ?this-rule)
 
   (?nn1 likes level-zero)		;; Assure level-zero is queued
@@ -210,6 +223,7 @@
 (rule
  (name odd-next)
  (local)
+ (root-var ?ae0)
  (pred
   (?a odd ?a1)
   (?ae0 is-elem-of ?a1)
@@ -225,7 +239,7 @@
   (print odd-next ?a ?a1 ?ae0 ?ae1 ?e0 ?e1)
   (?ae0 next ?ae1))
  (del
-  ;; (?this-obj rule ?this-rule) ;; Back and forth on keeping this in!
+  (?this-obj rule ?this-rule) ;; This can stay in if root-var is specified. 
   ))
 
 (rule
@@ -278,6 +292,8 @@
   (?this-obj rule ?this-rule)		;; Leaving in these dels looks ok
   ))
 
+
+(comment ;; These don't seem to be needed anymore
 (rule
  (name odd-new-rule-propagate)
  (local)
@@ -306,6 +322,7 @@
  (add
   (print even-new-rule-propagate ?a ?e0)
   (?e0 rule ?even-new)))
+)
 
 ;; Begin copy-array-struct section
 ;; cas == copy-array-struct
@@ -382,6 +399,8 @@
   (?cas-new name cas-new)
   (?p lrp-rule ?cas-next)
   (?cas-next name cas-next)
+  (?p lrp-rule ?fft-comb-rule-zero)
+  (?fft-comb-rule-zero name fft-comb-rule-zero)
   )
  (add
   (print cas-rule-mod)
@@ -393,6 +412,8 @@
   (?cas-next add ?e1 rule ?cas-zero)
   (?cas-next del ?e0 rule ?cas-zero)
   (?cas-next add ?e1 rule-order ?cas-next ?cas-zero)
+
+  (?cas-zero add ?ae0 rule ?fft-comb-rule-zero)
 
   ;; (?cas-next del ?ae1 rule ?cas-next)		;; Can't del the rule from here yet! Removed 1/9/24 when did "sequential" tree rules
   ;; (?cas-next del ?e1 rule ?cas-zero)
@@ -466,6 +487,8 @@
 (rule
  (name fft-comb-rule-zero)
  (local)
+ ;; (root-var ?y)
+ (root-var ?e1)
  (pred
   (?x0 ?x1 fft-comb ?y)
   (?e0 is-elem-of ?x0)
@@ -477,7 +500,7 @@
   (?x0 local-rule-pool ?p)
   (?p lrp-rule ?fft-comb-rule-next)
   (?fft-comb-rule-next name fft-comb-rule-next)
-)
+  )
  (add
   (print fft-comb-rule-zero  ?this-obj ?x0 ?x1 ?y ?e0 ?e1 ?ey)
   ;; (?e0 rule ?fft-comb-rule-next)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -495,14 +518,14 @@
   ))
 
 (rule
- (name fft-rule-zero)
+ (name fft-rule-level0)
  (local)
  (pred
   (?x fft ?y)
   (?x level 0)
   )
  (add
-  (print fft-rule-zero ?x ?y)
+  (print fft-rule-level0 ?x ?y)
   (?x copy-array-struct ?y)
   (?y type array)
   (?y level 0)
@@ -526,13 +549,17 @@
   (?y rule ?even-new)
   (?even-new name even-new)
   (?y rule ?odd-new)
-  (?odd-new name odd-new))
+  (?odd-new name odd-new)
+  (?x rule ?fft-rule)
+  (?fft-rule name fft-rule)
+  )
  (add
   (print level-zero-rule ?x ?y)
   (?x junk ?y))		;; Force an add for testing !!!!!!!!!!!
  (del
   (?y rule ?odd-new)
   (?y rule ?even-new)
+  (?x rule ?fft-rule)
   (?x level-zero)))
 
 ;; This rule is global and bare-bones, with no rule-passing
@@ -553,6 +580,10 @@
   (?nn4 new-node sn4)
   (?p lrp-rule ?fft-comb-rule-zero)
   (?fft-comb-rule-zero name fft-comb-rule-zero)
+  (?p lrp-rule ?fft-rule-level0)
+  (?fft-rule-level0 name fft-rule-level0)
+  (?p lrp-rule ?fft-rule)
+  (?fft-rule name fft-rule)
   )
  (add
   (print fft-rule ?x ?y ?l)
@@ -571,9 +602,21 @@
   (?nn1 fft ?nn3)
   (?nn2 fft ?nn4)
   (?nn3 ?nn4 fft-comb ?y)
-  ;; (?y rule ?fft-comb-rule-zero)		;; ok to remove this
-  (?nn3 rule ?fft-comb-rule-zero)
-  (?nn4 rule ?fft-comb-rule-zero)
+  #|
+  ;;;;;; (?y rule ?fft-comb-rule-zero)		;; ok to remove this ?????
+  ;;;; (?nn3 rule ?fft-comb-rule-zero)
+  ;;;; (?nn4 rule ?fft-comb-rule-zero)
+  |#
+  (?nn1 rule ?fft-rule-level0)
+  (?nn2 rule ?fft-rule-level0)
+  (?nn1 rule-order ?fft-rule ?fft-rule-level0)
+  (?nn2 rule-order ?fft-rule ?fft-rule-level0)
+  (?nn1 rule ?fft-rule)
+  (?nn2 rule ?fft-rule)
+  
+  ;;;;;; (?x rule ?fft-rule-level0)
+  ;;;;;; (?y rule ?fft-rule-level0)
+   
   (?y level ?l)
   (?nn1 level ?l1)
   (?nn2 level ?l1)
@@ -585,9 +628,11 @@
 
   ;; (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
   ;; (exec ?nn1 ?nn2 ?nn3 ?nn4 ?y)
-)
+  )
  (del
-  (?this-obj rule ?this-rule)))
+  (?this-obj rule ?this-rule)
+  (?this-obj rule ?fft-rule-level0)
+  ))
 
 (rule
  (name fft-top-rule)
@@ -628,8 +673,8 @@
   ;;;; (fft-rule-opt-rule-names-data even-new-rule-propagate)
   ;;;; (fft-rule-opt-rule-names-data odd-new-rule-propagate)
   
-  (fft-rule-opt-rule-names-data fft-rule-zero)
-  (fft-rule-opt-rule-names-data fft-comb-rule-zero)
+  ;;;;;; (fft-rule-opt-rule-names-data fft-rule-level0)
+  ;;;; (fft-rule-opt-rule-names-data fft-comb-rule-zero)
   )
  (del
   (global-node rule ?this-rule)))
@@ -662,6 +707,7 @@
 
 (rule
  (name fft-rule-opt-2-rule-names)
+ (disabled)
  (attach-to global-node)
  (root-var global-node)
  (pred
@@ -672,7 +718,7 @@
   ;; (fft-rule-opt-2-rule-names-data copy-array-struct-new)
   ;; (fft-rule-opt-2-rule-names-data even-new-rule-propagate)
   ;; (fft-rule-opt-2-rule-names-data odd-new-rule-propagate)
-  ;; (fft-rule-opt-2-rule-names-data fft-rule-zero)
+  ;; (fft-rule-opt-2-rule-names-data fft-rule-level0)
   ;; (fft-rule-opt-2-rule-names-data fft-comb-rule-zero)
   )
  (del
@@ -680,6 +726,7 @@
 
 (rule
  (name fft-rule-opt-2)
+ (disabled)
  (attach-to global-node)
  (root-var global-node)
  (pred
