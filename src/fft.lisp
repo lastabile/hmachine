@@ -360,6 +360,8 @@
   (print cas-zero ?this-obj ?root-var ?a ?a1 ?e0 ?ae0)
   (?ae0 zero)
   (?ae0 cas-zero)
+  (?a1 casz-ref1 ?ae0)
+  (?a casz-ref ?e0)
   )
  (del
   (?this-obj rule ?this-rule)))
@@ -511,6 +513,7 @@
   ;; For display
 
   (?y comb-hb ?ey)
+  (?y comb-hb-z ?ey)
   
   )
  (del

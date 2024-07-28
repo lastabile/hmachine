@@ -39,7 +39,7 @@
  (name fwd-fe-rule)
  (local)
  (root-var ?n)
- (type blah)		;; Keep this as a test of handling multiplw types
+ (type blah)		;; Keep this as a test of handling multiple types
  (pred
   (?n sigma ?m)
   (?n even-func ?o)
@@ -75,6 +75,7 @@
   (?m rule ?nn-fwd-fe-rule)
   (?m fwd-fe-rule ?nn-fwd-fe-rule)
   (?m copy-rule-rule ?nn-copy-rule-rule)
+  (?this-obj ran ?this-rule)
   #|
   (?n rule (rule
 			(name del-fwd-fe-rule)

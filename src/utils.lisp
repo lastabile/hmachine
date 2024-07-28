@@ -54,11 +54,17 @@
 ;; Machine and system info
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun is-laptop ()
-  (let ((mi (machine-instance)))
-	(or	
-	 (equal (string-downcase (subseq mi 0 (search " " mi))) "gertrude")
-	 (equal (string-downcase (subseq mi 0 (search " " mi))) "rosencrantz"))))
+(let ((mi (machine-instance)))
+  (let ((r (equal (string-downcase (subseq mi 0 (search " " mi))) "rosencrantz")))
+	(let ((l (equal (string-downcase (subseq mi 0 (search " " mi))) "gertrude")))
+	  (defun is-laptop ()
+		1)
+	  (defun is-desktop ()
+		r)
+	  (defun is-large-monitor ()
+		r)
+	  (defun is-small-monitor ()
+		l))))
 
 ;;;;;;;;;;;;;
 ;; Perf Stats

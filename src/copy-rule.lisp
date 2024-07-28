@@ -17,50 +17,52 @@
 
 
 
-(comment
-
-(rule
- (name copy-rule-rule-gen)
- (attach-to rule-clause-type)
- (pred
-  (rule-clause-type ?ct))
- (add
-  (print copy-rule-rule-gen ?ct)
-  (local-rule-pool-node lrp-rule
-						(rule
-						 (name copy-rule-rule)
-						 (local)
-						 (root-var ?y)
-						 (pred
-						  (?r copy-rule ?y)
-						  (?r name ?name)
-						  (?r root-var ?x-root-var)	;; Note a rule will have an explicit root-var equal to :undefined added by define-rule if none was given
-						  (?r std-var-level ?l)
-						  (?r ?ct ?*rest))
-						 (add
-						  (print copy-rule-rule ?root-var ?this-obj ?this-rule ?name ?r ?ct ?*rest)
-						  (?y type rule)
-						  (?y name ?name)
-						  (?y root-var ?x-root-var)
-						  (?y std-var-level ?l)
-						  (?y copied-from ?r)
-						  (?y ?ct ?*rest))))))
-(rule
- (name rule-clause-type)
- (attach-to global-node)
- (pred
-  (global-node rule ?r)
-  (?r name rule-clause-type))
- (add
-  (print rule-clause-type)
-  (rule-clause-type pred)
-  (rule-clause-type del)
-  (rule-clause-type add)
-  (rule-clause-type not)))
-
-)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;; After many versions, the addition of rest vars, the new rule
+;; format, and the adoption of conventions on minimal rule content has
+;; made copy-rule be as simple as it should be. The copy is done as a
+;; single rule triggering, which avoids race conditions possible when
+;; copy is spread across rules. Note that the H-Machine works well
+;; with partial rules, but not having to deal with it in this basic
+;; case is more efficient.
+;;
+;; Note that copy-rule can copy itself, and does so in the fe-rule-test
 
 (rule
  (name copy-rule-rule)
@@ -88,4 +90,9 @@
   (?y add ?*rest-add)
   (?y del ?*rest-del)
   (?y not ?*rest-not)
-  ))
+  )
+ (del
+  ;; (?this-obj rule ?this-rule)	;; fe-rule-test is more efficient with this in (similar dels in fe.lisp), but we leave it like this for display
+  )
+ )
+

@@ -271,6 +271,11 @@
 			  ;; rem-subsets
 			  ;; get-edges-from-subqet
 			  ;; add-subqets
+			  ;; add-subqet
+			  ;; rem-subqets
+			  ;; rem-subqet
+			  ;; subqets
+			  ;; superqets
 			  ;; add-subset
 			  ;; subqets-length-n
 			  ;; is-subqet

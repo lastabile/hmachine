@@ -1,6 +1,8 @@
 ;;
 ;; Issue tags:
 ;;
+;;  Archived 7/23/24 -- prior to switching to new table-based count-edges-from-subqet and removing old code.
+;;
 ;;  Archived 7/17/24 -- prior to removing succ-rule-freq, rule-freq-graph, failure-handling experiment,
 ;;                      successful-exec-obj-list, freq-obj-queue, failed-queue.  See doc.txt, look for this archive
 ;;                      date.
@@ -134,7 +136,11 @@
 		  (nodeposlist (make-hash-table :test #'equal :size size))
 		  (subqet-map (make-sur-map :res-size 17))
 		  (superqet-map (make-sur-map :res-size 17))
+		  (edges-from-subqet-count (make-hash-table :test #'equal :size size))
 		  )
+
+	  (defm get-edges-from-subqet-count-table ()		;; Debug only
+		edges-from-subqet-count)
 
 	  (defm add-edge (edge)		;; For truth-and-beauty, the only way nodes get added is via add-edge
 		(defr
@@ -234,61 +240,13 @@
 				(let ((edges (hash-table-value-to-list map)))
 				  edges))))))
 
-	  ;; Does same scan as get-edges-from-subqet but just returns size of resulting hash table. Note this can be optimized by keeping a
-	  ;; running count when inserting qets. Used in scan-and-subst
-	  ;;
-	  ;; For now, we use a cache, invalidated in add-subqet and rem-subqet. Makes a dramatic performance difference.
 
-	  (let ((count-edges-from-subqet-hash (make-hash-table :test #'equal :size 256)))
-		(let ((count-edges-from-subqet-cache (make-hash-table :test #'equal :size 256)))
-		  (defm count-edges-from-subqet (subqet)
-			(timer 'count-edges-from-subqet
-			  (lambda ()
-				(let ((cache count-edges-from-subqet-cache))
-				  (let ((count (gethash subqet cache)))
-					(if count
-						(timer 'count-edges-from-subqet-cached
-						  (lambda ()
-							count))
-						(let ((map count-edges-from-subqet-hash))
-						  (clrhash map)
-						  (defr
-							(defl g (qet)
-							  (when (edge-exists qet)
-								(setf (gethash qet map) qet))
-							  (let ((sup (superqets qet)))
-								(dolist (qet sup)
-								  (g qet))))
-							(g subqet))
-						  (let ((count (hash-table-count map)))
-							(setf (gethash subqet cache) count)
-							count))))))))
-		  (defm clear-count-edges-from-subqet-cache (subqet)
-			(remhash subqet count-edges-from-subqet-cache))))
+	  ;; Using tab\le rather than cache is much better perf, especially as size grows.
 
-	  (let ((count-edges-from-subqet-hash (make-hash-table :test #'equal :size 256)))
-		(let ((count-edges-from-subqet-cache (make-hash-table :test #'equal :size 256)))
-		  (defm old-count-edges-from-subqet (subqet)
-			(timer 'count-edges-from-subqet
-			  (lambda ()
-				(let ((cache count-edges-from-subqet-cache))
-				  (let ((count (gethash subqet cache)))
-					(or count
-						(let ((map count-edges-from-subqet-hash))
-						  (clrhash map)
-						  (defr
-							(defl g (qet)
-							  (when (edge-exists qet)
-								(setf (gethash qet map) qet))
-							  (let ((sup (superqets qet)))
-								(dolist (qet sup)
-								  (g qet))))
-							(g subqet))
-						  (let ((count (hash-table-count map)))
-							(setf (gethash subqet cache) count)
-							count))))))))
-		  (defm old-clear-count-edges-from-subqet-cache (subqet)
-			(remhash subqet count-edges-from-subqet-cache))))
+	  (defm count-edges-from-subqet (subqet)
+		(timer 'count-edges-from-subqet
+		  (lambda ()
+			(or (gethash subqet edges-from-subqet-count) 0))))
 
 	  ;; subqet is assumed singleton for now
 	  ;;
@@ -519,58 +477,115 @@
 		superqet-map)
 
 	  (defm add-subqets (edge)	;; qets-to-seqs -- subseqs, not subqets (subsets)
-		(defr
-		  (defl first-n (l n)
-			(when (and (not (= n 0))
-					   (>= (length l) n))
-			  (cons (first l) (first-n (rest l) (- n 1)))))
-		  (defl sublists-len-n (l n)
-			(when (and l
-					   (> n 0)
-					   (>= (length l) n))
-			  (cons (first-n l n) (sublists-len-n (rest l) n))))
-		  (defl add-layer (qets sub-qets len)
-			(when (not (null sub-qets))
-			  (when (not (null qets))
-				(dolist (qet qets)
-				  (dolist (sub-qet sub-qets)
-					(when (is-subqet sub-qet qet)
-					  (add-subqet sub-qet qet)))))
-			  (add-layer sub-qets (sublists-len-n edge len) (- len 1))))
-		  (timer 'add-subqets
-			(lambda ()
-			  (add-layer nil (list edge) (- (length edge) 1))
-			  nil))))
+		(let ((subqet-table (make-hash-table :test #'equal :size 13)))	
+		  (defr
+			(defl first-n (l n)
+			  (when (and (not (= n 0))
+						 (>= (length l) n))
+				(cons (first l) (first-n (rest l) (- n 1)))))
+			(defl sublists-len-n (l n)
+			  (when (and l
+						 (> n 0)
+						 (>= (length l) n))
+				(cons (first-n l n) (sublists-len-n (rest l) n))))
+			(defl add-layer (qets sub-qets len)
+			  (when (not (null sub-qets))
+				(when (not (null qets))
+				  (dolist (qet qets)
+					(dolist (sub-qet sub-qets)
+					  (when (is-subqet sub-qet qet)
+						(add-subqet sub-qet qet)
+						(setf (gethash sub-qet subqet-table) sub-qet)))))
+				(add-layer sub-qets (sublists-len-n edge len) (- len 1))))
+			(timer 'add-subqets
+			  (lambda ()
+				(setf (gethash edge edges-from-subqet-count) (+ (or (gethash edge edges-from-subqet-count) 0) 1))
+				(add-layer nil (list edge) (- (length edge) 1))
+				(maphash (lambda (k v)
+						   (let ((qet v))
+							 (setf (gethash qet edges-from-subqet-count) (+ (or (gethash qet edges-from-subqet-count) 0) 1))))
+						 subqet-table)
+				nil)))))
 
 	  (defm add-subqet (sub super) ;; Add mapping in both directions
-		(! (self clear-count-edges-from-subqet-cache) sub)
 		(! (subqet-map insert) super sub)
 		(! (superqet-map insert) sub super)
 		nil)
 
 	  (defm rem-subqet (qet)
 		(dolist (s (subqets qet))
-		  (! (superqet-map remove-res) s qet)
-		  (! (self clear-count-edges-from-subqet-cache) s))
+		  (! (superqet-map remove-res) s qet))
 		(dolist (s (superqets qet))
-		  (! (subqet-map remove-res) s qet)
-		  (! (self clear-count-edges-from-subqet-cache) s))
+		  (! (subqet-map remove-res) s qet))
 		(! (subqet-map remove) qet)
 		(! (superqet-map remove) qet)
 		nil)
 
+	  (defm old-new-rem-subqets (edge)
+		(let ((subqet-table (make-hash-table :test #'equal :size 13)))	
+		  (defr
+			(defl decr-count (qet)
+			  (when qet
+				(when (null (gethash qet subqet-table))
+				  (setf (gethash qet subqet-table) qet)
+				  (setf (gethash qet edges-from-subqet-count) (- (or (gethash qet edges-from-subqet-count) 0) 1)))
+				(let ((subqets (subqets qet)))
+				  (dolist (subqet subqets)
+					(decr-count subqet)))))
+			(defl rem-qet (qet)
+			  (when (not (null qet))
+				(let ((subqets (subqets qet)))
+				  (remhash qet edges-from-subqet-count)
+				  (rem-subqet qet)
+				  (dolist (subqet subqets)
+					(when (and (= (length (superqets subqet)) 0)
+							   (not (edge-exists subqet)))
+					  (rem-qet subqet))))
+				nil))
+			(clrhash subqet-table)
+			(decr-count edge)
+			(rem-qet edge)
+			nil)))
+
 	  (defm rem-subqets (edge)
+		(let ((subqet-table (make-hash-table :test #'equal :size 13)))	
+		  (defr
+			(defl decr-count (qet)
+			  (when qet
+				(when (null (gethash qet subqet-table))
+				  (setf (gethash qet subqet-table) qet)
+				  (setf (gethash qet edges-from-subqet-count) (- (or (gethash qet edges-from-subqet-count) 0) 1)))
+				(let ((subqets (subqets qet)))
+				  (dolist (subqet subqets)
+					(decr-count subqet)))))
+			(defl rem-qets ()
+			  (maphash (lambda (k v)
+						 (let ((qet v))
+						   (when (and (= (length (superqets qet)) 0)
+									  (not (edge-exists qet)))
+							 (rem-subqet qet))))
+					   subqet-table)
+			  nil)
+			(clrhash subqet-table)
+			(decr-count edge)
+			(rem-qets)
+			nil)))
+
+	  (defm old-rem-subqets (edge)
 		(defr
 		  (defl rem-qet (qet)
+			(print (list 'rq qet))
 			(when (not (null qet))
 			  (let ((subqets (subqets qet)))
-				(rem-subqet qet)
+				(rem-subqet qet)				;; Use qet to get subqets before removing it
 				(dolist (subqet subqets)
-				  (when (= (length (superqets subqet)) 0)
+				  (when (and (= (length (superqets subqet)) 0)			;; Note use of length here may cause perf loss
+							 (not (edge-exists subqet)))
 					(rem-qet subqet))))
 			  nil))
 		  (rem-qet edge)
 		  nil))
+
 
 	  ;; ********** End Subqet Methods ********** 
 
@@ -2784,52 +2799,54 @@
 							((eq clause-type 'type)
 							 (let ((type (second clause)))
 							   (pushe (add-edge (list rule 'type type)))))
-						   ((eq clause-type 'name)
-							(let ((rule-name (second clause)))
-							  (if (not (listp rule-name))
-								  (pushe (add-edge (list  rule 'name rule-name)))
-								  (pushe (add-edge `(name-attr ,rule ,@rule-name))))))
-						   ((eq clause-type 'root-var)
-							(let ((root-var (second clause)))
-							  (pushe (add-edge (list rule 'root-var root-var)))))
-						   ((eq clause-type 'no-triggered)
-							(pushe (add-edge `(,rule no-triggered))))
-						   ((eq clause-type 'local)
-							(setq add-to-lrp t)
-							(pushe (add-edge `(,rule local))))
-						   ((eq clause-type 'global)
-							(setq add-to-grp t)
-							(pushe (add-edge `(,rule global))))
-						   ((eq clause-type 'disabled)
-							(pushe (add-edge `(,rule disabled))))
-						   ((eq clause-type 'attach-to)
-							(dolist (node (rest clause))
-							  (setq add-to-nodes (cons node add-to-nodes))
-							  (pushe (add-edge `(,rule attach-to ,node)))))
-						   ((member clause-type '(add) :test #'eq)
-							(dolist (edge (rest clause))
-							  (let ((edge (xform-std-vars edge)))
-								(cond
-								 ((and (listp (first (last edge))) (eq (first (first (last edge))) 'rule))
-								  (let ((rule-values (define-rule
-													   (first (last edge))
-													   :new-pool (+ new-pool 1)
-													   :unattached t)))
-									(let ((rule-node (first rule-values))
-										  (rule-edges (second rule-values)))
-									  (pushe (add-edge (list rule 'add rule 'nested-rule rule-node)))
-									  (pushe (add-edge (list rule 'pred rule-node 'new-node (new-sn))))
-									  ;; (pushe (add-edge (list rule 'add (first edge) (second edge) rule-node)))
-									  (pushe (add-edge `(,rule add ,@(butlast edge) ,rule-node)))
-									  (dolist (rule-edge rule-edges)
-										(pushe (add-edge (append (list rule 'add) rule-edge)))))))
-								 (t
-								  (pushe (add-edge (append (list rule clause-type) edge))))))))
-						   ((member clause-type '(pred del not) :test #'eq)
-							(setq clause-types-added (cons clause-type clause-types-added))
-							(dolist (edge (rest clause))
-							  (let ((edge (xform-std-vars edge)))
-								(pushe (add-edge (append (list rule clause-type) edge))))))))))
+							((eq clause-type 'name)
+							 (let ((rule-name (second clause)))
+							   (if (not (listp rule-name))
+								   (pushe (add-edge (list  rule 'name rule-name)))
+								   (pushe (add-edge `(name-attr ,rule ,@rule-name))))))
+							((eq clause-type 'root-var)
+							 (let ((root-var (second clause)))
+							   (pushe (add-edge (list rule 'root-var root-var)))))
+							((eq clause-type 'no-triggered)
+							 (pushe (add-edge `(,rule no-triggered))))
+							((eq clause-type 'local)
+							 (setq add-to-lrp t)
+							 (pushe (add-edge `(,rule local))))
+							((eq clause-type 'global)
+							 (setq add-to-grp t)
+							 (pushe (add-edge `(,rule global))))
+							((eq clause-type 'disabled)
+							 (pushe (add-edge `(,rule disabled))))
+							((eq clause-type 'attach-to)
+							 (dolist (node (rest clause))
+							   (setq add-to-nodes (cons node add-to-nodes))
+							   (pushe (add-edge `(,rule attach-to ,node)))))
+							((and (memq clause-type '(add))
+								  (rest clause))
+							 (dolist (edge (rest clause))
+							   (let ((edge (xform-std-vars edge)))
+								 (cond
+								   ((and (listp (first (last edge))) (eq (first (first (last edge))) 'rule))
+									(let ((rule-values (define-rule
+														   (first (last edge))
+														   :new-pool (+ new-pool 1)
+														   :unattached t)))
+									  (let ((rule-node (first rule-values))
+											(rule-edges (second rule-values)))
+										(pushe (add-edge (list rule 'add rule 'nested-rule rule-node)))
+										(pushe (add-edge (list rule 'pred rule-node 'new-node (new-sn))))
+										;; (pushe (add-edge (list rule 'add (first edge) (second edge) rule-node)))
+										(pushe (add-edge `(,rule add ,@(butlast edge) ,rule-node)))
+										(dolist (rule-edge rule-edges)
+										  (pushe (add-edge (append (list rule 'add) rule-edge)))))))
+								   (t
+									(pushe (add-edge (append (list rule clause-type) edge))))))))
+							((and (memq clause-type '(pred del not))
+								  (rest clause))
+							 (setq clause-types-added (cons clause-type clause-types-added))
+							 (dolist (edge (rest clause))
+							   (let ((edge (xform-std-vars edge)))
+								 (pushe (add-edge (append (list rule clause-type) edge))))))))))
 
 					;; We expect all rules to have a certain required set of properties, otherwise they cannot be
 					;; copied. Required are pred, add, del, not, root-var, type, std-var-level, name. All but name are
@@ -3624,9 +3641,12 @@
 
 		(defm get-entry (rule-node)
 		  (let ((entry (! (rule-stats-table lookup-one) rule-node)))
-			(when (null entry)
-			  (setq entry (make-rule-stats-entry :rule-node rule-node :rule-name (! (graph hget) rule-node 'name)))
-			  (! (rule-stats-table insert) rule-node entry))
+			(if (null entry)
+				(let ()
+				  (setq entry (make-rule-stats-entry :rule-node rule-node :rule-name (! (graph hget) rule-node 'name)))
+				  (! (rule-stats-table insert) rule-node entry))
+				(when (null (rule-stats-entry-rule-name entry))		;; Race condition possible eg via update-root-var so we should be sure name gets filled in
+				  (setf (rule-stats-entry-rule-name entry) (! (graph hget) rule-node 'name))))
 			entry))
 
 		;; Command-line hack, but nice we can do this. rslambda is a misnomer, since it takes no var list and instead
@@ -3889,177 +3909,177 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
 			  (macrolet ((xprint (tag &rest x)
-								 ;; nil
-								 `(ptag ,tag ,@x)
+						   ;; nil
+						   `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
 					(let ((g objgraph))
-					  (let ((use-singleton-qets (and (! (self has-single-const-preds))
-													 (not (is-var-name root-var)))))
-						(defr
-						  (defl init-pred-status (ks)
-							(dolist (k ks)
-							  (setf (gethash (k-orig-pred k) pred-status) (list :untested))))
-						  (defl print-pred-status (tag)
-							(print (list tag))
-							(maphash (lambda (k v)
-									   (print (list tag obj-node root-var rule-name k v)))
-									 pred-status))
-						  (defl make-ks ()
-							(let ((preds (second (! (g filter-new-node-pred-edges) (get-preds)))))
-							  (mapcar (lambda (pred)
-										(make-k :pred pred 
-												:pred-info (mapcar (lambda (node) (if (is-var-name node) 'v 'd)) pred)
-												:orig-pred pred))
-									  preds)))
-						  (defl get-new-node-env ()
-							(let ((new-node-preds (first (! (g filter-new-node-pred-edges) (get-preds)))))
-							  (mapcar (lambda (new-node-pred) (list (first new-node-pred) (third new-node-pred))) new-node-preds))) ;; dump-sn
-						  ;; Splits l at vars and returns a list of subseqs at those var boundaries
-						  ;; E.g. (filter-vars-to-qets '(1 2 ?x 3 4 ?y 5 6 ?z)) => ((1 2) (3 4) (5 6))
-						  ;;
-						  ;; !! Fcn name and logic cloned in possible-match-fcn !!
-						  (defl filter-vars-to-qets (pred pred-info)
-							(defr
-							  (defl is-var (node node-info)
-								(and (is-var-name node)
-									 (eq node-info 'v)))
-							  (defl doloop (l i c r)
-								(if (null l)
-									(append r (when c (list c)))
-									(if (is-var (first l) (first i))
-										(doloop (rest l) (rest i) nil (append r (when c (list c))))
-										(doloop (rest l) (rest i) (append c (list (first l))) r))))
-							  (doloop pred pred-info  nil nil)))
-						  (defl check-consts (ks) ;; T if all preds have only consts, no vars
-							(block b
+					  (let ((has-single-const-preds (! (self has-single-const-preds))))
+						(let ((use-singleton-qets (and has-single-const-preds
+													   (not (is-var-name root-var)))))
+						  (xprint 's18 has-single-const-preds (! (self has-single-const-preds)) (not (is-var-name root-var)) use-singleton-qets)
+						  (defr
+							(defl init-pred-status (ks)
 							  (dolist (k ks)
-								(when (memq 'v (k-pred-info k))
-								  (return-from b nil)))
-							  t))
-						  (defl check-const (k)
-							(not (memq 'v (k-pred-info k))))
-						  (defl subst (ks env) ;; Returns new ks
-							(mapcar (lambda (k)
-									  (let ((pred (k-pred k)))
-										(let ((pred-info (k-pred-info k)))
-										  (let ((pred-info-list (mapcar (lambda (node pred-info-node)
-																		  (if (eq pred-info-node 'v)
-																			  (let ((val (env-lookup node env :idempotent nil)))
-																				(if val
-																					(list val 'd)
-																					(list node pred-info-node)))
-																			  (list node pred-info-node)))
-																		pred pred-info)))
-											(make-k :pred (mapcar (lambda (x) (first x)) pred-info-list)
-													:pred-info (mapcar (lambda (x) (second x)) pred-info-list)
-													:orig-pred (k-orig-pred k))))))
-									ks))
-						  (defl find-min-edges-k (ks)
-							(timer 'find-min-edges-k
-							  (lambda ()
-								(let ((n 1e38))
-								  (let ((min-k nil))
-									(dolist (k ks)
-									  (let ((pred (k-pred k)))
-										(let ((pred-info (k-pred-info k)))
-										  (when (not (check-const k))
-											(let ((qets (filter-vars-to-qets pred pred-info)))
-											  (let ((len nil))
-												(if (> (length qets) 1) ;; If more than one qet cannot just add; need to find size of union
-													(let ()
-													  (setq len (! (qet-edge-len-cache lookup-one) qets))
-													  (when (null len)
-														(let ((new-edges (mapunion (lambda (qet)
-																					 (when (or use-singleton-qets (> (length qet) 1))
-																					   (! (g get-edges-from-subqet) qet))) qets)))
-														  (when new-edges
-															(setq len (length new-edges))
-															(! (qet-edge-len-cache insert-one) qets len)))))
-													(let ((qet (first qets))) ;; One or zero qets
-													  (when qet
-														(setq len (! (g count-edges-from-subqet) qet)))))
-												(when (and len (< len n))
-												  (setq n len)
-												  (setq min-k k))))))))
-									(xprint 's11 min-k)
-									min-k)))))
-						  (defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
-							(timer 'match
-							 (lambda ()
-							   (defr
-								 (defl find-var-binding (env)
-								   (block b
-									 (dolist (binding env)
-									   (when (is-var-name (first binding))
-										 (return-from b (list binding))))
-									 nil))
-								 (let ((k-to-match (find-min-edges-k ks)))
-								   (let ((k k-to-match))
-									 (when k
-									   (let ((pred (k-pred k)))
-										 (let ((pred-info (k-pred-info k)))
-										   (let ((qets (filter-vars-to-qets pred pred-info)))
-											 (let ((new-edges (mapunion (lambda (qet)
-																		  (when (or use-singleton-qets (> (length qet) 1))
-																			(! (g get-edges-from-subqet) qet))) qets)))
-											   (let ((r (mapcad (lambda (edge)
-																  (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
-																new-edges)))
-												 #|
-												 (when (eq (gethash (k-orig-pred k) pred-status) :untested) ;
-												 (setf (gethash (k-orig-pred k) pred-status) (if r :matched :unmatched))) ;
-												 |#
-												 (setf (gethash (k-orig-pred k) pred-status) (append (gethash (k-orig-pred k) pred-status) (list (if r :matched :unmatched))))
-												 (xprint 's9 pred new-edges r)
-												 r))))))))))))
-						  (defl edges-exist (ks) ;; All pred edges need to exist
-							(block b
-							  (dolist (k ks)
-								(let ((pred (k-pred k)))
-								  (when (not (! (g edge-exists) pred))
-									(return-from b nil))))
-							  t))
-						  (defl doloop (lvl cnt ks env-chain)
-							(xprint 's1 ks lvl cnt doloop-cnt)
-							(xprint 's14 env-chain)
-							(setq doloop-cnt (+ doloop-cnt 1))
-							(if (check-consts ks)
-								(let ()
-								  (xprint 's4 env-chain doloop-cnt)
-								  (when (edges-exist ks)
-									(xprint 's2 env-chain doloop-cnt)
-									(setf (gethash env-chain envs) env-chain) ;; Tests show we can get dups so hash table is needed
+								(setf (gethash (k-orig-pred k) pred-status) (list :untested))))
+							(defl print-pred-status (tag)
+							  (print (list tag))
+							  (maphash (lambda (k v)
+										 (print (list tag obj-node root-var rule-name k v)))
+									   pred-status))
+							(defl make-ks ()
+							  (let ((preds (second (! (g filter-new-node-pred-edges) (get-preds)))))
+								(mapcar (lambda (pred)
+										  (make-k :pred pred 
+												  :pred-info (mapcar (lambda (node) (if (is-var-name node) 'v 'd)) pred)
+												  :orig-pred pred))
+										preds)))
+							(defl get-new-node-env ()
+							  (let ((new-node-preds (first (! (g filter-new-node-pred-edges) (get-preds)))))
+								(mapcar (lambda (new-node-pred) (list (first new-node-pred) (third new-node-pred))) new-node-preds))) ;; dump-sn
+							;; Splits l at vars and returns a list of subseqs at those var boundaries
+							;; E.g. (filter-vars-to-qets '(1 2 ?x 3 4 ?y 5 6 ?z)) => ((1 2) (3 4) (5 6))
+							;;
+							;; !! Fcn name and logic cloned in possible-match-fcn !!
+							(defl filter-vars-to-qets (pred pred-info)
+							  (defr
+								(defl is-var (node node-info)
+								  (and (is-var-name node)
+									   (eq node-info 'v)))
+								(defl doloop (l i c r)
+								  (if (null l)
+									  (append r (when c (list c)))
+									  (if (is-var (first l) (first i))
+										  (doloop (rest l) (rest i) nil (append r (when c (list c))))
+										  (doloop (rest l) (rest i) (append c (list (first l))) r))))
+								(doloop pred pred-info  nil nil)))
+							(defl check-consts (ks) ;; T if all preds have only consts, no vars
+							  (block b
+								(dolist (k ks)
+								  (when (memq 'v (k-pred-info k))
+									(return-from b nil)))
+								t))
+							(defl check-const (k)
+							  (not (memq 'v (k-pred-info k))))
+							(defl subst (ks env) ;; Returns new ks
+							  (mapcar (lambda (k)
+										(let ((pred (k-pred k)))
+										  (let ((pred-info (k-pred-info k)))
+											(let ((pred-info-list (mapcar (lambda (node pred-info-node)
+																			(if (eq pred-info-node 'v)
+																				(let ((val (env-lookup node env :idempotent nil)))
+																				  (if val
+																					  (list val 'd)
+																					  (list node pred-info-node)))
+																				(list node pred-info-node)))
+																		  pred pred-info)))
+											  (make-k :pred (mapcar (lambda (x) (first x)) pred-info-list)
+													  :pred-info (mapcar (lambda (x) (second x)) pred-info-list)
+													  :orig-pred (k-orig-pred k))))))
+									  ks))
+							(defl find-min-edges-k (ks)
+							  (let ((n 1e38))
+								(let ((min-k nil))
+								  (dolist (k ks)
+									(let ((pred (k-pred k)))
+									  (let ((pred-info (k-pred-info k)))
+										(when (not (check-const k))
+										  (let ((qets (filter-vars-to-qets pred pred-info)))
+											(let ((len nil))
+											  (if (> (length qets) 1) ;; If more than one qet cannot just add; need to find size of union
+												  (let ()
+													(setq len (! (qet-edge-len-cache lookup-one) qets))
+													(when (null len)
+													  (let ((new-edges (mapunion (lambda (qet)
+																				   (when (or use-singleton-qets (> (length qet) 1))
+																					 (! (g get-edges-from-subqet) qet))) qets)))
+														(when new-edges
+														  (setq len (length new-edges))
+														  (! (qet-edge-len-cache insert-one) qets len)))))
+												  (let ((qet (first qets))) ;; One or zero qets
+													(when qet
+													  (setq len (! (g count-edges-from-subqet) qet)))))
+											  (when (and len (< len n))
+												(setq n len)
+												(setq min-k k))))))))
+								  (xprint 's11 use-singleton-qets min-k)
+								  min-k)))
+							(defl match (ks) ;; Returns a list of envs. Each env is a singleton binding, and all the bindings are for the same variable
+							  (defr
+								(defl find-var-binding (env)
+								  (block b
+									(dolist (binding env)
+									  (when (is-var-name (first binding))
+										(return-from b (list binding))))
 									nil))
-								(let ((new-envs (match ks)))
-								  (xprint 's10 new-envs)
-								  (gstat 'match-num-envs (lambda (x y) (+ x y)) (lambda () (length new-envs)))
-								  (let ((i 0))
-									(dolist (new-env new-envs)
-									  (let ((ks (subst ks new-env)))
-										(doloop (+ lvl 1) i ks (append new-env env-chain))
-										(setq i (+ i 1))))))))
-						  (let ((env `((,root-var ,obj-node))))
-							(xprint 's0 rule-name root-var obj-node)
-							(! (qet-edge-len-cache clear)) ;; !!!!!!!!!!!! Clearing cache
-							(clrhash pred-status)
-							(setq doloop-cnt 0)
-							(let ((global-ks (make-ks)))
-							  (let ((ks (make-ks)))
-								(init-pred-status ks)
-								(let ((ks (subst ks env)))
-								  (clrhash envs)
-								  (doloop 0 0 ks env)
-								  (xprint 's16 doloop-cnt)
-								  (gstat 'match-doloop-cnt (lambda (x y) (+ x y)) (lambda () doloop-cnt))
-								  (let ((new-node-env (get-new-node-env)))
-									(let ((envs-list (hash-table-value-to-list envs)))
-									  (when (null envs-list)
-										(let ((fail-tag 'subst-match-fail))
-										  (when (chkptag fail-tag)
-											(print-pred-status fail-tag))))
-									  (mapcar (lambda (env) (append env new-node-env)) envs-list))))))))))))))))))
+								(let ((k-to-match (find-min-edges-k ks)))
+								  (let ((k k-to-match))
+									(when k
+									  (let ((pred (k-pred k)))
+										(let ((pred-info (k-pred-info k)))
+										  (let ((qets (filter-vars-to-qets pred pred-info)))
+											(let ((new-edges (mapunion (lambda (qet)
+																		 (when (or use-singleton-qets (> (length qet) 1))
+																		   (! (g get-edges-from-subqet) qet))) qets)))
+											  (xprint 's16 qets new-edges)
+											  (let ((r (mapcad (lambda (edge)
+																 (find-var-binding (! (g match-one-edge) pred edge nil nil nil :pred-info pred-info)))
+															   new-edges)))
+												#|
+												(when (eq (gethash (k-orig-pred k) pred-status) :untested) ; ; ;
+												(setf (gethash (k-orig-pred k) pred-status) (if r :matched :unmatched))) ; ; ;
+												|#
+												(setf (gethash (k-orig-pred k) pred-status) (append (gethash (k-orig-pred k) pred-status) (list (if r :matched :unmatched))))
+												(xprint 's9 pred new-edges r)
+												r))))))))))
+							(defl edges-exist (ks) ;; All pred edges need to exist
+							  (block b
+								(dolist (k ks)
+								  (let ((pred (k-pred k)))
+									(when (not (! (g edge-exists) pred))
+									  (return-from b nil))))
+								t))
+							(defl doloop (lvl cnt ks env-chain)
+							  (xprint 's1 ks lvl cnt doloop-cnt)
+							  (xprint 's14 env-chain)
+							  (setq doloop-cnt (+ doloop-cnt 1))
+							  (if (check-consts ks)
+								  (let ()
+									(xprint 's4 env-chain doloop-cnt)
+									(when (edges-exist ks)
+									  (xprint 's2 env-chain doloop-cnt)
+									  (setf (gethash env-chain envs) env-chain) ;; Tests show we can get dups so hash table is needed
+									  nil))
+								  (let ((new-envs (match ks)))
+									(xprint 's10 new-envs)
+									;; (gstat 'match-num-envs (lambda (x y) (+ x y)) (lambda () (length new-envs)))
+									(let ((i 0))
+									  (dolist (new-env new-envs)
+										(let ((ks (subst ks new-env)))
+										  (doloop (+ lvl 1) i ks (append new-env env-chain))
+										  (setq i (+ i 1))))))))
+							(let ((env `((,root-var ,obj-node))))
+							  (xprint 's0 rule-name root-var obj-node)
+							  (xprint 's17 (! (self has-single-const-preds)) (not (is-var-name root-var)) use-singleton-qets)
+							  (! (qet-edge-len-cache clear)) ;; !!!!!!!!!!!! Clearing cache
+							  (clrhash pred-status)
+							  (setq doloop-cnt 0)
+							  (let ((global-ks (make-ks)))
+								(let ((ks (make-ks)))
+								  (init-pred-status ks)
+								  (let ((ks (subst ks env)))
+									(clrhash envs)
+									(doloop 0 0 ks env)
+									(xprint 's16 doloop-cnt)
+									;; (gstat 'match-doloop-cnt (lambda (x y) (+ x y)) (lambda () doloop-cnt))
+									(let ((new-node-env (get-new-node-env)))
+									  (let ((envs-list (hash-table-value-to-list envs)))
+										(when (null envs-list)
+										  (let ((fail-tag 'subst-match-fail))
+											(when (chkptag fail-tag)
+											  (print-pred-status fail-tag))))
+										(mapcar (lambda (env) (append env new-node-env)) envs-list)))))))))))))))))))
 
 	;; Also in objgraph (as-is)
 	;;
@@ -4149,7 +4169,8 @@
 						 (dolist (pred preds)
 						   (when (> (length (filter-vars pred)) 1)
 							 (return-from b nil))))
-					   t)))))))
+					   t)))
+			  (first has-single-const-preds-cache)))))
 
 	;; This is also a candidate for caching, using the signature
 	(defm has-rest-vars ()

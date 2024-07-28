@@ -373,10 +373,12 @@
 					   (del
 						(global-node rule ?this-rule))))
   (time
-   (timer 'main
-	 (lambda ()
-	   (! (g execute-global-all-objs-loop))
-	   ))))
+   (with-redirected-stdout (and t "fftout")
+	 (lambda (s)
+	   (timer 'main
+		 (lambda ()
+		  (let ((*print-tags* t))
+			(! (g execute-global-all-objs-loop)))))))))
 
 (let ((d (make-dumper)))
   (! (d set-graph) g)
@@ -743,7 +745,7 @@
 	 :omitted-attrs '(for-rule next-color
 							   copy-rule-rule-pred copy-rule-rule-add copy-rule-rule-pred-elem copy-rule-rule-add-elem)
 	 :rules nil
-	 :attrs '(sigma even-func fe copied-from rule copy-rule))
+	 :attrs '(sigma even-func fe copied-from rule copy-rule))	;; Or subst rule with ran
   
   (! (d gv-to-image) "fe"))
 
@@ -3934,6 +3936,38 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 	(! (map as-list))))
 
 
+;;
+;; Tests for add-subqets, rem-subqets, and count-edges-from-subqet
+;;
+
+(let ()
+  (setq h (make-graph))
+  (! (h add-edge) '(1 a 0))
+  (! (h add-edge) '(2 a 0))
+  (! (h add-edge) '(3 a 0))
+  (! (h add-edge) '(3 a)))
+
+(! (h rem-edge) '(3 a 0))
+  
+(let ((g h))
+  (let ((y (! (g all-subqets))))
+	(dolist (x y)
+	  (when (not (= (length (! (g get-edges-from-subqet) x)) (! (g count-edges-from-subqet) x)))
+		(print (list x (length (! (g get-edges-from-subqet) x)) (! (g count-edges-from-subqet) x)))))))
+
+(! (h rem-edge) '(3 a 0))
+
+(! (h all-subqets))
+
+(! (h get-edges-from-subqet-count-table))
+
+(! (h get-edges-from-subqet) '(a 0))
+
+(! (h get-edges-from-subqet) '(3 a))
+
+(! (h count-edges-from-subqet) '(a 0))
+
+(! (h get-all-edges))
 
 ;;
 ;; Accumulation of useful queries
