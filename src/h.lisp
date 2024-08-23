@@ -74,6 +74,7 @@
 ;;					  10/10/23  Turned off for now as if appears to be just as fast or faster, and
 ;;							    higher efficiency, without the heuristic. It's also simpler for further
 ;;							    root-var analysis to assume there is no heuristic.
+;;					  8/7/24 Add to this tag the handling of root var by low-level operations such as match-one-edge.
 ;;
 ;; match-perf -- Improve match perf by looking at the various pieces, e.g., poss-match. First we've shorted out
 ;;					 scan-and-subst, and everything seems to be faster. This tag is related to the previous two, in
@@ -127,6 +128,11 @@
 ;;
 ;; multi-types -- Allow the attribute "type" to take on multi values, which means using memq instead of eq in the code.
 ;;					Discharged 6/4/24
+;;
+;; enable-subst-match -- Turn on subst-match for more types of matches, specifically, to allow subst-match to run on a
+;;						  const root-var, and when so allow single-const qet lookup. Leaves only rest-vars not covered
+;;						  by subst-match yet.
+;;
 
 (defc graph nil nil
   (let ((size 63)) ;; 1021
@@ -910,6 +916,11 @@
   (let ((trace-seqno 0))
 	(let ((rule-seqno 0))
 	  (let ((et-table (make-sur-map)))
+		;; Record initial state, e.g., as via define-rule, before rule eval begins. 
+		(defm init-trace (graph)	;; Note we have a std class fcn "init" already
+		  (let ((g graph))
+			(dolist (e (! (g get-all-edges)))
+			  (insert-er e e :edge-to-add 'kernel 'kernel nil))))
 		;; edge-to-trace, :add :pred :del
 		(defm insert-et (edge type rule-node rule-name obj-node)
 		  (! (et-table insert) edge (make-et-entry :trace-seqno trace-seqno :rule-seqno rule-seqno :type type
@@ -1769,7 +1780,8 @@
 						(first-edge nil)
 						(matched-edges nil)
 						(deleted-edges nil)
-						(matched-and-new-edges-per-env nil))
+						(matched-and-new-edges-per-env nil)
+						(n-edges-added 0))
 					(dolist (env envlist)
 					  (timer 'add-consequent-edges-per-env
 						(lambda ()
@@ -1856,6 +1868,7 @@
 												  (dolist (new-node new-edge)
 													(setf (gethash new-node all-node-hash) new-node))
 												  (add-edge new-edge)
+												  (setq n-edges-added (+ n-edges-added 1))
 												  (check-rule-components-cache new-edge)
 												  (! (rule-stats update-root-var) rule-node root-var)
 												  (when (chkptag 'ace4)
@@ -1914,6 +1927,7 @@
 										(when (chkptag 'ace6)
 										  (print (list 'ace6 (! (obj-queue as-list))))))))))))))
 					(! (rule-stats update-max-env-size) rule-node (length envlist))
+					(! (rule-stats update-max-edges-added) rule-node n-edges-added)
 					(when r
 					  (check-rule-trace rule-name `(ace-new-edges rule ,rule-node ,rule-name obj ,obj-node)))
 					(funcall cont r matched-edges deleted-edges matched-and-new-edges-per-env))))))))
@@ -2139,7 +2153,8 @@
 											(! (edge-to-trace insert-et) new-edge :add rule-node rule-name obj-node)))
 										(dolists ((matched-edge matched-pred) (matched-edges (second (filter-new-node-pred-edges pred-list))))
 										  (! (edge-to-trace insert-er) matched-edge matched-pred :edge-to-pred rule-node rule-name obj-node))
-										(dolists ((new-edge add) (new-edges add-list))
+										;; To get the right match-up in trace, need to remove print edges from adds
+										(dolists ((new-edge add) (new-edges (mapcad (lambda (e) (when (not (eq (first e) 'print)) e)) add-list)))
 										  (! (edge-to-trace insert-er) new-edge add :edge-to-add rule-node rule-name obj-node))))))
 								 ((eq match-status :no-new-edges)
 								  (! (edge-to-trace insert-en) obj-node :no-new-edges rule-node rule-name obj-node))
@@ -2441,7 +2456,7 @@
 	  (defm all-matches-aux (rule-graph obj-node root-var &key use-all-matches-aux2)
 		(if (and (not use-all-matches-aux2)
 				 (or
-				  (is-var-name root-var)
+				  t ;; (is-var-name root-var)   ;; enable-subst-match
 				  ;; These experiments did not increase the speed as expected. Subst-match slower but so is other stuff.
 				  ;; (< (! (self count-edges-from-subqet) (list root-var)) 10)
 				  ;; (eq (! (rule-graph name)) 'weave-next-rule)
@@ -2630,9 +2645,12 @@
 					(return-from b (is-rest-var-name (first l)))))
 				pat-edge)))
 
+	  ;; better-root-var: Examine the need for the root var in this and related low-level matchers. E.g. the logic of
+	  ;; only having one of the roots in -aux seems like it should not be necessary.
+
 	  (defm match-one-edge (pat-edge obj-edge 
 									 root-var		;; If null, is ignored
-									 obj-node		;; If null, is ignored (implied by null root-var
+									 obj-node		;; If null, is ignored (implied by null root-var)
 									 rule-node		;; Passed for diag purposes only
 									 &key
 									 pred-info)		;; If passed, use this to determine how to match a var in the
@@ -2662,7 +2680,7 @@
 				(cond
 				 ((null pat-edge)
 				  '((t t))) ;; literal-match case; dummy binding
-				 ;; If we have only one of the roots, then whole edge does not match
+				 ;; If we have only one of the roots, then whole edge does not match   better-root-var
 				 ((or (and root-var
 						   (not (eq root-var :undefined))
 						   (equal (first pat-edge) root-var)
@@ -2671,6 +2689,7 @@
 						   (not (eq root-var :undefined))
 						   (not (equal (first pat-edge) root-var))
 						   (equal (first obj-edge) obj-node)))
+				  ;; (print (list 'moea1 pat-edge obj-edge root-var obj-node))		;; When this is in it looks like only "xis" picks up this case    better-root-var
 				  (return-from match-one-edge1 nil))
 				 ((and (is-var-name (first pat-edge))
 					   (or (null pred-info)
@@ -3316,10 +3335,6 @@
 
 	  ;; Returns a graph of a full trace of rule execution.  
 	  ;; 
-	  ;; But note default is in-place, i.e., within the current
-	  ;; object. It may be advantageous at some point to have a
-	  ;; separate graph, so that is supported.
-	  ;;
 	  ;; (rule a edge) = edge has been added by rule
 	  ;; (rule d edge) = edge has been deleted by rule
 	  ;; (edge p rule) = edge is a pred of rule
@@ -3333,18 +3348,25 @@
 	  ;;
 	  ;; 5/25/23 Consigned the "tested" stuff to the old version, as I haven't found a good graphical model for it yet.
 
-	  (defm edge-trace-graph (&key make-new-graph 
-								   (rules-fcn (lambda (r) t))
+	  (defm edge-trace-graph (&key (rules-fcn (lambda (r) t))
 								   (except-rules-fcn (lambda (r) nil))
 								   (nodes-fcn (lambda (edge) t))
 								   (except-nodes-fcn (lambda (edge) nil))
-								   (trim-dangling-adds-and-preds nil))
+								   (trim-dangling-adds-and-preds nil)
+								   (min-freq 0))
 		(defr
 		  (defl has-preds (events)
 			(block b
 			  (dolist (event events)
-				(when (eq (et-entry-type event) :pred-to-trace)
+				(when (eq (et-entry-type event) :edge-to-pred)
 				  (return-from b t)))
+			  nil))
+		  (defl find-add (events)
+			(block b
+			  (dolist (event events)
+				(let ((kind (et-entry-type event)))
+				  (when (eq kind :edge-to-add)
+					(return-from b event))))
 			  nil))
 		  (defl trim-dangling-adds-and-preds (g)
 			(let ((edges (! (g get-all-edges))))
@@ -3358,13 +3380,23 @@
 				  (let ((edge-node (first edge)))
 					(when (not (! (g hget-inverse-all) edge-node 'a))
 					  (! (g rem-edge) edge))))))))
-		  (let ((g (if make-new-graph (make-foundation) self)))
+		  (defl random-frac-list (frac l-in)
+			(let ((l l-in))
+			  (let ((r nil))
+				(let ((n (floor (* frac (length l)))))
+				  (dotimes (i n)
+					(let ((x (nth (random (- n i)) l)))
+					  (setq r (cons x r))
+					  (setq l (set-subtract l (list x))))))
+				r)))
+		  (let ((g (make-foundation)))
 			(let ((g1 (make-objgraph)))
 			  (let ((trace (! (edge-to-trace as-list))))
 				(dolist (entry trace)							;; g1 is then a reproduction of the graph captured by the trace. Helps for getting rule names, etc.
 				  (let ((edge (first entry)))
 					(when (listp edge)
 					  (! (g1 add-edge) edge))))
+				;; This pass does a, p, d, ao, am, an, q, r, e
 				(let ((am-done nil))
 				  (dolist (entry trace)
 					(let ((edge (first entry)))
@@ -3434,20 +3466,15 @@
 													   (when (memq obj-node edge)
 														 (! (g add-edge) (list obj-node 'type 'et-obj))
 														 (! (g add-edge) (list obj-node 'r rule-node))
-														 (! (g add-edge) (list obj-node 'e edge-node)))))))))))))))))))))))))
+														 (! (g add-edge) (list obj-node 'e edge-node)))))))))))))))))))))))
 
-			(let ((g1 (make-objgraph)))
-			  (let ((trace (! (edge-to-trace as-list))))
-				(dolist (info trace) ;; g1 is then a reproduction of the graph captured by the trace. Helps for getting rule names, etc.
-				  (let ((edge (first info)))
-					(when (listp edge)
-					  (! (g1 add-edge) edge))))
+				;; This pass does pe, pr, ae, ar
 				(dolist (info trace)
 				  (let ((edge (first info)))
 					(when (listp edge)
 					  (let ((events (second info)))
 						(dolist (event events)
-						  (when (eq (et-entry-type event) '(:pred-to-trace :add-to-trace))
+						  (when (memq (et-entry-type event) '(:edge-to-pred :edge-to-add))
 							(let ((seqno (et-entry-rule-seqno event)))
 							  (let ((rule-name (et-entry-rule-name event)))
 								(let ((rule-edge (et-entry-rule-edge event)))
@@ -3457,7 +3484,7 @@
 										(when (not (funcall except-nodes-fcn edge))
 										  (let ((rule-node (symcat rule-name '-- seqno)))
 											(let ((edge-node (format nil "~a" edge)))
-											  (if (eq (et-entry-type event) :pred-to-trace)
+											  (if (eq (et-entry-type event) :edge-to-pred)
 												  (let ((pred-node-name (format nil "~a" rule-edge)))
 													(let ((pred-node (format nil "~a--~a--~a" pred-node-name rule-name seqno)))
 													  (! (g add-edge) (list pred-node 'type 'pred-node))
@@ -3469,10 +3496,194 @@
 													  (! (g add-edge) (list add-node 'type 'add-node))
 													  (! (g add-edge) (list add-node 'label add-node-name))
 													  (! (g add-edge) (list add-node 'ae edge-node))
-													  (! (g add-edge) (list rule-node 'ar add-node))))))))))))))))))))))
-			(when trim-dangling-adds-and-preds
-			  (trim-dangling-adds-and-preds g))
-			g)))
+													  (! (g add-edge) (list rule-node 'ar add-node))))))))))))))))))))
+
+				  (when trim-dangling-adds-and-preds
+				  (trim-dangling-adds-and-preds g))
+				  g)))))
+
+	  ;;
+	  ;; General admit-rule for in particular making visual representations, where typically we want to prune down the
+	  ;; rules to mitigate display overload.
+	  ;;
+	  ;; Default is rules = (t), where t represents match-any, and omitted-rules = nil. Each may be a list, and if an
+	  ;; element is a string, it's taken to mean that the string is contained in the (typically symbol) name (print
+	  ;; format) of the rule name. There is right now no way to denote a literal string as a rule name.
+	  ;;
+	  ;; (admit-rule rule-name :rules '(init "tree") :omit-rules '(color-color))
+	  ;; 
+
+	  (defm admit-rule (rule &key (rules '(t)) (omitted-rules nil))
+		(block b
+		  (dolist (r rules)
+			(when (or (eq r t)
+					  (equal rule r)
+					  (and (stringp r)
+						   (search r (string-downcase (format nil "~a" rule)))))
+			  (dolist (o omitted-rules)
+				(when (or (equal rule o)
+						  (and (stringp o)
+							   (search o (string-downcase (format nil "~a" rule)))))
+				  (return-from b nil)))
+			  (return-from b t)))))
+
+	  (defm edge-trace-var-graph (&key (min-freq 0) (rules '(t)) (omitted-rules nil))
+		(defr
+		  (defl has-preds (events)
+			(block b
+			  (dolist (event events)
+				(when (eq (et-entry-type event) :edge-to-pred)
+				  (return-from b t)))
+			  nil))
+		  (defl find-add (events)
+			(block b
+			  (dolist (event events)
+				(let ((kind (et-entry-type event)))
+				  (when (eq kind :edge-to-add)
+					(return-from b event))))
+			  nil))
+		  (let ((g (make-foundation)))
+			(let ((trace (! (edge-to-trace as-list))))
+			  ;; This pass does the var-based part of the graph: v, ap, freq
+			  (let ((freq-table (make-sur-map))) ;; Count of ap edge instances
+				(dolist (entry trace)
+				  (let ((edge (first entry)))
+					(let ((events (second entry)))
+					  (when (has-preds events)
+						(let ((add-event (find-add events)))
+						  (when add-event
+							(let ((add-rule-name (et-entry-rule-name add-event)))
+							  (when (admit-rule add-rule-name :rules rules :omitted-rules omitted-rules)
+								(let ((add-rule-node (et-entry-rule-node add-event)))
+								  (let ((add-edge (et-entry-rule-edge add-event)))
+									(let ((add-seqno (et-entry-rule-seqno add-event)))
+									  (dolist (event events)
+										(let ((type (et-entry-type event)))
+										  (when (eq type :edge-to-pred)
+											(let ((rule-node (et-entry-rule-node event)))
+											  (let ((rule-name (et-entry-rule-name event)))
+												(when (admit-rule rule-name :rules rules :omitted-rules omitted-rules)
+												  (let ((pred-edge (et-entry-rule-edge event)))
+													(let ((env (mapcar (lambda (x y) (list x y)) add-edge pred-edge)))
+													  ($comment (let ((*print-pretty* nil))
+																  (print (list 'etv add-rule-name add-edge rule-name pred-edge env))))
+													  (dolist (binding env)
+														(mlet (((x y) binding))
+														  (when (is-var-name y) ;; "value" of the binding must be a var
+															(let ((rule-var-add (symcat add-rule-name "-" x)))
+															  (let ((rule-var-pred (symcat rule-name "-" y)))
+																(let ((rule-var-add-name x))
+																  (let ((rule-var-pred-name y))
+																	(let ((ap-edge `(,rule-var-add ap ,rule-var-pred)))
+																	  (! (g add-edge) ap-edge)
+																	  (! (freq-table insert-one) ap-edge (+ (or (! (freq-table lookup-one) ap-edge) 0) 1))
+																	  (! (freq-table insert-one) rule-var-add (+ (or (! (freq-table lookup-one) rule-var-add) 0) 1)))
+																	(when (hget x 'type)
+																	  (! (g add-edge) `(,rule-var-add type ,(hget x 'type))))
+																	(when (hget y 'type)
+																	  (! (g add-edge) `(,rule-var-pred type ,(hget y 'type))))
+																	(if (hget x 'name)
+																		(! (g add-edge) `(,rule-var-add name ,(hget x 'name)))
+																		(! (g add-edge) `(,rule-var-add label ,rule-var-add-name)))
+																	(if (hget y 'name)
+																		(! (g add-edge) `(,rule-var-pred name ,(hget y 'name)))
+																		(! (g add-edge) `(,rule-var-pred label ,rule-var-pred-name)))
+																	(! (g add-edge) `(,rule-node type rule))
+																	(! (g add-edge) `(,add-rule-node type rule))
+																	(! (g add-edge) `(,rule-node name ,rule-name))
+																	(! (g add-edge) `(,add-rule-node type rule))
+																	(! (g add-edge) `(,add-rule-node name ,add-rule-name))
+																	(! (g add-edge) `(,add-rule-node v ,rule-var-add))
+																	(! (g add-edge) `(,rule-node v ,rule-var-pred))
+																	(! (g add-edge) `(,add-rule-node type gv-cluster))
+																	(! (g add-edge) `(,add-rule-node gv-cluster-relation v))
+																	(! (g add-edge) `(,rule-node type gv-cluster))
+																	(! (g add-edge) `(,rule-node gv-cluster-relation v))))))))))))))))))))))))))))
+				(dolist (i (! (freq-table as-list)))
+				  (let ((ap-edge (first i)))
+					(when (listp ap-edge)
+					  (let ((count (first (second i))))
+						(let ((tot (! (freq-table lookup-one) (first ap-edge))))
+						  (let ((freq (float (/ count tot))))
+							(when (>= freq min-freq)
+							  (! (g add-edge) (list (first ap-edge) 'freq freq (third ap-edge))))))))))
+				g)))))
+
+	  (defm old-edge-trace-var-graph (&key (min-freq 0))
+		(defr
+		  (defl has-preds (events)
+			(block b
+			  (dolist (event events)
+				(when (eq (et-entry-type event) :edge-to-pred)
+				  (return-from b t)))
+			  nil))
+		  (defl find-add (events)
+			(block b
+			  (dolist (event events)
+				(let ((kind (et-entry-type event)))
+				  (when (eq kind :edge-to-add)
+					(return-from b event))))
+			  nil))
+		  (let ((g (make-foundation)))
+			(let ((g1 (make-objgraph)))
+			  (let ((trace (! (edge-to-trace as-list))))
+				(dolist (entry trace)							;; g1 is then a reproduction of the graph captured by the trace. Helps for getting rule names, etc.
+				  (let ((edge (first entry)))
+					(when (listp edge)
+					  (! (g1 add-edge) edge))))
+
+				;; This pass does the var-based part of the graph: v, ap
+
+				(let ((freq-table (make-sur-map))) ;; Count of ap edge instances
+				  (dolist (entry trace)
+					(let ((edge (first entry)))
+					  (let ((events (second entry)))
+						(when (has-preds events)
+						  (let ((add-event (find-add events)))
+							(when add-event
+							  (let ((add-rule-name (et-entry-rule-name add-event)))
+								(let ((add-rule-node (et-entry-rule-node add-event)))
+								  (let ((add-edge (et-entry-rule-edge add-event)))
+									(let ((add-seqno (et-entry-rule-seqno add-event)))
+									  (dolist (event events)
+										(let ((type (et-entry-type event)))
+										  (when (eq type :edge-to-pred)
+											(let ((rule-node (et-entry-rule-node event)))
+											  (let ((rule-name (et-entry-rule-name event)))
+												(let ((pred-edge (et-entry-rule-edge event)))
+												  (let ((env (match-one-edge add-edge pred-edge nil nil nil)))
+													(dolist (binding env)
+													  (mlet (((x y) binding))
+														(when (is-var-name y) ;; "value" of the binding must be a var
+														  (let ((rule-var-add (symcat add-rule-name "-" x)))
+															(let ((rule-var-pred (symcat rule-name "-" y)))
+															  (let ((rule-var-add-name x))
+																(let ((rule-var-pred-name y))
+																  (let ((ap-edge `(,rule-var-add ap ,rule-var-pred)))
+																	(! (g add-edge) ap-edge)
+																	(! (freq-table insert-one) ap-edge (+ (or (! (freq-table lookup-one) ap-edge) 0) 1))
+																	(! (freq-table insert-one) rule-var-add (+ (or (! (freq-table lookup-one) rule-var-add) 0) 1)))
+																  (! (g add-edge) `(,rule-var-add label ,rule-var-add-name))
+																  (! (g add-edge) `(,rule-var-pred label ,rule-var-pred-name))
+																  (! (g add-edge) `(,rule-node type rule))
+																  (! (g add-edge) `(,add-rule-node type rule))
+																  (! (g add-edge) `(,rule-node name ,rule-name))
+																  (! (g add-edge) `(,add-rule-node type rule))
+																  (! (g add-edge) `(,add-rule-node name ,add-rule-name))
+																  (! (g add-edge) `(,add-rule-node v ,rule-var-add))
+																  (! (g add-edge) `(,rule-node v ,rule-var-pred))))))))))))))))))))))))))
+				  (dolist (i (! (freq-table as-list)))
+					(let ((ap-edge (first i)))
+					  (when (listp ap-edge)
+						(let ((count (first (second i))))
+						  (let ((tot (! (freq-table lookup-one) (first ap-edge))))
+							(let ((freq (float (/ count tot))))
+							  (when (>= freq min-freq)
+								(! (g add-edge) (list (first ap-edge) 'freq freq (third ap-edge))))))))))
+				  (dolist (e (! (g1 get-all-edges)))
+					(! (g add-edge) e)))
+
+				g)))))
 
 	  ;; Variant on above full trace: r1 is related to r2 iff there
 	  ;; exists an edge e such that (r1 add e) and (e pred r2). Temporal
@@ -3580,6 +3791,7 @@
   (new-edges-max-expand-len 0)
   (last-expand-len 0)
   (max-env-size 0)
+  (max-edges-added 0)  
   (root-vars nil)
   (rule-node nil)
   (rule-name nil)
@@ -3633,6 +3845,7 @@
 					   ("failed"			"~a~vt"		,(lambda (e) (rule-stats-entry-failed e)))
 					   ("max-expand-len"	"~a~vt"		,(lambda (e) (rule-stats-entry-new-edges-max-expand-len e)))
 					   ("max-env-size"		"~a~vt"		,(lambda (e) (rule-stats-entry-max-env-size e)))
+					   ("max-edges-added"	"~a~vt"		,(lambda (e) (rule-stats-entry-max-edges-added e)))
 					   ("max-root-vars"		"~a~vt"		,(lambda (e) (length (rule-stats-entry-root-vars e))))
 					   ("efficiency%"		"~,2f~vt"	,(lambda (e) (div (* (float (rule-stats-entry-new-edges e)) 100) (float (rule-stats-entry-tested e)))))
 					   ("redundancy%"		"~,2f~vt"	,(lambda (e) (div (* (float (rule-stats-entry-not-new-edges e)) 100) (float (rule-stats-entry-tested e)))))
@@ -3833,6 +4046,13 @@
 		(defm update-max-env-size (rule-node env-size)
 		  (let ((entry (get-entry rule-node)))
 			(setf (rule-stats-entry-max-env-size entry) (max (rule-stats-entry-max-env-size entry) env-size))
+			($comment (log-stat 'max-env-size (rule-stats-entry-new-edges-max-env-size entry)))
+			nil))
+
+		(defm update-max-edges-added (rule-node n-edges-added)
+		  (let ((entry (get-entry rule-node)))
+			(setf (rule-stats-entry-max-edges-added entry) (max (rule-stats-entry-max-edges-added entry) n-edges-added))
+			($comment (log-stat 'max-edges-added (rule-stats-entry-new-edges-max-edges-added entry)))
 			nil))
 
 		(defm update-root-var (rule-node root-var)
@@ -3909,14 +4129,14 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
 			  (macrolet ((xprint (tag &rest x)
-						   ;; nil
-						   `(ptag ,tag ,@x)
+								 nil
+								 ;; `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
 					(let ((g objgraph))
 					  (let ((has-single-const-preds (! (self has-single-const-preds))))
-						(let ((use-singleton-qets (and has-single-const-preds
+						(let ((use-singleton-qets (and t ;; has-single-const-preds  ;; enable-subst-match
 													   (not (is-var-name root-var)))))
 						  (xprint 's18 has-single-const-preds (! (self has-single-const-preds)) (not (is-var-name root-var)) use-singleton-qets)
 						  (defr

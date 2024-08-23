@@ -412,7 +412,7 @@
   (?cas-new del ?e0 rule ?cas-new)
 
   (?cas-next add ?e1 rule ?cas-zero)
-  (?cas-next del ?e0 rule ?cas-zero)
+  ;; (?cas-next del ?e0 rule ?cas-zero)	;; 7/29/24 Leaving this in makes an incomplete set of fft butterflies at n=6 and beyond! See doc.txt.
   (?cas-next add ?e1 rule-order ?cas-next ?cas-zero)
 
   (?cas-zero add ?ae0 rule ?fft-comb-rule-zero)
@@ -660,9 +660,12 @@
 
 ;; Rule optimizer (for a specific rule). Adds rule propagators.
 ;; Experimental -- note this one adds more rules to a given node than needed.
+;;
+;; Note these two are disabled -- moved around rhe rule propagation and this is not currently used.
 
 (rule
  (name fft-rule-opt-rule-names)
+ (disabled)
  (attach-to global-node)
  (root-var global-node)
  (pred
@@ -684,6 +687,7 @@
 
 (rule
  (name fft-rule-opt)
+ (disabled)
  (attach-to global-node)
  (root-var global-node)
  (pred

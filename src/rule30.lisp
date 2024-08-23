@@ -221,7 +221,7 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
 ;; such rules be added, we just have the single
 ;; rule-30-max-prune-rules-added hanging off the last max node.
 ;;
-;; This is a good exercise using nested rules and rthe "?this.."
+;; This is a good exercise using nested rules and the "?this.."
 ;; indicators to refer to the rules at different levels,
 
 (rule

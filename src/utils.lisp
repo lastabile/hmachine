@@ -796,13 +796,16 @@
 ;;
 ;; Fcn == (lambda (stdout-stream) ...)
 ;;
-;; If file is nil use normal stdout
+;; If file is nil, dump to a string stream, which is then discarded. Best we can do without an offical /dev/null that
+;; works.
 ;;
 
 (defun with-redirected-stdout (file fcn)
   (let ((std *standard-output*))
 	(if (null file)
-		(funcall fcn std)
+		(let ((s (make-string-output-stream)))
+		  		  (let ((*standard-output* s))
+					(funcall fcn std)))
 		(with-open-file (s file :direction :output)
 		  (let ((*standard-output* s))
 			(funcall fcn std))))))

@@ -27,7 +27,7 @@
  (name fft-rule-delta2)
  (attach-to fft)
  (attach-to color)
- (attach-to next-color)
+ ;; (attach-to next-color)
  ;; (root-var ?x)
  (pred
   (?x fft ?y)
@@ -46,9 +46,9 @@
 (rule
  (name fft-rule-delta3)
  (attach-to color)
- (attach-to fcn-color)
- (attach-to rand)
- (attach-to rule30val)
+ ;; (attach-to fcn-color)
+ ;; (attach-to rand)
+ ;; (attach-to rule30val)
  (pred
   (?x color ?c)
   (?y fcn-color ?c)
@@ -101,24 +101,4 @@
  (del
   (?p0 weave-next-root)))
 
-(rule
- (disabled)
- (name weave-next-rule-paste)
- (attach-to weave-next-root)
- (pred
-  (?p0 weave-next-root)
-  (?p0 odd ?x00)
-  (?p0 even ?x01)
-  (?p1 odd ?x10)
-  (?p1 even ?x11)
-  (a wn b) ;; (?x00 weave-next ?x01)
-  (?x10 weave-next ?x11)
-  (?p0 weave-next ?p1)
-  )
- (add
-  (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
-  (a wn b) ;; (?x01 weave-next ?x10)
-  (?p1 weave-next-root)
-  )
- (del
-  (?p0 weave-next-root)))
+

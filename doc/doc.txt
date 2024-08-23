@@ -2454,3 +2454,39 @@ experiment, successful-exec-obj-list, freq-obj-queue, failed-queue.
 Generally, I need a new approach to the optimization algorithm, and
 I'm cleaning out some of the stats to try to clear the thought
 process.
+
+----------------------------------------------------------
+7/29/24 -- Diagnosing rules not triggering at large sizes
+
+Tried fft with the usual local rules and the butterfly diagram was
+incomplete for n=6 and above. Having the failure occur only at such
+large sizes was a challenge to diagnose. The culprit was traced to
+cas-zero, but only after generating a set of diagrams of different
+types. First, I went to the "pure fft" model for a little bit of
+simplification. Then I generated a set with butterflies etc., and a
+separate diagram of just is-elem-of, next, zero, and others as
+needed. This allowed me to see a missing zero. I tried most of the
+usual changes with root vars and so forth, but it did not fix it.  But
+a good technique was to define a new rule, cas-zero-x, which was
+purely global. This fixed it, thus giving me a good direction to
+head. The problem turned out to be a delete in cas-rule-mod.
+
+
+
+(rule
+ (name cas-zero-x)
+ (disabled)
+ (global)
+ (pred
+  (?a copy-array-struct ?a1)
+  (?e0 is-elem-of ?a)
+  (?ae0 is-elem-of ?a1)
+  (?ae0 ref ?e0)
+  (?e0 zero))
+ (add
+  (print cas-zero-x ?this-obj ?root-var ?a ?a1 ?e0 ?ae0)
+  (?ae0 zero)
+  (?ae0 cas-zero)
+  (?a1 casz-ref1 ?ae0)
+  (?a casz-ref ?e0)
+  ))
