@@ -2786,12 +2786,12 @@ color-color
 								  (! (x execute-global-all-objs-loop)))))
   (let ((d (make-dumper)))
 	(! (d set-graph) x)
-	(! (d dump-gv-edges) "z.gv"
+	(! (d dump-gv-edges) "t.gv"
 	   :rules nil 
 	   :emit-legend nil
 	   :gv-graph-props "rankdir=LR;ranksep=5.0;"
-	   :attrs '(v ap #| ae ar pe pr am d a p d r an pn q e rn |#))
-	(time (! (d gv-to-image) "z" :edit-svg nil)))
+	   :attrs '(ae ar pe pr #| am d a p d r an pn q e rn |#))
+	(time (! (d gv-to-image) "t" :edit-svg nil)))
   )
 
 
