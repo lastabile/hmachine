@@ -152,507 +152,509 @@
 		  (gv-attr-map (make-sur-map))) ;; gv-attr -> attr value
 		(let ((omitted-attrs (append omitted-attrs '(triggered add pred del binding left right print note))))
 		  (let ((edge-rendered (make-sur-map)))
-			(with-open-file (s file :direction :output)
-			  (defr
-				(defl string-concat (x y)
-				  (concatenate 'string x y))
+			(let ((cluster-seqno 0))
+			  (with-open-file (s file :direction :output)
+				(defr
+				  (defl string-concat (x y)
+					(concatenate 'string x y))
 
-				(defl admit-edge (v)
-				  (let ((r 
-						 (or
-						  (= (length v) 1)
-						  (and admit-string-attrs
-							   (stringp (second v)))
-						  (and (eq attrs t) ;; attrs defined (i.e. other than t) will supersede specification of an attrs-fcn
-							   (funcall attrs-fcn v)
-							   (not (intersect v omitted-attrs)))
-						  (and (not (eq attrs t))
-							   (intersect v attrs)
-							   (not (intersect (set-subtract v (intersect v attrs)) omitted-attrs))))))
-					;; (print (list v r))
-					r))
+				  (defl admit-edge (v)
+					(let ((r 
+						   (or
+							(= (length v) 1)
+							(and admit-string-attrs
+								 (stringp (second v)))
+							(and (eq attrs t) ;; attrs defined (i.e. other than t) will supersede specification of an attrs-fcn
+								 (funcall attrs-fcn v)
+								 (not (intersect v omitted-attrs)))
+							(and (not (eq attrs t))
+								 (intersect v attrs)
+								 (not (intersect (set-subtract v (intersect v attrs)) omitted-attrs))))))
+					  ;; (print (list v r))
+					  r))
 
-				;; create-node-entry should only be called when we define all the node enrties as the first pass.
+				  ;; create-node-entry should only be called when we define all the node enrties as the first pass.
 
-				(defl create-node-entry (n &key two-input-op as-prop rule-name do-not-emit is-new-node-var)
-				  (let ()
-					(let ((ne (! (node-map lookup-one) n)))
-					  (when (null ne)
-						(! (node-set insert) n nil)
-						(setq ne (make-node-entry))
-						(! (node-map insert-one) n ne)
-						(setf (node-entry-name ne) (format nil "~a~a"
-														   (if rule-name (format nil "~a-" rule-name) "")
-														   n))
-						(setf (node-entry-do-not-emit ne) do-not-emit)
-						(setf (node-entry-rule-name ne) rule-name)
-						(if (and emit-labels
-								 (not rule-labels-only)) ;; Rule labels are set separately - ???
-							(set-gv-attr n 'label n)
-							(set-gv-attr n 'label "")))
-					  (when rule-name
-						(cond 
-						 ((or (node-entry-is-new-node-var ne)
-							  is-new-node-var)
-						  (setf (node-entry-is-new-node-var ne) t)
-						  (set-gv-attr n 'shape 'octagon)
-						  (set-gv-attr n 'color 'mistyrose))
-						 ((is-var-name n)
-						  (set-gv-attr n 'color 'paleturquoise))
-						 (t
-						  (set-gv-attr n 'color 'palegreen))))
-
-					  (set-gv-attr n 'fontname 'arial)
-					  (set-gv-attr n 'style 'filled)
-
-					  (when (memq 'rule (! (g hget-all) n 'type))
-						(let ((name (! (g hget) n 'name)))
-						  (set-gv-attr n 'label name)
-						  (set-gv-attr n 'shape 'rectangle)
-						  (set-gv-attr n 'color 'mistyrose)))
-
-					  (when as-prop
-						(set-gv-attr n 'shape 'none))
-					  (dolist (gv-attr gv-attrs)
-						(when (! (g hget) n gv-attr)
-						  (! ((node-entry-gv-attr-map ne) insert-one) gv-attr (! (g hget) n gv-attr))))
-					  ;; (print (list 'd1 n ne (! ((node-entry-gv-attr-map ne) as-list))))
-					  nil)))
-
-				(defl clone-node-entry (n) ;; Returns new sym
-				  (let ((r (gensym)))
-					(! (node-set insert) r nil)
-					(let ((old-ne (! (node-map lookup-one) n)))
-					  (let ((ne (make-node-entry)))
-						(setf (node-entry-name ne) r)
-						(setf (node-entry-gv-attr-map ne) (node-entry-gv-attr-map old-ne)) ;; Note we don't copy the attr map
-						(setf (node-entry-rule-name ne) (node-entry-rule-name old-ne))
-						;; (setf (node-entry-do-not-emit ne) (node-entry-do-not-emit old-ne))			;; Bugs -- with this in we get incorrect behavior from the two-input-ops
-						(! (node-map insert) r ne)
-						;; (print (list 'cne1 ne old-ne n r (! ((node-entry-gv-attr-map ne) as-list))))
-						r))))
-
-				(defl do-not-emit (n)
-				  (let ((ne (! (node-map lookup-one) n)))
-					(node-entry-do-not-emit ne)))
-
-				(defl set-gv-attr (n attr value)
-				  (let ((ne (! (node-map lookup-one) n)))
-					(! ((node-entry-gv-attr-map ne) insert-one) attr value)
-					nil))
-
-				(defl get-gv-attr (n attr)
-				  (let ((ne (! (node-map lookup-one) n)))
-					(! ((node-entry-gv-attr-map ne) lookup-one) attr)))
-
-				(defl prepend-node-name (n l)
-				  (let ((ne (create-node-entry n)))
-					(setf (node-entry-name ne) (symcat l '- (node-entry-name ne)))
-					nil))
-				(defl get-node-name (n)
-				  (let ((ne (create-node-entry n)))
-					(node-entry-name ne)))
-
-				(defl get-format (n &key as-prop)
-				  (let ()
-					(let ((ne (! (node-map lookup-one) n)))
-					  (let ((gv-attr-info-list (! ((node-entry-gv-attr-map ne) as-list))))
-						(let ((r (if as-prop (format nil "[") (format nil "\"~a\" [" (node-entry-name ne)))))
-						  (let ((comma ""))
-							(dolist (gv-attr-info gv-attr-info-list)
-							  (let ((attr (first gv-attr-info)))
-								(let ((value (first (second gv-attr-info))))
-								  (when value
-									(setq r (string-concat r (format nil "~a~a=\"~a\"" comma attr value)))
-									(setq comma ",")))))
-							(setq r (string-concat r (format nil "];" comma)))
-							r))))))
-				(defl dump-gv-nodes ()
-				  (let ((nodes (! (node-set inputs))))
-					(dolist (n nodes)
-					  (when (not (do-not-emit n))
-						(format s "~a~%" (get-format n)))
-					  )))
-				(defl dump-gv-notes ()
-				  (when emit-legend
-					;; Can add a large edge and cause undiagnosed some
-					;; explosion in subqet processing. So now just
-					;; append it following.
-					;;
-					;; (! (g add-edge) `(note body "attributes:" "\\n" ,@attrs))
-					(let ((title-fontsize (! (g query) '((set note title fontsize ?x)) '?x)))
-					  (let ((body-fontsize (! (g query) '((set note body fontsize ?x)) '?x)))
-						(let ((footer-fontsize (! (g query) '((set note footer fontsize ?x)) '?x)))
-						  (let ((notes (! (g get-edges) 'note)))
-							(let ((xxxnotes (cons `(note body "attributes:" "\\n" ,@attrs) notes))) ;; !!!!!!!!!!!!!!!!!!! Nop !!!!!!!!!!!!!!!!
-							  (let ((title "")
-									(body "")
-									(footer ""))
-								(let ((n ""))
-								  (dolist (note notes)
-									(when (eq (first note) 'note)
-									  (let ((type-data (if (member (second note) '(title footer body) :test #'eq)
-														   (list (second note) (rest (rest note)))
-														   (list 'body (rest note)))))
-										(let ((type (first type-data))
-											  (data (second type-data)))
-										  (dolist (p data)
-											(setq n (format nil "~a ~a" n p)))
-										  ;; (setq n (format nil "~a~%" n))
-										  (setq n (format nil "~a\\n" n))
-										  (cond
-										   ((eq type 'title)
-											(setq title (format nil "~a~a" title n)))
-										   ((eq type 'body)
-											(setq body (format nil "~a~a" body n)))
-										   ((eq type 'footer)
-											(setq footer (format nil "~a~a" footer n))))
-										  (setq n ""))))))
-								(let ()
-								  (format s "digraph Notes {~%")
-								  (format s "subgraph cluster {~%")
-								  (format s "style=filled;~%")
-								  (format s "color=springgreen;~%")
-								  (format s "label = \"Legend\";~%")
-								  (when (not (equal title ""))
-									(format s "__x1 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" title (or title-fontsize 18)))
-								  (when (not (equal body ""))
-									(format s "__x2 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" body (or body-fontsize 12)))
-								  (when (not (equal footer ""))
-									(format s "__x3 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" footer(or footer-fontsize 8)))
-								  (format s "__x1 -> __x2 -> __x3 [style=invis];~%")
-								  (format s "}~%")
-								  (format s "}~%"))))))))))
-				(defl dump-gv-edges-data (v)
-				  (when (not (and (eq (second v) 'type) (eq (third v) 'rule)))
-					(when (admit-edge v)
-					  (when (not (! (edge-rendered lookup-one) v))
-						(! (edge-rendered insert-one) v t)
-						($comment
-						 (when (and (>= (length v) 1)
-									(! (g hget) (first v) 'color))
-						   (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
-						 (when (and (= (length v) 4)
-									(! (g edge-exists) `(,(third v) two-input-op))
-									(! (g hget) (second v) 'color))
-						   (format s "\"~a\" [color=~a,style=filled];~%" (second v) (! (g hget) (second v) 'color)))
-						 (when (and (= (length v) 4)
-									(! (g edge-exists) `(,(third v) two-input-op))
-									(! (g hget) (first v) 'color))
-						   (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
-						 )
-						(let ((l (length v)))
-						  (cond
-						   ((= l 1)
-							(format s "\"~a\" [label=\"~a\"];~%"
-									(first v) (or (! (g hget) (first v) 'label) (first v))))
-						   ((and (= l 2)
-								 (eq (second v) 'next))
-							(format s "\"~a\" -> \"~a\" [label=\"~a\",style=\"setlinewidth(1)\"];~%"
-									(first v) (first v) 
-									(if emit-labels (second v) "")))
-						   ((and (= l 3)
-								 (eq (second v) 'fcn-color))
-							nil)
-						   ((and (= l 3) ;; Special-case coloring for rule30 nodes  *******************
-								 (eq (second v) 'rule30val))
-							(format s "\"~a\" [color=~a,style=filled];~%" (first v) (if (and (numberp (third v)) (= (third v) 1)) "cyan" "magenta"))
-							)
-						   ((and as-2d-asc-facets
-								 (= l 3))
-							(let ((n1 (first v)))
-							  (let ((n2 (second v)))
-								(let ((n3 (third v)))
-								  (when (not (member (list n1 n2) pair-list :test #'set-equal))
-									(setq pair-list (cons (list n1 n2) pair-list))
-									(create-node-entry n1)
-									(create-node-entry n2)
-									(format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n1 n2))
-								  (when (not (member (list n2 n3) pair-list :test #'set-equal))
-									(setq pair-list (cons (list n2 n3) pair-list))
-									(create-node-entry n2)
-									(create-node-entry n3)
-									(format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n2 n3))
-								  (when (not (member (list n3 n1) pair-list :test #'set-equal))
-									(setq pair-list (cons (list n3 n1) pair-list))
-									(create-node-entry n3)
-									(create-node-entry n1)
-									(format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n3 n1))))))
-						   ((= l 3)
-							(block b
-							  (let ((in-node (first v)))
-								(let ((out-node (third v)))
-								  (let ((prop (second v)))
-									(create-node-entry in-node)
-									(create-node-entry out-node)
-									(create-node-entry prop :as-prop t)
-									(let ((out-node (if (or (and separate-number-nodes  (numberp out-node))
-															(! (g hget) out-node 'separate-display-node))
-														(clone-node-entry out-node)
-														out-node)))
-									  (create-node-entry prop :do-not-emit t)
-									  (let ((prop-label (get-gv-attr prop 'label)))
-										(let ((edge-color (! (g hget) prop 'edge-color)))
-										  (let ((edge-attr-string ""))
-											(dolist (r (list in-node out-node))
-											  (when (memq 'rule (! (g hget-all) r 'type))
-												(let ((n (! (g hget) r 'name)))
-												  (when (member n omitted-attrs :test #'eq)
-													(return-from b nil))
-												  #|
-												  (set-gv-attr r 'label n) ; ;
-												  (set-gv-attr r 'shape 'rectangle) ; ;
-												  (set-gv-attr r 'color 'mistyrose) ; ;
-												  |#
-												  (when (memq graph-type '(:subgraph :single-graph))
-													(let ((rule-entry-node (designated-rule-entry-node r)))
-													  (when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
-														(! (designated-rule-edges insert) (list r rule-entry-node) (list r rule-entry-node))
-														(format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
-																r rule-entry-node)))))))
-											(when (eq prop 'note)
-											  (set-gv-attr out-node 'shape 'rectangle))
-											(setq edge-attr-string (get-format prop :as-prop t))
-											#|
-											(when edge-color ; ;
-											(setq edge-attr-string (concatenate 'string edge-attr-string (format nil ",color=~a" edge-color)))) ; ;
-											|#
-											(if emit-labels
-											
-												#| (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
-												in-node out-node prop-label edge-attr-string) |#
-
-												(format s "\"~a\" -> \"~a\"              ~a~%" 
-														in-node out-node edge-attr-string)
-
-
-											
-												(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
-														in-node out-node "" edge-color-string)))))))))))
-
-						   #|
-						   ((eq (second v) 'zero) ; ;
-						   (create-node-entry (first v)) ; ;
-						   (if emit-labels ; ;
-						   (set-gv-attr (first v) 'label (symcat (first v) '-z)) ; ;
-						   (set-gv-attr (first v) 'label ""))) ; ;
-						   |#
-					   
-						   ((and t
-								 (= l 4)
-								 (! (g edge-exists) `(,(third v) two-input-op)))
-							(let ((i1 (first v))
-								  (i2 (second v))
-								  (fcn (third v))
-								  (o (fourth v)))
-							  (create-node-entry i1)
-							  (create-node-entry i2)
-							  (create-node-entry o)
-							  (create-node-entry fcn :do-not-emit t)
-							  (let ((fcn (clone-node-entry fcn)))
-								(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i1 fcn)
-								(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i2 fcn)
-								(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" fcn o))))
-						   ((and (= l 4)
-								 (eq (second v) 'freq))
-							(let ((p1 (first v))
-								  (freq (third v))
-								  (p2 (fourth v)))
-							  (create-node-entry p1)
-							  (create-node-entry p2)
-							  (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"];~%" p1 p2 freq)))
-						   ((= l 2)
-							(let ((n (first v))
-								  (p (second v)))
-							  (create-node-entry n)
-							  (create-node-entry p)
-							  (let ((p (clone-node-entry p)))
-								(set-gv-attr p 'shape 'none)
-								(set-gv-attr p 'style 'solid)
-								(format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",label=\"\",arrowhead=none];~%" n p))))
+				  (defl create-node-entry (n &key two-input-op as-prop rule-name do-not-emit is-new-node-var)
+					(let ()
+					  (let ((ne (! (node-map lookup-one) n)))
+						(when (null ne)
+						  (! (node-set insert) n nil)
+						  (setq ne (make-node-entry))
+						  (! (node-map insert-one) n ne)
+						  (setf (node-entry-name ne) (format nil "~a~a"
+															 (if rule-name (format nil "~a-" rule-name) "")
+															 n))
+						  (setf (node-entry-do-not-emit ne) do-not-emit)
+						  (setf (node-entry-rule-name ne) rule-name)
+						  (if (and emit-labels
+								   (not rule-labels-only)) ;; Rule labels are set separately - ???
+							  (set-gv-attr n 'label n)
+							  (set-gv-attr n 'label "")))
+						(when rule-name
+						  (cond 
+						   ((or (node-entry-is-new-node-var ne)
+								is-new-node-var)
+							(setf (node-entry-is-new-node-var ne) t)
+							(set-gv-attr n 'shape 'octagon)
+							(set-gv-attr n 'color 'mistyrose))
+						   ((is-var-name n)
+							(set-gv-attr n 'color 'paleturquoise))
 						   (t
-							($comment
-							 (dotimes (i l)
-							   (let ((node (nth i v)))
-								 (format s "\"~a\" " node)
-								 (when (< i (- l 1))
-								   (format s "-> "))))
-							 (format s ";~%")
-							 )
-							(maplist
-							 (lambda (x)
-							   (let ((n1 (first x)))
-								 (let ((n2 (second x)))
-								   (when (and n1 n2 (not (member (list n1 n2) pair-list :test #'equal)))
-									 (create-node-entry n1)
-									 (create-node-entry n2)
-									 (setq pair-list (cons (list n1 n2) pair-list))
-									 (format s "\"~a\" -> \"~a\";~%" n1 n2)))))
-							 v))))))))
-				(defl dump-gv-edges-clusters (v)
-				  (when (and (eq (second v) 'type) (eq (third v) 'gv-cluster))
-					(let ((rel (! (g hget) (first v) 'gv-cluster-relation)))
-					  (let ((edges (! (g hget-edge-all) (first v) rel)))
-						(format s "subgraph cluster_~a {~%" (first v))
-						(format s "label=\"~a\"~%" (! (g hget) (first v) 'name))
-						(dolist (edge edges)
-						  (dump-gv-edges-data (rest (rest edge))))
-						(format s "}~%")))))
-				(defl dump-gv-edges-rules (v)
-				  (when (and (eq (second v) 'type)
-							 (eq (third v) 'rule)
-							 (or (eq rules t)
-								 (member (! (g hget) (first v) 'name) rules))
-							 (not (member (! (g hget) (first v) 'name) omitted-rules))
-							 (not (! (g hget-edge-inverse) (first v) 'nested-rule)))
-					(let ((rule-node (first v)))
-					  (when (or (not omit-unmatched-rules)
-								(> (! (g get-matched) rule-node) 0))
-						(let ((rule-name (! (g hget) rule-node 'name)))
-						  (when (eq graph-type :digraph)
-							(format s "digraph \"~a\" {~%" rule-name))
-						  (dump-gv-rule rule-node)
-						  (when (eq graph-type :digraph)
-							(format s "}~%")))))))
-				(defl dump-gv-rule (rule)
-				  (when (or (not omit-unmatched-rules)
-							(> (! (g get-matched) rule) 0))
-					(let ((rule-components (! (g get-rule-components) rule))
-						  (rule-name (! (g hget) rule 'name)))
-					  (let ((p-rule-name (symcat #| nest-prefix '- |# rule-name)))
-						(let ((pred-edges (! (rule-components preds)))
-							  (del-edges (! (rule-components dels)))
-							  (add-edges (! (rule-components adds))) ;; rem-add-main -- need prob here to determine how to expand nested rules, rule-modifying-rules, etc.
-							  (not-edges (! (rule-components nots)))
-							  (rule-nodes (! (rule-components all-nodes)))
-							  (i 0))
-						  (setq nest-prefix (+ nest-prefix 1))
-						  (setq node-map (make-sur-map))
-						  (setq node-set (make-sur-map))
-						  (when (memq graph-type '(:digraph :subgraph))
-							(format s "subgraph \"cluster-~a\" {~%" rule-name)
-							(format s "label = \"~a\";~%" rule-name))
-						  ;; (format s "\"~a\" [label=\"~a\"];~%" rule rule-name)
-						  ;; (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" "rules" rule-name  "")
-						  (dolist (rule-edges (list pred-edges del-edges add-edges not-edges))
-							(when (or (eq rule-edges pred-edges)
-									  (eq rule-edges add-edges)
-									  (eq rule-edges del-edges))
-							  (setq i (+ i 1))
-							  (dolist (rule-edge rule-edges)
-								(when (not (and (eq rule-edges add-edges)
-												(or (eq (first rule-edge) 'print)
-													(eq (first rule-edge) 'note)
-													#| (eq (second rule-edge) 'rule) |# )))
-								  (let ((l (length rule-edge)))
-									(cond
-									 ((and (= l 2)
-										   (eq (second rule-edge) 'next))
-									  (format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name (first rule-edge) (first rule-edge))
-									  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a\",style=~a,fontname=arial,color=~a];~%"
-											  p-rule-name (first rule-edge)
-											  p-rule-name (first rule-edge)
-											  (second rule-edge)
-											  (if (eq rule-edges add-edges) "dashed" "solid")
-											  (if (eq rule-edges add-edges) "red" "black")))
-									 ((= l 2)
-									  (let ((n (first rule-edge))
-											(p (second rule-edge)))
-										(create-node-entry n :rule-name p-rule-name)
-										(create-node-entry p :as-prop t :rule-name p-rule-name)
-										(format s "\"~a-~a\" -> \"~a-~a\" [label=\"\",style=~a,fontname=arial,color=~a,arrowhead=none];~%"
-												p-rule-name n
-												p-rule-name p
-												(if (eq rule-edges add-edges) "dashed" "solid")
-												(if (eq rule-edges add-edges) "red" "black"))))
-									 ((and (= l 3)
-										   (eq rule-edges pred-edges)
-										   (eq (second rule-edge) 'new-node))
-									  (create-node-entry (first rule-edge) :rule-name p-rule-name :is-new-node-var t))
-									 ((= l 3)
-									  ;; (when (admit-edge (list (second rule-edge)))						;; !!!!!!!!!!!!!!!!!!!
-									  (when (not (member (second rule-edge) omitted-attrs :test #'eq)) ;; Do we ever want to prune these out in rule displays?
-										(create-node-entry (first rule-edge) :rule-name p-rule-name)
-										(create-node-entry (third rule-edge) :rule-name p-rule-name)
-										(format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a~a\",style=~a,fontname=arial,color=~a];~%"
+							(set-gv-attr n 'color 'palegreen))))
+
+						(set-gv-attr n 'fontname 'arial)
+						(set-gv-attr n 'style 'filled)
+
+						(when (memq 'rule (! (g hget-all) n 'type))
+						  (let ((name (! (g hget) n 'name)))
+							(set-gv-attr n 'label name)
+							(set-gv-attr n 'shape 'rectangle)
+							(set-gv-attr n 'color 'mistyrose)))
+
+						(when as-prop
+						  (set-gv-attr n 'shape 'none))
+						(dolist (gv-attr gv-attrs)
+						  (when (! (g hget) n gv-attr)
+							(! ((node-entry-gv-attr-map ne) insert-one) gv-attr (! (g hget) n gv-attr))))
+						;; (print (list 'd1 n ne (! ((node-entry-gv-attr-map ne) as-list))))
+						nil)))
+
+				  (defl clone-node-entry (n) ;; Returns new sym
+					(let ((r (gensym)))
+					  (! (node-set insert) r nil)
+					  (let ((old-ne (! (node-map lookup-one) n)))
+						(let ((ne (make-node-entry)))
+						  (setf (node-entry-name ne) r)
+						  (setf (node-entry-gv-attr-map ne) (node-entry-gv-attr-map old-ne)) ;; Note we don't copy the attr map
+						  (setf (node-entry-rule-name ne) (node-entry-rule-name old-ne))
+						  ;; (setf (node-entry-do-not-emit ne) (node-entry-do-not-emit old-ne))			;; Bugs -- with this in we get incorrect behavior from the two-input-ops
+						  (! (node-map insert) r ne)
+						  ;; (print (list 'cne1 ne old-ne n r (! ((node-entry-gv-attr-map ne) as-list))))
+						  r))))
+
+				  (defl do-not-emit (n)
+					(let ((ne (! (node-map lookup-one) n)))
+					  (node-entry-do-not-emit ne)))
+
+				  (defl set-gv-attr (n attr value)
+					(let ((ne (! (node-map lookup-one) n)))
+					  (! ((node-entry-gv-attr-map ne) insert-one) attr value)
+					  nil))
+
+				  (defl get-gv-attr (n attr)
+					(let ((ne (! (node-map lookup-one) n)))
+					  (! ((node-entry-gv-attr-map ne) lookup-one) attr)))
+
+				  (defl prepend-node-name (n l)
+					(let ((ne (create-node-entry n)))
+					  (setf (node-entry-name ne) (symcat l '- (node-entry-name ne)))
+					  nil))
+				  (defl get-node-name (n)
+					(let ((ne (create-node-entry n)))
+					  (node-entry-name ne)))
+
+				  (defl get-format (n &key as-prop)
+					(let ()
+					  (let ((ne (! (node-map lookup-one) n)))
+						(let ((gv-attr-info-list (! ((node-entry-gv-attr-map ne) as-list))))
+						  (let ((r (if as-prop (format nil "[") (format nil "\"~a\" [" (node-entry-name ne)))))
+							(let ((comma ""))
+							  (dolist (gv-attr-info gv-attr-info-list)
+								(let ((attr (first gv-attr-info)))
+								  (let ((value (first (second gv-attr-info))))
+									(when value
+									  (setq r (string-concat r (format nil "~a~a=\"~a\"" comma attr value)))
+									  (setq comma ",")))))
+							  (setq r (string-concat r (format nil "];" comma)))
+							  r))))))
+				  (defl dump-gv-nodes ()
+					(let ((nodes (! (node-set inputs))))
+					  (dolist (n nodes)
+						(when (not (do-not-emit n))
+						  (format s "~a~%" (get-format n)))
+						)))
+				  (defl dump-gv-notes ()
+					(when emit-legend
+					  ;; Can add a large edge and cause undiagnosed some
+					  ;; explosion in subqet processing. So now just
+					  ;; append it following.
+					  ;;
+					  ;; (! (g add-edge) `(note body "attributes:" "\\n" ,@attrs))
+					  (let ((title-fontsize (! (g query) '((set note title fontsize ?x)) '?x)))
+						(let ((body-fontsize (! (g query) '((set note body fontsize ?x)) '?x)))
+						  (let ((footer-fontsize (! (g query) '((set note footer fontsize ?x)) '?x)))
+							(let ((notes (! (g get-edges) 'note)))
+							  (let ((xxxnotes (cons `(note body "attributes:" "\\n" ,@attrs) notes))) ;; !!!!!!!!!!!!!!!!!!! Nop !!!!!!!!!!!!!!!!
+								(let ((title "")
+									  (body "")
+									  (footer ""))
+								  (let ((n ""))
+									(dolist (note notes)
+									  (when (eq (first note) 'note)
+										(let ((type-data (if (member (second note) '(title footer body) :test #'eq)
+															 (list (second note) (rest (rest note)))
+															 (list 'body (rest note)))))
+										  (let ((type (first type-data))
+												(data (second type-data)))
+											(dolist (p data)
+											  (setq n (format nil "~a ~a" n p)))
+											;; (setq n (format nil "~a~%" n))
+											(setq n (format nil "~a\\n" n))
+											(cond
+											 ((eq type 'title)
+											  (setq title (format nil "~a~a" title n)))
+											 ((eq type 'body)
+											  (setq body (format nil "~a~a" body n)))
+											 ((eq type 'footer)
+											  (setq footer (format nil "~a~a" footer n))))
+											(setq n ""))))))
+								  (let ()
+									(format s "digraph Notes {~%")
+									(format s "subgraph cluster {~%")
+									(format s "style=filled;~%")
+									(format s "color=springgreen;~%")
+									(format s "label = \"Legend\";~%")
+									(when (not (equal title ""))
+									  (format s "__x1 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" title (or title-fontsize 18)))
+									(when (not (equal body ""))
+									  (format s "__x2 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" body (or body-fontsize 12)))
+									(when (not (equal footer ""))
+									  (format s "__x3 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" footer(or footer-fontsize 8)))
+									(format s "__x1 -> __x2 -> __x3 [style=invis];~%")
+									(format s "}~%")
+									(format s "}~%"))))))))))
+				  (defl dump-gv-edges-data (v)
+					(when (not (and (eq (second v) 'type) (eq (third v) 'rule)))
+					  (when (admit-edge v)
+						(when (not (! (edge-rendered lookup-one) v))
+						  (! (edge-rendered insert-one) v t)
+						  ($comment
+						   (when (and (>= (length v) 1)
+									  (! (g hget) (first v) 'color))
+							 (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
+						   (when (and (= (length v) 4)
+									  (! (g edge-exists) `(,(third v) two-input-op))
+									  (! (g hget) (second v) 'color))
+							 (format s "\"~a\" [color=~a,style=filled];~%" (second v) (! (g hget) (second v) 'color)))
+						   (when (and (= (length v) 4)
+									  (! (g edge-exists) `(,(third v) two-input-op))
+									  (! (g hget) (first v) 'color))
+							 (format s "\"~a\" [color=~a,style=filled];~%" (first v) (! (g hget) (first v) 'color)))
+						   )
+						  (let ((l (length v)))
+							(cond
+							 ((= l 1)
+							  (format s "\"~a\" [label=\"~a\"];~%"
+									  (first v) (or (! (g hget) (first v) 'label) (first v))))
+							 ((and (= l 2)
+								   (eq (second v) 'next))
+							  (format s "\"~a\" -> \"~a\" [label=\"~a\",style=\"setlinewidth(1)\"];~%"
+									  (first v) (first v) 
+									  (if emit-labels (second v) "")))
+							 ((and (= l 3)
+								   (eq (second v) 'fcn-color))
+							  nil)
+							 ((and (= l 3) ;; Special-case coloring for rule30 nodes  *******************
+								   (eq (second v) 'rule30val))
+							  (format s "\"~a\" [color=~a,style=filled];~%" (first v) (if (and (numberp (third v)) (= (third v) 1)) "cyan" "magenta"))
+							  )
+							 ((and as-2d-asc-facets
+								   (= l 3))
+							  (let ((n1 (first v)))
+								(let ((n2 (second v)))
+								  (let ((n3 (third v)))
+									(when (not (member (list n1 n2) pair-list :test #'set-equal))
+									  (setq pair-list (cons (list n1 n2) pair-list))
+									  (create-node-entry n1)
+									  (create-node-entry n2)
+									  (format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n1 n2))
+									(when (not (member (list n2 n3) pair-list :test #'set-equal))
+									  (setq pair-list (cons (list n2 n3) pair-list))
+									  (create-node-entry n2)
+									  (create-node-entry n3)
+									  (format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n2 n3))
+									(when (not (member (list n3 n1) pair-list :test #'set-equal))
+									  (setq pair-list (cons (list n3 n1) pair-list))
+									  (create-node-entry n3)
+									  (create-node-entry n1)
+									  (format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n3 n1))))))
+							 ((= l 3)
+							  (block b
+								(let ((in-node (first v)))
+								  (let ((out-node (third v)))
+									(let ((prop (second v)))
+									  (create-node-entry in-node)
+									  (create-node-entry out-node)
+									  (create-node-entry prop :as-prop t)
+									  (let ((out-node (if (or (and separate-number-nodes  (numberp out-node))
+															  (! (g hget) out-node 'separate-display-node))
+														  (clone-node-entry out-node)
+														  out-node)))
+										(create-node-entry prop :do-not-emit t)
+										(let ((prop-label (get-gv-attr prop 'label)))
+										  (let ((edge-color (! (g hget) prop 'edge-color)))
+											(let ((edge-attr-string ""))
+											  (dolist (r (list in-node out-node))
+												(when (memq 'rule (! (g hget-all) r 'type))
+												  (let ((n (! (g hget) r 'name)))
+													(when (member n omitted-attrs :test #'eq)
+													  (return-from b nil))
+													#|
+													(set-gv-attr r 'label n) ; ; ;
+													(set-gv-attr r 'shape 'rectangle) ; ; ;
+													(set-gv-attr r 'color 'mistyrose) ; ; ;
+													|#
+													(when (memq graph-type '(:subgraph :single-graph))
+													  (let ((rule-entry-node (designated-rule-entry-node r)))
+														(when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
+														  (! (designated-rule-edges insert) (list r rule-entry-node) (list r rule-entry-node))
+														  (format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
+																  r rule-entry-node)))))))
+											  (when (eq prop 'note)
+												(set-gv-attr out-node 'shape 'rectangle))
+											  (setq edge-attr-string (get-format prop :as-prop t))
+											  #|
+											  (when edge-color ; ; ;
+											  (setq edge-attr-string (concatenate 'string edge-attr-string (format nil ",color=~a" edge-color)))) ; ; ;
+											  |#
+											  (if emit-labels
+											
+												  #| (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
+												  in-node out-node prop-label edge-attr-string) |#
+
+												  (format s "\"~a\" -> \"~a\"              ~a~%" 
+														  in-node out-node edge-attr-string)
+
+
+											
+												  (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
+														  in-node out-node "" edge-color-string)))))))))))
+
+							 #|
+							 ((eq (second v) 'zero) ; ; ;
+							 (create-node-entry (first v)) ; ; ;
+							 (if emit-labels ; ; ;
+							 (set-gv-attr (first v) 'label (symcat (first v) '-z)) ; ; ;
+							 (set-gv-attr (first v) 'label ""))) ; ; ;
+							 |#
+					   
+							 ((and t
+								   (= l 4)
+								   (! (g edge-exists) `(,(third v) two-input-op)))
+							  (let ((i1 (first v))
+									(i2 (second v))
+									(fcn (third v))
+									(o (fourth v)))
+								(create-node-entry i1)
+								(create-node-entry i2)
+								(create-node-entry o)
+								(create-node-entry fcn :do-not-emit t)
+								(let ((fcn (clone-node-entry fcn)))
+								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i1 fcn)
+								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i2 fcn)
+								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" fcn o))))
+							 ((and (= l 4)
+								   (eq (second v) 'freq))
+							  (let ((p1 (first v))
+									(freq (third v))
+									(p2 (fourth v)))
+								(create-node-entry p1)
+								(create-node-entry p2)
+								(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"];~%" p1 p2 freq)))
+							 ((= l 2)
+							  (let ((n (first v))
+									(p (second v)))
+								(create-node-entry n)
+								(create-node-entry p)
+								(let ((p (clone-node-entry p)))
+								  (set-gv-attr p 'shape 'none)
+								  (set-gv-attr p 'style 'solid)
+								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",label=\"\",arrowhead=none];~%" n p))))
+							 (t
+							  ($comment
+							   (dotimes (i l)
+								 (let ((node (nth i v)))
+								   (format s "\"~a\" " node)
+								   (when (< i (- l 1))
+									 (format s "-> "))))
+							   (format s ";~%")
+							   )
+							  (maplist
+							   (lambda (x)
+								 (let ((n1 (first x)))
+								   (let ((n2 (second x)))
+									 (when (and n1 n2 (not (member (list n1 n2) pair-list :test #'equal)))
+									   (create-node-entry n1)
+									   (create-node-entry n2)
+									   (setq pair-list (cons (list n1 n2) pair-list))
+									   (format s "\"~a\" -> \"~a\";~%" n1 n2)))))
+							   v))))))))
+				  (defl dump-gv-edges-clusters (v)
+					(when (and (eq (second v) 'type) (eq (third v) 'gv-cluster))
+					  (let ((rel (! (g hget) (first v) 'gv-cluster-relation)))
+						(let ((edges (! (g hget-edge-all) (first v) rel)))
+						  (format s "subgraph cluster_~a {~%" cluster-seqno)
+						  (setq cluster-seqno (+ cluster-seqno 1))
+						  (format s "label=\"~a\"~%" (! (g hget) (first v) 'name))
+						  (dolist (edge edges)
+							(dump-gv-edges-data (rest (rest edge))))
+						  (format s "}~%")))))
+				  (defl dump-gv-edges-rules (v)
+					(when (and (eq (second v) 'type)
+							   (eq (third v) 'rule)
+							   (or (eq rules t)
+								   (member (! (g hget) (first v) 'name) rules))
+							   (not (member (! (g hget) (first v) 'name) omitted-rules))
+							   (not (! (g hget-edge-inverse) (first v) 'nested-rule)))
+					  (let ((rule-node (first v)))
+						(when (or (not omit-unmatched-rules)
+								  (> (! (g get-matched) rule-node) 0))
+						  (let ((rule-name (! (g hget) rule-node 'name)))
+							(when (eq graph-type :digraph)
+							  (format s "digraph \"~a\" {~%" rule-name))
+							(dump-gv-rule rule-node)
+							(when (eq graph-type :digraph)
+							  (format s "}~%")))))))
+				  (defl dump-gv-rule (rule)
+					(when (or (not omit-unmatched-rules)
+							  (> (! (g get-matched) rule) 0))
+					  (let ((rule-components (! (g get-rule-components) rule))
+							(rule-name (! (g hget) rule 'name)))
+						(let ((p-rule-name (symcat #| nest-prefix '- |# rule-name)))
+						  (let ((pred-edges (! (rule-components preds)))
+								(del-edges (! (rule-components dels)))
+								(add-edges (! (rule-components adds))) ;; rem-add-main -- need prob here to determine how to expand nested rules, rule-modifying-rules, etc.
+								(not-edges (! (rule-components nots)))
+								(rule-nodes (! (rule-components all-nodes)))
+								(i 0))
+							(setq nest-prefix (+ nest-prefix 1))
+							(setq node-map (make-sur-map))
+							(setq node-set (make-sur-map))
+							(when (memq graph-type '(:digraph :subgraph))
+							  (format s "subgraph \"cluster-~a\" {~%" rule-name)
+							  (format s "label = \"~a\";~%" rule-name))
+							;; (format s "\"~a\" [label=\"~a\"];~%" rule rule-name)
+							;; (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" "rules" rule-name  "")
+							(dolist (rule-edges (list pred-edges del-edges add-edges not-edges))
+							  (when (or (eq rule-edges pred-edges)
+										(eq rule-edges add-edges)
+										(eq rule-edges del-edges))
+								(setq i (+ i 1))
+								(dolist (rule-edge rule-edges)
+								  (when (not (and (eq rule-edges add-edges)
+												  (or (eq (first rule-edge) 'print)
+													  (eq (first rule-edge) 'note)
+													  #| (eq (second rule-edge) 'rule) |# )))
+									(let ((l (length rule-edge)))
+									  (cond
+									   ((and (= l 2)
+											 (eq (second rule-edge) 'next))
+										(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name (first rule-edge) (first rule-edge))
+										(format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a\",style=~a,fontname=arial,color=~a];~%"
 												p-rule-name (first rule-edge)
-												p-rule-name (third rule-edge)
-												(if (member rule-edge del-edges :test #'equal) "X " "")
+												p-rule-name (first rule-edge)
 												(second rule-edge)
 												(if (eq rule-edges add-edges) "dashed" "solid")
-												(cond
-												 ((eq rule-edges add-edges) "red")
-												 ((member rule-edge del-edges :test #'equal) "blue")
-												 (t "black")))))
-									 ((and (= l 4)
-										   (! (g edge-exists) `(,(third rule-edge) two-input-op)))
-									  (let ((i1 (first rule-edge))
-											(i2 (second rule-edge))
-											(fcn-name (third rule-edge))
-											(o (fourth rule-edge)))
-										(let ((fcn (format nil "~a-~a-~a-~a-~a" p-rule-name fcn-name i1 i2 o))
-											  (color (! (g hget) fcn-name 'color)))
-										  (format s "\"~a\" [label=\"~a\",fontname=arial];~%" fcn fcn-name)
-										  (when color
-											(format s "\"~a\" [color=~a,style=filled]~%" fcn color))
-										  (format s "\"~a-~a\" -> \"~a\"" p-rule-name i1 fcn)
-										  (format s "[style=~a,color=~a];~%" 
+												(if (eq rule-edges add-edges) "red" "black")))
+									   ((= l 2)
+										(let ((n (first rule-edge))
+											  (p (second rule-edge)))
+										  (create-node-entry n :rule-name p-rule-name)
+										  (create-node-entry p :as-prop t :rule-name p-rule-name)
+										  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"\",style=~a,fontname=arial,color=~a,arrowhead=none];~%"
+												  p-rule-name n
+												  p-rule-name p
 												  (if (eq rule-edges add-edges) "dashed" "solid")
-												  (if (eq rule-edges add-edges) "red" "black"))
-										  (format s "\"~a-~a\" -> \"~a\"" p-rule-name i2 fcn)
-										  (format s "[style=~a,color=~a];~%"
+												  (if (eq rule-edges add-edges) "red" "black"))))
+									   ((and (= l 3)
+											 (eq rule-edges pred-edges)
+											 (eq (second rule-edge) 'new-node))
+										(create-node-entry (first rule-edge) :rule-name p-rule-name :is-new-node-var t))
+									   ((= l 3)
+										;; (when (admit-edge (list (second rule-edge)))						;; !!!!!!!!!!!!!!!!!!!
+										(when (not (member (second rule-edge) omitted-attrs :test #'eq)) ;; Do we ever want to prune these out in rule displays?
+										  (create-node-entry (first rule-edge) :rule-name p-rule-name)
+										  (create-node-entry (third rule-edge) :rule-name p-rule-name)
+										  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a~a\",style=~a,fontname=arial,color=~a];~%"
+												  p-rule-name (first rule-edge)
+												  p-rule-name (third rule-edge)
+												  (if (member rule-edge del-edges :test #'equal) "X " "")
+												  (second rule-edge)
 												  (if (eq rule-edges add-edges) "dashed" "solid")
-												  (if (eq rule-edges add-edges) "red" "black"))
-										  (format s "\"~a\" -> \"~a-~a\"" fcn p-rule-name o)
-										  (format s "[style=~a,color=~a];~%"
-												  (if (eq rule-edges add-edges) "dashed" "solid")
-												  (if (eq rule-edges add-edges) "red" "black")))))
-									 (t
-									  (dotimes (i l)
-										(let ((rule-node (nth i rule-edge)))
-										  (format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name rule-node rule-node)))
-									  (dotimes (i l)
-										(let ((rule-node (nth i rule-edge)))
-										  (format s "\"~a-~a\"" p-rule-name rule-node)
-										  (when (< i (- l 1))
-											(format s " -> "))))
-									  (format s "[style=~a,fontname=arial,color=~a];~%"
-											  (if (eq rule-edges add-edges) "dashed" "solid")
-											  (if (eq rule-edges add-edges) "red" "black")))))))))
-						  (dump-gv-nodes)
+												  (cond
+												   ((eq rule-edges add-edges) "red")
+												   ((member rule-edge del-edges :test #'equal) "blue")
+												   (t "black")))))
+									   ((and (= l 4)
+											 (! (g edge-exists) `(,(third rule-edge) two-input-op)))
+										(let ((i1 (first rule-edge))
+											  (i2 (second rule-edge))
+											  (fcn-name (third rule-edge))
+											  (o (fourth rule-edge)))
+										  (let ((fcn (format nil "~a-~a-~a-~a-~a" p-rule-name fcn-name i1 i2 o))
+												(color (! (g hget) fcn-name 'color)))
+											(format s "\"~a\" [label=\"~a\",fontname=arial];~%" fcn fcn-name)
+											(when color
+											  (format s "\"~a\" [color=~a,style=filled]~%" fcn color))
+											(format s "\"~a-~a\" -> \"~a\"" p-rule-name i1 fcn)
+											(format s "[style=~a,color=~a];~%" 
+													(if (eq rule-edges add-edges) "dashed" "solid")
+													(if (eq rule-edges add-edges) "red" "black"))
+											(format s "\"~a-~a\" -> \"~a\"" p-rule-name i2 fcn)
+											(format s "[style=~a,color=~a];~%"
+													(if (eq rule-edges add-edges) "dashed" "solid")
+													(if (eq rule-edges add-edges) "red" "black"))
+											(format s "\"~a\" -> \"~a-~a\"" fcn p-rule-name o)
+											(format s "[style=~a,color=~a];~%"
+													(if (eq rule-edges add-edges) "dashed" "solid")
+													(if (eq rule-edges add-edges) "red" "black")))))
+									   (t
+										(dotimes (i l)
+										  (let ((rule-node (nth i rule-edge)))
+											(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name rule-node rule-node)))
+										(dotimes (i l)
+										  (let ((rule-node (nth i rule-edge)))
+											(format s "\"~a-~a\"" p-rule-name rule-node)
+											(when (< i (- l 1))
+											  (format s " -> "))))
+										(format s "[style=~a,fontname=arial,color=~a];~%"
+												(if (eq rule-edges add-edges) "dashed" "solid")
+												(if (eq rule-edges add-edges) "red" "black")))))))))
+							(dump-gv-nodes)
 						
-						  #|
-						  (when (memq graph-type '(:digraph :subgraph)) ;
-						  (format s "\"~a\" [label=\"~a\"];~%" rule rule)) ;
-						  |#
+							#|
+							(when (memq graph-type '(:digraph :subgraph)) ; ;
+							(format s "\"~a\" [label=\"~a\"];~%" rule rule)) ; ;
+							|#
 
-						  (when (eq graph-type :single-graph)
-							(let ((rule-entry-node (designated-rule-entry-node rule)))
-							  (format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
-									  (get-node-name rule) (get-node-name rule-entry-node))))
+							(when (eq graph-type :single-graph)
+							  (let ((rule-entry-node (designated-rule-entry-node rule)))
+								(format s "\"~a\" -> \"~a\" [style=dotted,color=blue;weight=50];~%" 
+										(get-node-name rule) (get-node-name rule-entry-node))))
 
-						  (let ((nested-rules (! (g hget-all) rule 'nested-rule)))
-							(dolist (nested-rule nested-rules)
-							  (let ((nested-rule-name (! (g hget) nested-rule 'name)))
-								(dump-gv-rule nested-rule)
-								(format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" rule nested-rule  "NESTED-RULE"))))
-						  (when (memq graph-type '(:digraph :subgraph))
-							(format s "}~%"))
-						  (setq nest-prefix (- nest-prefix 1)))))))
-				(let ((*print-case* :downcase))
-				  (block b
-					(dump-gv-notes)
-					(format s "digraph G {~%")
-					(when gv-graph-props
-					  (format s "~a~%" gv-graph-props))
-					(! (g dump-edges) :edges edges :dump-fcn #'dump-gv-edges-clusters :sort nil)
-					(! (g dump-edges) :edges edges :dump-fcn #'dump-gv-edges-data :sort nil)
-					(dump-gv-nodes)
-					(when (memq graph-type '(:digraph))
-					  (format s "}~%"))
-					(! (g dump-edges) :edges edges :dump-fcn #'dump-gv-edges-rules :sort nil)
-					(when (memq graph-type '(:subgraph :single-graph))
-					  (format s "}~%"))))))))))))
+							(let ((nested-rules (! (g hget-all) rule 'nested-rule)))
+							  (dolist (nested-rule nested-rules)
+								(let ((nested-rule-name (! (g hget) nested-rule 'name)))
+								  (dump-gv-rule nested-rule)
+								  (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" rule nested-rule  "NESTED-RULE"))))
+							(when (memq graph-type '(:digraph :subgraph))
+							  (format s "}~%"))
+							(setq nest-prefix (- nest-prefix 1)))))))
+				  (let ((*print-case* :downcase))
+					(block b
+					  (dump-gv-notes)
+					  (format s "digraph G {~%")
+					  (when gv-graph-props
+						(format s "~a~%" gv-graph-props))
+					  (! (g dump-edges) :edges edges :dump-fcn #'dump-gv-edges-clusters :sort nil)
+					  (! (g dump-edges) :edges edges :dump-fcn #'dump-gv-edges-data :sort nil)
+					  (dump-gv-nodes)
+					  (when (memq graph-type '(:digraph))
+						(format s "}~%"))
+					  (! (g dump-edges) :edges edges :dump-fcn #'dump-gv-edges-rules :sort nil)
+					  (when (memq graph-type '(:subgraph :single-graph))
+						(format s "}~%")))))))))))))
 
 ;; n must be odd
 ;;
