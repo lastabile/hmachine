@@ -92,7 +92,6 @@
   (with-redirected-stdout (and t "fftout")
 	(lambda (s)
 	  (setq g (make-pure-fft-test))
-	  (! ((! (g get-edge-to-trace)) init-trace) g)
 	  (let ((*print-tags* (and nil t)))
 		(time (! (g run) n))))))
 
@@ -412,16 +411,20 @@
   (! (d gv-to-image) "xxfft")
   )
 
-(let ((d (make-dumper)))
-  (let ((g (! (g edge-trace-rule-graph) :rules '(even-new))))
-	(! (d set-graph) g)
-	(! (d dump-gv-edges) "x.gv" :rules nil :attrs-fcn
-	   (lambda (e)
-		 (or (intersect e '(
-							r
-							))
-			 )))
-	(! (d gv-to-image) "x")))
+
+
+(let ()
+  (setq x (! (g edge-trace-rule-graph) :min-freq 0))
+  (setq y (! (x spanning-dag) 'kernel 'r))
+  (let ((d (make-dumper)))
+	(! (d set-graph) x)
+	(! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
+	(! (d gv-to-image) "y"))
+  ($comment
+   (let ((d (make-dumper)))
+	 (! (d set-graph) y)
+	 (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
+	 (! (d gv-to-image) "y1"))))
 
  
 (let ((d (make-dumper)))
@@ -2611,29 +2614,25 @@ color-color
 	  (with-redirected-stdout (and t "fftout")
 		(lambda (s)
 		  (setq g (make-fft-test))
-		  ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
-		  ;; (! (g trace-rule) 'cas-next)
-		  (let ((*print-tags* (and nil '(succ-path)))) ;; use (get-tag-list) to see all compiled tags
+		  (! ((! (g get-edge-to-trace)) init-trace) g)
+		  (let ((*print-tags* nil))
 			(time (! (g run) n)))))))
   (setq x (! (g edge-trace-rule-graph)))
+  (setq y (! (x spanning-dag) 'kernel 'r))
   (let ((d (make-dumper)))
 	(! (d set-graph) x)
 	(! (d dump-gv-edges) "y.gv"
 	   :rules nil 
 	   :emit-legend nil
-	   :attrs '(r)
-	   :omitted-attrs '(xis
-						add-inverse-is-elem-of
-						;; rule-30-next-rule-1-1-1 
-						;; rule-30-next-rule-1-1-0 
-						;; rule-30-next-rule-1-0-1
-						;; rule-30-next-rule-1-0-0
-						;; rule-30-next-rule-0-1-1
-						;; rule-30-next-rule-0-1-0
-						;; rule-30-next-rule-0-0-1
-						;; rule-30-next-rule-0-0-0
-						))
+	   :attrs '(r))
 	(! (d gv-to-image) "y" :edit-svg t))
+  (let ((d (make-dumper)))
+	(! (d set-graph) y)
+	(! (d dump-gv-edges) "y1.gv"
+	   :rules nil 
+	   :emit-legend nil
+	   :attrs '(r))
+	(! (d gv-to-image) "y1" :edit-svg t))
   )
 
 
@@ -2701,7 +2700,7 @@ color-color
 	   :rules nil 
 	   :emit-legend nil
 	   :gv-graph-props "rankdir=LR;ranksep=5.0;"
-	   :attrs '(ae ar pe pr #| am d a p d r an pn q e rn |#))
+	   :attrs '(ae pe #| ar pr pa am d a p d r an pn q e rn |#))
 	(time (! (d gv-to-image) "t" :edit-svg nil)))
   )
 

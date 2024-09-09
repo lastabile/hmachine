@@ -494,7 +494,7 @@
 					(when (and (eq (second v) 'type) (eq (third v) 'gv-cluster))
 					  (let ((rel (! (g hget) (first v) 'gv-cluster-relation)))
 						(let ((edges (! (g hget-edge-all) (first v) rel)))
-						  (format s "subgraph cluster_~a {~%" cluster-seqno)
+						  (format s "subgraph \"cluster_~a_~a\" {~%" cluster-seqno (! (g hget) (first v) 'name))
 						  (setq cluster-seqno (+ cluster-seqno 1))
 						  (format s "label=\"~a\"~%" (! (g hget) (first v) 'name))
 						  (dolist (edge edges)

@@ -680,52 +680,6 @@
 
 	  ;; End overlap testing 
 
-	  ;; excl-set = exclusion set (hitting set?) -- any edge which overlaps with excl-set is not used.
-	  ;;
-	  ;; Does breadth-first search so always returns a shortest path.
-	  ;;
-	  ;; Could use breadth fcn -- a little more elegant
-
-	  (defm path (n1 n2 &key excl-set trace)
-		(let ((visit-hash (make-hash-table :test #'equal)))
-		  (defr
-			(defl filter-edges (edges)
-			  (if (null excl-set)
-				  edges
-				  (let ((r nil))
-					(dolist (edge edges)
-					  (when (not (intersect edge excl-set))
-						(setq r (append r (list edge)))))
-					r)))
-			(defl get-children (bnode)
-			  (let ((r (cond 
-						((is-node bnode)
-						 (filter-edges (get-edges bnode)))
-						((is-edge bnode)
-						 bnode)
-						(t
-						 (print 'error)
-						 nil))))
-				r))
-			(defl b2 ()
-			  (block b
-				(defr
-				  ;; bni = bnode-info = (bnode chain)
-				  (defl b1 (bnis)
-					(when bnis
-					  (b1 (mapunion (lambda (bni)
-									  (let ((bnode (first bni))
-											(bnode-chain (second bni)))
-									  	(if (equal bnode n2)
-											(return-from b (cons n2 bnode-chain))
-											(when (not (gethash bnode visit-hash))
-											  (setf (gethash bnode visit-hash) bnode)
-											  (mapcar (lambda (bnode1) (list bnode1 (cons bnode bnode-chain)))
-													  (get-children bnode))))))
-									bnis))))
-				  (b1 (list (list n1 nil))))))
-			(reverse (b2)))))
-
 	  )))
 
 (defc xgraph graph nil
@@ -920,7 +874,8 @@
 		(defm init-trace (graph)	;; Note we have a std class fcn "init" already
 		  (let ((g graph))
 			(dolist (e (! (g get-all-edges)))
-			  (insert-er e e :edge-to-add 'kernel 'kernel nil))))
+			  (insert-er e e :edge-to-add 'kernel 'kernel nil)
+			  (insert-et e :add 'kernel 'kernel nil))))
 		;; edge-to-trace, :add :pred :del
 		(defm insert-et (edge type rule-node rule-name obj-node)
 		  (! (et-table insert) edge (make-et-entry :trace-seqno trace-seqno :rule-seqno rule-seqno :type type
@@ -3467,7 +3422,7 @@
 												   (! (g add-edge) (list obj-node 'r rule-node))
 												   (! (g add-edge) (list obj-node 'e edge-node))))))))))))))))))))
 					
-				;; This pass does pe, pr, ae, ar
+				;; This pass does pe, pr, ae, ar. Also pa as a pred/add relation to rules as a cluster relation
 				(dolist (info trace)
 				  (let ((edge (first info)))
 					(when (listp edge)
@@ -3479,6 +3434,11 @@
 								(let ((rule-edge (et-entry-rule-edge event)))
 								  (when (admit-rule rule-name :rules rules :omitted-rules omitted-rules)
 									(let ((rule-node (symcat rule-name '-- seqno)))
+									  ($nocomment			;; If this is deactivated, won't get clusters. With clusters don't need to pass ar, pr, or pa to dumper
+									   (! (g add-edge) `(,rule-node name ,rule-name))
+									   (! (g add-edge) `(,rule-node type gv-cluster))
+									   (! (g add-edge) `(,rule-node gv-cluster-relation pa))
+									   )
 									  (let ((edge-node (format nil "~a" edge)))
 										(if (eq (et-entry-type event) :edge-to-pred)
 											(let ((pred-node-name (format nil "~a" rule-edge)))
@@ -3486,13 +3446,15 @@
 												(! (g add-edge) (list pred-node 'type 'pred-node))
 												(! (g add-edge) (list pred-node 'label pred-node-name))
 												(! (g add-edge) (list edge-node 'pe pred-node))
-												(! (g add-edge) (list pred-node 'pr rule-node))))
+												(! (g add-edge) (list pred-node 'pr rule-node))
+												(! (g add-edge) (list rule-node 'pa pred-node))))
 											(let ((add-node-name (format nil "~a" rule-edge)))
 											  (let ((add-node (format nil "~a--~a--~a" add-node-name rule-name seqno)))
 												(! (g add-edge) (list add-node 'type 'add-node))
 												(! (g add-edge) (list add-node 'label add-node-name))
 												(! (g add-edge) (list add-node 'ae edge-node))
-												(! (g add-edge) (list rule-node 'ar add-node)))))))))))))))))
+												(! (g add-edge) (list rule-node 'ar add-node))
+												(! (g add-edge) (list rule-node 'pa add-node)))))))))))))))))
 				(when trim-dangling-adds-and-preds
 				  (trim-dangling-adds-and-preds g))
 				g)))))
@@ -3613,7 +3575,54 @@
 	  ;; type of graph, but with only rules deps that are really needed
 	  ;; by a given run, rather than by analysis.
 
-	  (defm edge-trace-rule-graph (&key rules (except-rules-fcn (lambda (x) nil)))
+	  (defm edge-trace-rule-graph (&key (min-freq 0) (rules '(t)) (omitted-rules nil))
+		(defr
+		  (defl has-preds (events)
+			(block b
+			  (dolist (event events)
+				(when (eq (et-entry-type event) :pred)
+				  (return-from b t)))
+			  nil))
+		  (defl find-add (events)
+			(block b
+			  (dolist (event events)
+				(let ((kind (et-entry-type event)))
+				  (when (eq kind :add)
+					(return-from b event))))
+			  nil))
+		  (let ((freq-table (make-sur-map))) ;; Count of r edge instances
+			(let ((g (make-objgraph)))
+			  (let ((trace (! (edge-to-trace as-list))))
+				(dolist (entry trace)
+				  (let ((edge (first entry)))
+					(let ((events (second entry)))
+					  (when t #|(has-preds events)|#
+						(let ((add-event (find-add events)))
+						  (when add-event
+							(let ((add-rule-name (et-entry-rule-name add-event)))
+							  (dolist (event events)
+								(let ((kind (et-entry-type event)))
+								  (let ((seqno (et-entry-rule-seqno event)))
+									(let ((rule-name (et-entry-rule-name event)))
+									  (when (or (admit-rule add-rule-name :rules rules :omitted-rules omitted-rules)
+												(admit-rule rule-name :rules rules :omitted-rules omitted-rules))
+										(when (and (eq kind :pred)
+												   (not (null add-rule-name)))
+										  (let ((r-edge (list add-rule-name 'r rule-name)))
+											(! (g add-edge) r-edge)
+											(! (freq-table insert-one) r-edge (+ (or (! (freq-table lookup-one) r-edge) 0) 1))
+											(! (freq-table insert-one) add-rule-name (+ (or (! (freq-table lookup-one) add-rule-name) 0) 1)))))))))))))))))
+			  (dolist (i (! (freq-table as-list)))
+				  (let ((r-edge (first i)))
+					(when (listp r-edge)
+					  (let ((count (first (second i))))
+						(let ((tot (! (freq-table lookup-one) (first r-edge))))
+						  (let ((freq (float (/ count tot))))
+							(when (>= freq min-freq)
+							  (! (g add-edge) (list (first r-edge) 'freq freq (third r-edge))))))))))
+			  g))))
+
+	  (defm old-edge-trace-rule-graph (&key rules (except-rules-fcn (lambda (x) nil)))
 		(defr
 		  (defl has-preds (events)
 			(block b
@@ -3633,7 +3642,7 @@
 			  (dolist (entry trace)
 				(let ((edge (first entry)))
 				  (let ((events (second entry)))
-					(when (has-preds events)
+					(when t #|(has-preds events)|#
 					  (let ((add-event (find-add events)))
 						(when add-event
 						  (let ((add-rule-name (et-entry-rule-name add-event)))
@@ -3653,39 +3662,83 @@
 			g)))
 
 	  ;; Assume a graph g of the form (<x> attr <y>), where attr is considerd an edge label, and return a new graph
-	  ;; consisting edges of g which form cycles to cycle heads, starting from init-node.
-  
+	  ;; consisting of edges of g which form a dag rooted at init-node, i.e, g with cycles removed.
+
 	  (defm spanning-dag (init-node attr)
-		(let ((new-g (make-graph)))
-		  (let ((levels (make-sur-map)))
-			(depth init-node
-				   (lambda (node level)
-					 (! (levels insert-one) node level)
-					 (hget-all node attr)))
+		(let ((new-g (make-objgraph)))
 		  (breadth init-node
 				   (lambda (node level)
 					 (let ((children (hget-all node attr)))
 					   (dolist (child children)
-						 (when (> (! (levels lookup-one) child) level)
+						 (when (not (equal node child))
 						   (! (new-g add-edge) (list node attr child))))
-					   children))))
+					   children)))
 		  new-g))
-	  
-	  ;; Produces spanning dag via attr attr with attr s. Also adds edge (attr s)
 
+	  ;; Like spanning-dag, but just a more-or-less arbitrary tree subset
+	  
 	  (defm spanning-tree (init-node attr)
 		(let ((visited (make-sur-map)))
-		  (add-edge '(attr s))
+		  (let ((new-g (make-objgraph)))
+			(breadth init-node
+					 (lambda (node level)
+					   (let ((children (hget-all node attr)))
+						 (dolist (child children)
+						   (when (not (! (visited lookup-one) child))
+							 (! (visited insert-one) child child)
+							 (when (not (equal node child))
+							   (! (new-g add-edge) (list node attr child)))))
+						 children)))
+			new-g)))
+
+	  ;; excl-set = exclusion set (hitting set?) -- any edge which overlaps with excl-set is not used.
+	  ;;
+	  ;; Does breadth-first search so always returns a shortest path.
+	  ;;
+	  ;; Could use breadth fcn -- a little more elegant
+
+	  (defm path (n1 n2 &key attr excl-set trace)
+		(let ((visit-hash (make-hash-table :test #'equal)))
 		  (defr
-			(defl d (node prev-node)
-			  (when (not (! (visited lookup-one) node))
-				(! (visited insert-one) node node)
-				(when prev-node
-				  (add-edge (list prev-node 's node)))
-				(let ((children (hget-all node attr)))
-				  (dolist (child children)
-					(d child node)))))
-			(d init-node nil))))
+			(defl filter-edges (edges)
+			  (if (null excl-set)
+				  edges
+				  (let ((r nil))
+					(dolist (edge edges)
+					  (when (not (intersect edge excl-set))
+						(setq r (append r (list edge)))))
+					r)))
+			(defl get-children (bnode)
+			  (let ((r (cond
+						 ((and (is-node bnode)
+							   attr)
+						  (filter-edges (hget-all bnode attr)))
+						 ((is-node bnode)
+						  (filter-edges (get-edges bnode)))
+						 ((is-edge bnode)
+						  bnode)
+						 (t
+						  (print 'error)
+						  nil))))
+				r))
+			(defl b2 ()
+			  (block b
+				(defr
+				  ;; bni = bnode-info = (bnode chain)
+				  (defl b1 (bnis)
+					(when bnis
+					  (b1 (mapunion (lambda (bni)
+									  (let ((bnode (first bni))
+											(bnode-chain (second bni)))
+									  	(if (equal bnode n2)
+											(return-from b (cons n2 bnode-chain))
+											(when (not (gethash bnode visit-hash))
+											  (setf (gethash bnode visit-hash) bnode)
+											  (mapcar (lambda (bnode1) (list bnode1 (cons bnode bnode-chain)))
+													  (get-children bnode))))))
+									bnis))))
+				  (b1 (list (list n1 nil))))))
+			(reverse (b2)))))
 
 	(defm read-rule-file (file)
 	  (with-open-file (s file :direction :input)
@@ -5070,6 +5123,7 @@
 					 (del
 					  (global-node rule ?this-rule))))
 	  (add-natural-number-edges (max fft-n rule-30-levels))
+	  (! ((get-edge-to-trace) init-trace) self)
 	  (timer 'main
 		(lambda ()
 		  (execute-global-all-objs-loop))))))
@@ -5105,6 +5159,7 @@
 					 (del
 					  (global-node rule ?this-rule))))
 	  (add-natural-number-edges fft-n)
+	  (! ((get-edge-to-trace) init-trace) self)
 	  (timer 'main
 		(lambda ()
 		  (execute-global-all-objs-loop))))))
