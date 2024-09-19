@@ -58,7 +58,7 @@
   (let ((r (equal (string-downcase (subseq mi 0 (search " " mi))) "rosencrantz")))
 	(let ((l (equal (string-downcase (subseq mi 0 (search " " mi))) "gertrude")))
 	  (defun is-laptop ()
-		1)
+		l)
 	  (defun is-desktop ()
 		r)
 	  (defun is-large-monitor ()

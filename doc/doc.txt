@@ -2471,8 +2471,6 @@ a good technique was to define a new rule, cas-zero-x, which was
 purely global. This fixed it, thus giving me a good direction to
 head. The problem turned out to be a delete in cas-rule-mod.
 
-
-
 (rule
  (name cas-zero-x)
  (disabled)
@@ -2490,3 +2488,39 @@ head. The problem turned out to be a delete in cas-rule-mod.
   (?a1 casz-ref1 ?ae0)
   (?a casz-ref ?e0)
   ))
+
+----------------------------------------------------------
+9/15/24 -- Added distinct-vars clause to rules
+
+(distinct-vars {t | :none})
+
+The default is :none, so that this clause copies.
+
+When t, it means all vars in the pred must match with distinct
+values. There has been clear need for this, but it shows most in rules
+like transred:
+
+(rule
+ (name transred)
+ (global)
+ (distinct-vars t)
+ (pred
+  (?x r ?y)
+  (?y r ?z)
+  (?x r ?z))
+ (add
+  (print transred ?x ?y ?z))
+ (del
+  (?x r ?z)))
+
+Although the algorithm induced by coding this as a rule is naive, it
+fails completely if non-distinct matches are permitted.
+
+This was added at the kernel level since it seems to be inherent in
+the H model; analog to logic is FOL with equality.
+
+Another method may be to add an "equality" pred as a primitive. But
+this could not be represented efficiently explicitly as a graph edge;
+we'd need a pseudo-edge for each pair of nodes e.g. (n1 not-equal-to
+n2), etc. So a pred saying (?x not-equal-to-?y) would need special
+detection; we only do that now for new-node.

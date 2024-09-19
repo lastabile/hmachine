@@ -34,7 +34,7 @@
 	  (setq g (make-fft-test))
 	  (! ((! (g get-edge-to-trace)) init-trace) g)
 	  ;; (! (g trace-rule) 'cas-next)
-	  (let ((*print-tags* (and nil '(s0 s10 s16 #|subst-match-fail|#)))) ;; use (get-tag-list) to see all compiled tags
+	  (let ((*print-tags* (and nil '(s0 s2)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
 
 
@@ -415,18 +415,44 @@
 
 (let ()
   (setq x (! (g edge-trace-rule-graph) :min-freq 0))
-  (setq y (! (x spanning-dag) 'kernel 'r))
-  (let ((d (make-dumper)))
-	(! (d set-graph) x)
-	(! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
-	(! (d gv-to-image) "y"))
-  ($comment
-   (let ((d (make-dumper)))
-	 (! (d set-graph) y)
-	 (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
-	 (! (d gv-to-image) "y1"))))
 
- 
+  ($nocomment
+   (setq y (make-objgraph))
+   (dolist (e (! (x get-all-edges)))
+	 (! (y add-edge) e))
+   )
+  
+  ($comment
+   (setq y (! (x spanning-dag) 'kernel 'r))
+   )
+
+    (let ()
+	  (! (y define-rule) '(rule
+						   (name transred)
+						   (global)
+						   (distinct-vars t)
+						   (pred
+							(?x r ?y)
+							(?y r ?z)
+							(?x r ?z))
+						   (add
+							(print transred ?x ?y ?z))
+						   (del
+							(?x r ?z))))
+	  (let ((*print-tags* (and nil '(s0 s2))))
+		(! (y execute-global-all-objs-loop))
+		))
+	(let ((d (make-dumper)))
+	  (! (d set-graph) x)
+	  (! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
+	  (! (d gv-to-image) "y"))
+	($nocomment
+	 (let ((d (make-dumper)))
+	   (! (d set-graph) y)
+	   (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
+	   (! (d gv-to-image) "y1"))))
+
+
 (let ((d (make-dumper)))
   (! (d set-graph) g)
   (! (d dump-gv-edges) "y1.gv" :rules nil :attrs-fcn

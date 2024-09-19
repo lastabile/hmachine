@@ -1036,10 +1036,19 @@
 	  ;;
 	  ;; re-queue-behavior
 
-	  (defm execute-queue (&key once (rule-mode :local-global))
+	  (defm execute-queue (&key once (rule-mode :local-global) stack)
 		(defr
 		  (defl pop-next ()
-			(let ((r (! (obj-queue pop-head))))
+			;; 
+			;; [Date? This comment is old, not sure when. Today is 9/17/24.] Interesting experiment, i.e., executing as
+			;; a stack instead of a queue.  FFT worked, even a bit faster. Number of exec-all passes 2 instead of
+			;; three. However seemed to be more dup of rule execs.
+			;;
+			;; 9/17/24 -- Tried passing stack=t to exec-queue part of global-all-objs-loop. Doesn't finish correctly.
+			;;
+			(let ((r (if stack
+						 (! (obj-queue pop-tail))
+						 (! (obj-queue pop-head)))))
 			  (when (chkptag 'eq4)
 				(when r
 				  (print (list 'eq4 r))))
@@ -1047,13 +1056,6 @@
 		  (let ((failed-queue-count 0))
 			(block exq
 			  (loop
-
-			   ;; Interesting experiment, i.e., executing as a stack instead
-			   ;; of a queue.  FFT worked, even a bit faster. Number of
-			   ;; exec-all passes 2 instead of three. However seemed to be
-			   ;; more dup of rule execs.
-			   ;; (let ((obj (! (obj-queue pop-tail))))
-			 
 			   (let ((obj (pop-next)))
 				 (when (null obj) ;; Null means queue empty
 				   (return-from exq nil))
@@ -1267,7 +1269,7 @@
 						 (lambda ()
 						   (log1 'queue
 								 (lambda ()
-								   (execute-queue :rule-mode queue-rule-mode)))))))
+								   (execute-queue :rule-mode queue-rule-mode :stack nil)))))))
 				   (setq no-new-edges-cnt (if no-new-edges (+ no-new-edges-cnt 1) 0))
 				   (when (= no-new-edges-cnt 3)
 					 (return-from b nil)))
@@ -1504,7 +1506,10 @@
 						(let ((del-list (get-clause-edges 'del)))
 						  (let ((add-list (get-clause-edges 'add)))
 							(let ((not-list (get-clause-edges 'not)))
-							  (let ((pred-rulegraph (make-rulegraph rule-node (hget rule-node 'name) (hget rule-node 'root-var))))
+							  (let ((pred-rulegraph (make-rulegraph rule-node
+																	(hget rule-node 'name)
+																	(hget rule-node 'root-var)
+																	(hget rule-node 'distinct-vars))))
 								(dolist (pred pred-list)
 								  (! (pred-rulegraph add-edge) pred))
 								(let ((rule-comps (make-rule-components pred-list del-list add-list not-list pred-rulegraph)))
@@ -2781,6 +2786,9 @@
 							((eq clause-type 'root-var)
 							 (let ((root-var (second clause)))
 							   (pushe (add-edge (list rule 'root-var root-var)))))
+							((eq clause-type 'distinct-vars)
+							 (let ((v (second clause)))
+							   (pushe (add-edge (list rule 'distinct-vars v)))))
 							((eq clause-type 'no-triggered)
 							 (pushe (add-edge `(,rule no-triggered))))
 							((eq clause-type 'local)
@@ -2823,10 +2831,10 @@
 								 (pushe (add-edge (append (list rule clause-type) edge))))))))))
 
 					;; We expect all rules to have a certain required set of properties, otherwise they cannot be
-					;; copied. Required are pred, add, del, not, root-var, type, std-var-level, name. All but name are
-					;; filled in by define-rule with defaults if not specified. So nameless rules cannot be
-					;; copied. Properties of rule attachment (local, ...) given in a rule def do not copy; the rule
-					;; invoking the copy is responsible for putting it where needed.
+					;; copied. Required are pred, add, del, not, root-var, type, std-var-level, distinct-vars, and
+					;; name. All but name are filled in by define-rule with defaults if not specified. So nameless rules
+					;; cannot be copied. Properties of rule attachment (local, ...) given in a rule def do not copy; the
+					;; rule invoking the copy is responsible for putting it where needed.
 
 					(when (not (memq 'del clause-types-added))
 					  (pushe (add-edge (list rule 'del))))
@@ -2835,6 +2843,9 @@
 
 					(when (null (hget rule 'root-var))
 					  (pushe (add-edge (list rule 'root-var :undefined))))
+
+					(when (null (hget rule 'distinct-vars))
+					  (pushe (add-edge (list rule 'distinct-vars :none))))
 
 					(pushe (add-edge (list rule 'type 'rule)))
 					(pushe (add-edge (list rule 'std-var-level new-pool)))
@@ -4052,7 +4063,7 @@
 ;; We cache creation of a rulegraph, so most operations here can be done once and saved, with no cache clearing
 ;; required.
 
-(defc rulegraph graph (rule-node rule-name root-var)
+(defc rulegraph graph (rule-node rule-name root-var distinct-vars)
   (let ()
 
 	(defm rule-node ()
@@ -4104,8 +4115,8 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
 			  (macrolet ((xprint (tag &rest x)
-								 nil
-								 ;; `(ptag ,tag ,@x)
+								 ;; nil
+								 `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
@@ -4149,6 +4160,21 @@
 										  (doloop (rest l) (rest i) nil (append r (when c (list c))))
 										  (doloop (rest l) (rest i) (append c (list (first l))) r))))
 								(doloop pred pred-info  nil nil)))
+
+							;; If rule is marked distinct-vars, then each var in env should be bound to a different
+							;; object.
+							;;
+							;; Returns t if not marked distinct, or bindings are all in fact distinct, else nil
+							(defl check-distinct-vars (env)
+							  (or (not (eq distinct-vars t))
+								  (let ((h (make-hash-table :test #'equal)))
+									(block b
+									  (dolist (b env)
+										(when (is-var-name (first b))
+										  (if (gethash (second b) h)
+											  (return-from b nil)
+											  (setf (gethash (second b) h) t))))
+									  t))))
 							(defl check-consts (ks) ;; T if all preds have only consts, no vars
 							  (block b
 								(dolist (k ks)
@@ -4239,7 +4265,8 @@
 							  (xprint 's1 ks lvl cnt doloop-cnt)
 							  (xprint 's14 env-chain)
 							  (setq doloop-cnt (+ doloop-cnt 1))
-							  (if (check-consts ks)
+							  (if (and (check-consts ks)
+									   (check-distinct-vars env-chain))
 								  (let ()
 									(xprint 's4 env-chain doloop-cnt)
 									(when (edges-exist ks)
