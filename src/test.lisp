@@ -505,7 +505,6 @@
 
 ;; Node trace file, sort by node, then rule name, then seqno
 
-
 (defun xxxnode ()
   (with-open-file (s "xxxnode1" :direction :output)
 	(let ((*print-pretty* nil))
@@ -566,7 +565,8 @@
 												(memq (et-entry-type et-entry) '(:no-new-edges
 																				 :new-edges
 																				 :new-edges-from
-																				 :failed)))
+																				 :failed
+																				 :queued :already-queued :dequeued)))
 									   entry))))
 							   entries)))
 		  (let ((entries
@@ -2735,7 +2735,8 @@ color-color
 
 (let ()
   (setq x (! (g edge-trace-var-graph) :min-freq 0 :rules '("tree" "fft" "odd" "cas" init kernel)
-			 :omitted-rules '(kernel add-inverse-is-elem-of add-inverse-is-member-of basic-display-data color-circle-data color-color data xis xis-gen xis-not)))
+			 :omitted-rules '(kernel add-inverse-is-elem-of add-inverse-is-member-of basic-display-data color-circle-data color-color data xis xis-gen xis-not
+							  fft-comb-rule-next odd-zero fft-rule-delta2)))
   (time (with-redirected-stdout "y2"
 								(lambda (std)
 								  (! (x execute-global-all-objs-loop)))))

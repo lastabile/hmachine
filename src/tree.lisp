@@ -271,7 +271,8 @@
   (?nn2 xis treeobj)
   (?nn2 xis treeobj-2)
   (?nn1 tree-next ?nn2)
-  (exec ?nn1 ?nn2)
+  ;; (exec ?nn1 ?nn2)
+  ;; (queue ?nn1 ?nn2)
   ))
 
 (rule						

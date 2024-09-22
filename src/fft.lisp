@@ -629,7 +629,7 @@
   (?nn3 local-rule-pool ?p)
   (?nn4 local-rule-pool ?p)
 
-  ;; (queue ?nn1 ?nn2 ?nn3 ?nn4 ?y)
+  ;; (queue ?y ?nn1 ?nn3 ?nn2 ?nn4)
   ;; (exec ?nn1 ?nn2 ?nn3 ?nn4 ?y)
   )
  (del

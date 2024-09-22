@@ -1145,6 +1145,7 @@
 											  (setq r t))
 											d)))
 				(let ()
+				  (ptag 'eo1 node)
 				  (cond
 				   ((eq rule-mode :local-rule-pool-only)
 					(let ((local-rule-pool (hget node 'local-rule-pool)))
@@ -1189,7 +1190,8 @@
 						  (print (list 'eo2-1 r match-status matched-edges evaled-rule-names))
 						  (print (list 'eo2-2 'succrules successful-rule-names))
 						  (print (list 'eo2-3 'nrules (length evaled-rules) (length successful-rules)))))))
-				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))
+				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))		;; Note failed-rules will not include those just deleted (which may have failed)
+					(ptag 'eo-match-status node match-status)
 					(funcall cont r match-status matched-edges successful-rules failed-rules))))))))
 
 	  (defm execute-all-objs (&key (rule-mode :local-global))
@@ -1684,11 +1686,11 @@
 				  ;; huge nunmber of these right now.
 				  ;;
 
-				  ;; !!!! Disabled !!!!
+				  ;; 9/21/24 Enabled ;; !!!! Disabled !!!!
 
 				  (defl get-explicit-nodes-to-exec ()
 					(block b
-					  (return-from b nil)
+					  ;; (return-from b nil)
 					  (let ((exec-edges (get-edges-from-subqet '(exec))))
 						(let ((prefix-exec-edges (mapcad (lambda (e) (when (eq (first e) 'exec) e)) exec-edges)))
 						  (let ((suffix-exec-edges (mapcad (lambda (e) (when (and (= (length e) 2) (eq (second e) 'exec)) e)) exec-edges)))
@@ -1708,12 +1710,13 @@
 							  (rem-edge exec-edge)
 							  exec-list))))))
 
-				  ;; !!!! Disabled !!!!
+				  ;; 9/21/24 Enabled ;; !!!! Disabled !!!!
 
 				  (defl get-explicit-nodes-to-queue ()
 					(block b
-					  (return-from b nil)
-					  (let ((queue-edge (first (get-edges-from-subqet '(queue)))))
+					  ;; (return-from b nil)
+					  (let ((queue-edge (first (mapcad (lambda (e) (when (eq (first e) 'queue) e)) 
+													   (get-edges-from-subqet '(queue))))))
 						(if queue-edge
 							(let ((queue-list (rest queue-edge)))
 							  (rem-edge queue-edge)
@@ -1872,6 +1875,7 @@
 									(let ()
 									  (dolist (node explicit-nodes-to-exec)
 										(queue-node node :push-head t))
+									  (ptag 'explicit-queue explicit-nodes-to-queue)
 									  (dolist (node explicit-nodes-to-queue)
 										(queue-node node :push-head nil)))
 									(let ((nodes (get-implicit-nodes-to-queue (! (env-new-edges results))  new-node-hash all-node-hash)))
@@ -3580,11 +3584,9 @@
 							  (! (g add-edge) (list (first ap-edge) 'freq freq (third ap-edge))))))))))
 				g)))))
 
-	  ;; Variant on above full trace: r1 is related to r2 iff there
-	  ;; exists an edge e such that (r1 add e) and (e pred r2). Temporal
-	  ;; (seqno) info is not included. This should provide a rule-dep
-	  ;; type of graph, but with only rules deps that are really needed
-	  ;; by a given run, rather than by analysis.
+	  ;; Variant on above full trace: r1 is related to r2 iff there exists an edge e such that (r1 add e) and (e pred
+	  ;; r2). Temporal (seqno) info is not included. This should provide a rule-dep type of graph, but with only rule
+	  ;; deps that are really needed by a given run, rather than by analysis.
 
 	  (defm edge-trace-rule-graph (&key (min-freq 0) (rules '(t)) (omitted-rules nil))
 		(defr
@@ -5145,7 +5147,7 @@
 					  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
 					  (x local-rule-pool local-rule-pool-node)
 					  (r local-rule-pool local-rule-pool-node)
-					  (queue x r)
+					  ;; (queue x r)
 					  )
 					 (del
 					  (global-node rule ?this-rule))))

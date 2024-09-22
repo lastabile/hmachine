@@ -38,6 +38,7 @@
   (print fft-rule-delta2 ?this-obj ?y)
   (?y fcn-color ?s)
   (?y color ?t)
+  ;; (queue fft color)
   )
  (del
   ;; (?this-obj rule ?this-rule)
@@ -77,6 +78,7 @@
   (print fft-rule-delta4 ?this-obj ?x ?y ?c ?s)
   (?y color ?s)
   (?y rand ?u)
+  ;; (queue center-up)
   )
 )
 
@@ -92,6 +94,7 @@
   (?x00 weave-next ?x01)
   (?x10 weave-next ?x11)
   (?p0 weave-next ?p1)
+  ;; (queue weave-next-root)
   )
  (add
   (print weave-next-rule ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
