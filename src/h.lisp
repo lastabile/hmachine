@@ -1070,7 +1070,9 @@
 				 ;; with a high success rate, followed by stretches of
 				 ;; failures. Worth formalizing better at some point.
 				 ;;
-				 ;; (print (list 'qlen (length (! (obj-queue as-list)))))
+				 ($comment
+				  (let ((*print-pretty* nil))
+					(print (list 'qlen (! ((get-edge-to-trace) get-rule-seqno)) (length (! (obj-queue as-list))) (! (obj-queue as-list))))))
 
 				 (if (functionp obj)
 					 (let ((r (funcall obj)))
@@ -1079,6 +1081,7 @@
 						 nil)
 						((eq r :requeue)
 						 (queue-node obj))))
+					 ;; 9/27/24 Tried experiment: do execute-obj multiple times to see if that alleviated re-queue issue. It didn't. re-queue-behavior
 					 (execute-obj obj :rule-mode rule-mode :cont
 					   (lambda (m s p r f)
 						 ;; (print (list 'eq42  obj (mapcar (lambda (n) (hget n 'name)) r) (mapcar (lambda (n) (hget n 'name)) f)))
@@ -1129,7 +1132,7 @@
 					(let ((rule-orders (mapcad (lambda (x) (when (equal (first x) node) (intersect (rest (rest x)) rules))) (get-edges-from-subqet `(,node rule-order)))))
 					  (let ((unordered-rules (set-subtract rules (mapunion (lambda (x) x) rule-orders))))
 						(let ((r (append (mapappend (lambda (x) x) rule-orders) unordered-rules)))
-						  ;; (print (list 'eo1 node 'ros rule-orders unordered-rules r))
+						  (ptag 'eo3 node 'ros rule-orders unordered-rules r)
 						  r)))))
 				(defl m-and-e (rule node)
 				  (match-and-execute-rule rule node :cont
@@ -1190,6 +1193,9 @@
 						  (print (list 'eo2-1 r match-status matched-edges evaled-rule-names))
 						  (print (list 'eo2-2 'succrules successful-rule-names))
 						  (print (list 'eo2-3 'nrules (length evaled-rules) (length successful-rules)))))))
+				  (when (chkptag 'eo-success)
+					(when (eq match-status :new-edges)
+					  (ptag 'eo-success node)))
 				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))		;; Note failed-rules will not include those just deleted (which may have failed)
 					(ptag 'eo-match-status node match-status)
 					(funcall cont r match-status matched-edges successful-rules failed-rules))))))))
@@ -1249,12 +1255,13 @@
 			(defl exec-all-objs-and-queue (rule-mode)
 			  (timer 'exec-all-objs-and-queue 
 				(lambda ()
-				  (let ((nodes (get-all-nodes)))
-					(dolist (node nodes)
-					  (execute-obj node :rule-mode rule-mode :cont (lambda (m s p r f) nil))
-					  (timer 'exec-all-objs-and-queue-exec-queue
-						(lambda ()
-						  (execute-queue :rule-mode queue-rule-mode))))))))
+				  (block b
+					(let ((nodes (get-all-nodes)))
+					  (dolist (node nodes)
+						(execute-obj node :rule-mode rule-mode :cont (lambda (m s p r f) nil))
+						(timer 'exec-all-objs-and-queue-exec-queue
+						  (lambda ()
+							(execute-queue :rule-mode queue-rule-mode)))))))))
 			(let ()
 			  (block b
 				(loop 

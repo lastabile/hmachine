@@ -4117,8 +4117,6 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 
 (! (h get-all-edges))
 
-
-
 (let ()
   (! (g add-edge) '(x type gv-cluster))
   (! (g add-edge) '(x gv-cluster-relation xxx))
@@ -4126,16 +4124,33 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
   (! (g add-edge) '(x xxx x2))
   (! (g add-edge) '(x xxx x3)))
 
+;;
+;; Make files for gnuplot of length distribution of edges for a set of fft runs.
+;;
+;; Interesting in that it reaches a max length
+;;
+;; plot "xxx0" with lines, "xxx1" with lines, "xxx2" with lines, "xxx3" with lines, "xxx4" with li
+nes, "xxx5" with lines, "xxx6" with lines
+;;
 
-
-
-
-
-
-
-
-
-
+(dotimes (i 7)
+  (let ((n i))
+	(with-redirected-stdout
+	 (and t "fftout")
+	 (lambda (s)
+	   (setq g (make-fft-test))
+	   (! ((! (g get-edge-to-trace)) init-trace) g)
+	   ;; (! (g trace-rule) 'cas-next)
+	   (let ((*print-tags* (and nil '(s0 s2)))) ;; use (get-tag-list) to see all compiled tags
+		 (time (! (g run) n))))))
+  (let ((m (make-sur-map)))
+	(dolist (e (! (g get-all-edges)))
+	  (let ((l (length e)))
+		(! (m insert-one) l (+ 1 (or (! (m lookup-one) l) 0)))))
+	(with-redirected-stdout (format nil "xxx~a" i)
+	 (lambda (s)
+	   (dolist (x (sort (! (m as-list)) (lambda (x y) (< (first x) (first y)))))
+		 (format t "~a ~a ~%" (first x) (first (second x))))))))
 
 ;;
 ;; Accumulation of useful queries
