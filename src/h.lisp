@@ -1063,17 +1063,6 @@
 				 (when (chkptag 'pop-head)
 				   (print (list 'pop-head obj)))
 
-				 ;; Experiment -- see queue-len-graph.gnuplot. Plotted the
-				 ;; queue length, then edited to produce a queue size
-				 ;; printed with each rule test, with a spike to 1000 for
-				 ;; each success. So you can see the pattern of areas
-				 ;; with a high success rate, followed by stretches of
-				 ;; failures. Worth formalizing better at some point.
-				 ;;
-				 ($comment
-				  (let ((*print-pretty* nil))
-					(print (list 'qlen (! ((get-edge-to-trace) get-rule-seqno)) (length (! (obj-queue as-list))) (! (obj-queue as-list))))))
-
 				 (if (functionp obj)
 					 (let ((r (funcall obj)))
 					   (cond
@@ -1085,10 +1074,23 @@
 					 (execute-obj obj :rule-mode rule-mode :cont
 					   (lambda (m s p r f)
 						 ;; (print (list 'eq42  obj (mapcar (lambda (n) (hget n 'name)) r) (mapcar (lambda (n) (hget n 'name)) f)))
+
+						 ;;
+						 ;; Experiment -- see queue-len-graph.gnuplot. Plotted the queue length, then edited to produce
+						 ;; a queue size printed with each rule test, with a spike to 1000 for each success. So you can
+						 ;; see the pattern of areas with a high success rate, followed by stretches of failures. Worth
+						 ;; formalizing better at some point.
+						 ;;
+						 ($nocomment
+						  (let ((*print-pretty* nil))
+							(let ((l (length (! (obj-queue as-list)))))
+							  (print (list 'qlen (! ((get-edge-to-trace) get-rule-seqno)) l obj (if m 50 0)(! (obj-queue as-list)))))))
+
 						 (when once
 						   (return-from exq nil))
+						 
 						 (when m ;; If obj exec succeeds, re-queue   re-queue-behavior
-						   (queue-node obj)))))))))))
+						   (queue-node obj :only-if-not-queued t)))))))))))
 
 	  ;; An enum "type"
 	  (defm match-status ()
