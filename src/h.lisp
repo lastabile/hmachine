@@ -1081,7 +1081,7 @@
 						 ;; see the pattern of areas with a high success rate, followed by stretches of failures. Worth
 						 ;; formalizing better at some point.
 						 ;;
-						 ($nocomment
+						 ($comment
 						  (let ((*print-pretty* nil))
 							(let ((l (length (! (obj-queue as-list)))))
 							  (print (list 'qlen (! ((get-edge-to-trace) get-rule-seqno)) l obj (if m 50 0)(! (obj-queue as-list)))))))

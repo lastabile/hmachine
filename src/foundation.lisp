@@ -115,7 +115,7 @@
  (del
   (?this-obj rule ?this-rule)))
 
-;; This for os "is" and "is-not" replaces all othger old ones. Much
+;; This form of "is" and "is-not" replaces all othger old ones. Much
 ;; better using the rest var and a "has" notation, allowing for
 ;; inheritance of arbitrary info without funny naming and so forth.
 
