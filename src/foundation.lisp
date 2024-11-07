@@ -115,10 +115,13 @@
  (del
   (?this-obj rule ?this-rule)))
 
-;; This form of "is" and "is-not" replaces all othger old ones. Much
+;; This form of "is" and "is-not" replaces all other old ones. Much
 ;; better using the rest var and a "has" notation, allowing for
 ;; inheritance of arbitrary info without funny naming and so forth.
 
+;; 10/22/24 pulled this back to get only rule attrs, better to trace rule-vars and so forth. 
+
+(comment
 (rule
  (name xis-gen)
  (attach-to global-node)
@@ -157,7 +160,46 @@
   )
  (del
   (?this-obj rule ?this-rule))
+ )
 )
+
+(rule
+ (name xis-gen)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node rule ?r1)
+  (?r1 name xis-gen)
+  )
+ (add
+  (print xis-gen)
+  (xis rule 
+	   (rule
+		(name xis)
+		(pred
+		 (?x xis ?y)
+		 (?y has rule ?r))
+		(add
+		 (print xis ?x ?y ?r)
+		 (?x rule ?r))
+		(del
+		 (?x xis ?y))))
+  (xis-not rule 
+		   (rule
+			(name xis-not)
+			(pred
+			 (?x xis-not ?y)
+			 (?y has rule ?r))
+			(add
+			 (print xis-not ?x ?y ?r))
+			(del
+			 (?x xis ?y)
+			 (?x xis-not ?y)
+			 (?x rule ?r))))
+  )
+ (del
+  (?this-obj rule ?this-rule))
+ )
 
 (rule
  (name color-circle-data)
@@ -239,5 +281,6 @@
   (?x color ?x))
  (del
   (?this-obj rule ?this-rule)))
+
 
 
