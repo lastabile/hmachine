@@ -299,7 +299,6 @@
 												(data (second type-data)))
 											(dolist (p data)
 											  (setq n (format nil "~a ~a" n p)))
-											;; (setq n (format nil "~a~%" n))
 											(setq n (format nil "~a\\n" n))
 											(cond
 											 ((eq type 'title)
@@ -316,9 +315,9 @@
 									(format s "color=springgreen;~%")
 									(format s "label = \"Legend\";~%")
 									(when (not (equal title ""))
-									  (format s "__x1 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" title (or title-fontsize 18)))
+									  (format s "__x1 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" title (or title-fontsize 25)))
 									(when (not (equal body ""))
-									  (format s "__x2 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" body (or body-fontsize 12)))
+									  (format s "__x2 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" body (or body-fontsize 20)))
 									(when (not (equal footer ""))
 									  (format s "__x3 [label = \"~a\",fontsize=~a,shape=rectangle,color=springgreen,style=filled];~%" footer(or footer-fontsize 8)))
 									(format s "__x1 -> __x2 -> __x3 [style=invis];~%")
@@ -506,7 +505,7 @@
 							   (or (eq rules t)
 								   (member (! (g hget) (first v) 'name) rules))
 							   (not (member (! (g hget) (first v) 'name) omitted-rules))
-							   (not (! (g hget-edge-inverse) (first v) 'nested-rule)))
+							   #|(not (! (g hget-edge-inverse) (first v) 'nested-rule))|#)	;; !!!!! nested-rule display issue
 					  (let ((rule-node (first v)))
 						(when (or (not omit-unmatched-rules)
 								  (> (! (g get-matched) rule-node) 0))

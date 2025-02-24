@@ -78,7 +78,7 @@
   (?r name std-notes))
  (add
   (print std-notes)
-  (note footer "Copyright (c) 2024 Lawrence Stabile"))
+  (note footer "Copyright (c) 2025 Lawrence Stabile"))
  (del
   (global-node rule ?this-rule)))
 

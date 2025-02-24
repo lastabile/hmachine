@@ -247,7 +247,7 @@
 				  edges))))))
 
 
-	  ;; Using tab\le rather than cache is much better perf, especially as size grows.
+	  ;; Using table rather than cache is much better perf, especially as size grows.
 
 	  (defm count-edges-from-subqet (subqet)
 		(timer 'count-edges-from-subqet
@@ -3510,7 +3510,7 @@
 
 	  ;; Var-based trace graph
 
-	  (defm edge-trace-var-graph (&key (min-freq 0) (rules '(t)) (omitted-rules nil))
+	  (defm edge-trace-var-graph (&key (min-freq 0) (max-freq 1.0) (rules '(t)) (omitted-rules nil))
 		(defr
 		  (defl has-preds (events)
 			(block b
@@ -3589,7 +3589,7 @@
 					  (let ((count (first (second i))))
 						(let ((tot (! (freq-table lookup-one) (first ap-edge))))
 						  (let ((freq (float (/ count tot))))
-							(when (>= freq min-freq)
+							(when (and (>= freq min-freq) (<= freq max-freq))
 							  (! (g add-edge) (list (first ap-edge) 'freq freq (third ap-edge))))))))))
 				g)))))
 

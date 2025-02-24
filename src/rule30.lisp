@@ -20,11 +20,11 @@ level, which is N^2+2N+1.
 
 The number of times we test rules is optimized by the -opt rule
 modifiers below. In particular a set of rules is needed to get the
-values of each node, e.g., rule-30-nexrt-rule-0-0-0, where we get a
+values of each node, e.g., rule-30-next-rule-0-0-0, where we get a
 new suffix for each config we need to detect. rule-30-next-rule-opt
-installs deleters in in each rule-30-nexrt-rule-n-n-n rule to rid the
+installs deleters in each rule-30-nexrt-rule-n-n-n rule to rid the
 object of all rules which no longer need to be tested, since one of
-them has succeeded.
+them has succeeded. Very cell-inhibition-signaling-ish.
 
 To run these tests, look for "Rule30 complexity test" in test.lisp.
 |#
@@ -306,6 +306,10 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   (?y local-rule-pool ?p)
   ;; (?y xis rule-30-center-obj)
   (?y center-up ?x)
+  (?y xcenter-up ?x)
+  (xcenter-up color red)
+  (xcenter-up fontcolor green)
+  (xcenter-up fontsize 18)
   (?y top ?t)
   ;; (?x xis-not rule-30-center-obj)
   )
@@ -393,6 +397,8 @@ To run these tests, look for "Rule30 complexity test" in test.lisp.
   (?nn3 new-node sn3))
  (add
   (print rule-30-top ?this-obj ?x ?nn1 ?nn2 ?nn3)
+  (note title "Rule 30")
+  (note body ?l " levels")
   (?nn2 up ?x)
   (?x xis rule-30-center-obj)
   (?x center)

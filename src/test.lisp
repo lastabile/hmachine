@@ -37,7 +37,6 @@
 	  (let ((*print-tags* (and nil '(s0 s2)))) ;; use (get-tag-list) to see all compiled tags
 		(time (! (g run) n))))))
 
-
 ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
 
 
@@ -300,17 +299,27 @@
 		   (lambda ()
 			 (! (g execute-global-all-objs-loop))
 			 )))))
-	(with-open-file (s "fftperf" :direction :output)
-	  (let ((std *standard-output*))
-		(let ((*standard-output* s))
-		  (let ((n 7)) ;; 9
+
+	(with-redirected-stdout "fftperf"
+	  (lambda (orig-stdout)
+		  (let ((n 30)) ;; 7 ;; 9
 			(time
 			 (dotimes (i n)
-			   (print (list '************* i) std)
-			   (f i)
+			   (print (list '************* i) orig-stdout)
+			   (load-compiled)
+			   (gc)
+			   (f 3) ;; (f i)
 			   (perf-stats)
 			   (! (g rule-stats))
-			   (room t)))))))))
+			   (room t)))))))
+
+  ($comment
+	 (let ()
+	   (setq gp (make-gnuplot))
+	   (! (gp plot-log) (make-fft-perf-stats-info))))
+
+	))
+
 (let ((n 3))
   (clear-counters)
   (clear-perf-stats)
@@ -920,7 +929,7 @@
 		  ;; (! (g execute-global-all-objs-loop)) ;; Temp! until we get queuing work right.
 		  ))))
 
-  ($nocomment
+  ($comment
    (let ((*print-tags* (and nil '(am2))))   ;; am2 produces too much output
 	 (with-redirected-stdout "fetest"
 							 (lambda (s)
@@ -928,7 +937,7 @@
 
   ;; Perf runs
   ;; Nat to 100
-  ($comment								;; Perf runs
+  ($nocomment								;; Perf runs
    (with-open-file (s "feperf" :direction :output)
 	 (let ((std *standard-output*))
 	   (let ((*standard-output* s))
@@ -2734,7 +2743,7 @@ color-color
 ;; Var-based dumper 
 
 (let ()
-  (setq x (! (g edge-trace-var-graph) :min-freq 0 :rules '("tree" "fft" "odd" "cas" init kernel)
+  (setq x (! (g edge-trace-var-graph) :min-freq 0 :max-freq 1.0 :rules '("tree" "fft" "odd" "cas" init kernel)
 			 :omitted-rules '(kernel add-inverse-is-elem-of add-inverse-is-member-of basic-display-data color-circle-data color-color data xis xis-gen xis-not
 							  fft-comb-rule-next odd-zero fft-rule-delta2)))
   (time (with-redirected-stdout "y2"
