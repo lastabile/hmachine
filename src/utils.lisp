@@ -2,6 +2,8 @@
 ;; Fundamental macros
 ;;;;;;;;;;;;;;;;;;;;;;;
 
+(defconstant most-pos-32-bit-signed-fixnum (- (expt 2 31) 1)) ; For use in hash fcns
+
 (defmacro defr (&rest defls-and-forms)
   `(labels
 	,(mapappend (lambda (defls)
@@ -55,7 +57,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (let ((mi (machine-instance)))
-  (let ((r (equal (string-downcase (subseq mi 0 (search " " mi))) "rosencrantz")))
+  (let ((r (equal (string-downcase (subseq mi 0 (search " " mi))) "guildenstern")))
 	(let ((l (equal (string-downcase (subseq mi 0 (search " " mi))) "gertrude")))
 	  (defun is-laptop ()
 		l)
@@ -419,7 +421,7 @@
 	(defl h (l)
 	  (if (null l)
 		  0
-		  (mod (+ (sxhash (first l)) (h (rest l)))  most-positive-fixnum)))
+		  (mod (+ (sxhash (first l)) (h (rest l))) most-pos-32-bit-signed-fixnum)))  ; was most-positive-fixnum but crashes on ubuntu clisp
 	(h l)))
 
 (let ((set-hash-test-name nil))
@@ -790,8 +792,10 @@
   (run-program "bash" :arguments (list "-o" "igncr" script-file)))		;; Takes a script file name
 
 (defun shell-cmd (cmd)
-  (print cmd)
-  (run-program "bash" :arguments (list "-o" "igncr" "-c" cmd)))	;; Takes a command with args 
+  (print (format nil cmd))
+  (if (is-laptop)
+	  (run-program "bash" :arguments (list "-o" "igncr" "-c" cmd))
+  	  (run-program "bash" :arguments (list "-c" cmd))))
 
 ;;
 ;; Fcn == (lambda (stdout-stream) ...)

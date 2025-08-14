@@ -412,7 +412,8 @@
   (?cas-new del ?e0 rule ?cas-new)
 
   (?cas-next add ?e1 rule ?cas-zero)
-  ;; (?cas-next del ?e0 rule ?cas-zero)	;; 7/29/24 Leaving this in makes an incomplete set of fft butterflies at n=6 and beyond! See doc.txt.
+  (?cas-next del ?e0 rule ?cas-zero)	;; 7/29/24 Leaving this in makes an incomplete set of fft butterflies at n=6 and beyond! See doc.txt.
+										;; 7/31/25 Re-activated as it looks like it works now. Tried to n=8. Not sure what fixed it.
   (?cas-next add ?e1 rule-order ?cas-next ?cas-zero)
 
   (?cas-zero add ?ae0 rule ?fft-comb-rule-zero)

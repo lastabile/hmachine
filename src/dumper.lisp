@@ -11,7 +11,12 @@
 		(node-set (make-sur-map))
 		(designated-rule-edges (make-sur-map))
 		(pair-list nil)
-		(gv-dir "c:/Program Files/Graphviz"))
+		(gv-dir (if (is-laptop)
+					"c:/Program Files/Graphviz/bin"
+					"/usr/bin"))
+		(gv-exec-ext (if (is-laptop)
+						 ".exe"
+						 "")))
 
 	(defm set-graph (graph)
 	  (setq g graph)
@@ -42,21 +47,25 @@
 		(defl file-root (gv-file)
 		  (subseq gv-file 0 (search ".gv" gv-file)))
 		(let ((gv-file-root (file-root gv-file)))
-	      (let ((cmd (format nil (cat "\"~a/bin/dot.exe\" ~a.gv | "
-									  "\"~a/bin/gvpack.exe\" -m0 | "
-									  "\"~a/bin/neato.exe\" -s ~a -T~a "
+	      (let ((cmd (format nil (cat "\"~a/dot~a\" ~a.gv | "
+									  "\"~a/gvpack~a\" -m0 | "
+									  "\"~a/neato~a\" -s ~a -T~a "
 									  "~a"
 									  " > ~a.~a")
 							 gv-dir
+							 gv-exec-ext
 							 gv-file-root
 							 gv-dir
+							 gv-exec-ext
 							 gv-dir
+							 gv-exec-ext						 	
 							 (if n2 "-n2" "")
 							 (case file-type (:svg "svg") (:jpg "jpg"))
 							 (if (and (eq file-type :svg) edit-svg) "| sed -e \"s/<svg.*$/\<svg/\"" "")
 							 gv-file-root
 							 (case file-type (:svg "svg") (:jpg "jpg")))))
 			(let ((cmd (format nil "~a" cmd)))
+			  (format t cmd)
 			  (shell-cmd cmd))))))
 
 	;; This svg dump assumes a rule-30 graph. See the ca-to-svg fcn below which generates fast and large rule-30 svg
@@ -206,8 +215,10 @@
 						(set-gv-attr n 'fontname 'arial)
 						(set-gv-attr n 'style 'filled)
 
+						(print (list 'las42 n (! (g hget-all) n 'type)))
 						(when (memq 'rule (! (g hget-all) n 'type))
 						  (let ((name (! (g hget) n 'name)))
+							(print (list 'las57 n (! (g hget-all) n 'type) (! (g hget) n 'name)))
 							(set-gv-attr n 'label name)
 							(set-gv-attr n 'shape 'rectangle)
 							(set-gv-attr n 'color 'mistyrose)))
@@ -399,11 +410,6 @@
 												  (let ((n (! (g hget) r 'name)))
 													(when (member n omitted-attrs :test #'eq)
 													  (return-from b nil))
-													#|
-													(set-gv-attr r 'label n) ; ; ;
-													(set-gv-attr r 'shape 'rectangle) ; ; ;
-													(set-gv-attr r 'color 'mistyrose) ; ; ;
-													|#
 													(when (memq graph-type '(:subgraph :single-graph))
 													  (let ((rule-entry-node (designated-rule-entry-node r)))
 														(when (not (! (designated-rule-edges lookup-one) (list r rule-entry-node)))
@@ -413,31 +419,8 @@
 											  (when (eq prop 'note)
 												(set-gv-attr out-node 'shape 'rectangle))
 											  (setq edge-attr-string (get-format prop :as-prop t))
-											  #|
-											  (when edge-color ; ; ;
-											  (setq edge-attr-string (concatenate 'string edge-attr-string (format nil ",color=~a" edge-color)))) ; ; ;
-											  |#
-											  (if emit-labels
-											
-												  #| (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%" 
-												  in-node out-node prop-label edge-attr-string) |#
-
-												  (format s "\"~a\" -> \"~a\"              ~a~%" 
-														  in-node out-node edge-attr-string)
-
-
-											
-												  (format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"~a];~%"
-														  in-node out-node "" edge-color-string)))))))))))
-
-							 #|
-							 ((eq (second v) 'zero) ; ; ;
-							 (create-node-entry (first v)) ; ; ;
-							 (if emit-labels ; ; ;
-							 (set-gv-attr (first v) 'label (symcat (first v) '-z)) ; ; ;
-							 (set-gv-attr (first v) 'label ""))) ; ; ;
-							 |#
-					   
+											  (format s "\"~a\" -> \"~a\"              ~a~%" 
+													  in-node out-node edge-attr-string))))))))))
 							 ((and t
 								   (= l 4)
 								   (! (g edge-exists) `(,(third v) two-input-op)))
@@ -515,7 +498,12 @@
 							(dump-gv-rule rule-node)
 							(when (eq graph-type :digraph)
 							  (format s "}~%")))))))
+				  (defl lab (l)
+					(if emit-labels
+						l
+						""))
 				  (defl dump-gv-rule (rule)
+					(print (list 'las86 rule (! (g hget) rule 'name)))
 					(when (or (not omit-unmatched-rules)
 							  (> (! (g get-matched) rule) 0))
 					  (let ((rule-components (! (g get-rule-components) rule))
@@ -533,8 +521,6 @@
 							(when (memq graph-type '(:digraph :subgraph))
 							  (format s "subgraph \"cluster-~a\" {~%" rule-name)
 							  (format s "label = \"~a\";~%" rule-name))
-							;; (format s "\"~a\" [label=\"~a\"];~%" rule rule-name)
-							;; (format s "\"~a\" -> \"~a\" [label=\"~a\"];~%" "rules" rule-name  "")
 							(dolist (rule-edges (list pred-edges del-edges add-edges not-edges))
 							  (when (or (eq rule-edges pred-edges)
 										(eq rule-edges add-edges)
@@ -549,11 +535,11 @@
 									  (cond
 									   ((and (= l 2)
 											 (eq (second rule-edge) 'next))
-										(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name (first rule-edge) (first rule-edge))
+										(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name (first rule-edge) (lab (first rule-edge)))
 										(format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a\",style=~a,fontname=arial,color=~a];~%"
 												p-rule-name (first rule-edge)
 												p-rule-name (first rule-edge)
-												(second rule-edge)
+												(lab (second rule-edge))
 												(if (eq rule-edges add-edges) "dashed" "solid")
 												(if (eq rule-edges add-edges) "red" "black")))
 									   ((= l 2)
@@ -579,7 +565,7 @@
 												  p-rule-name (first rule-edge)
 												  p-rule-name (third rule-edge)
 												  (if (member rule-edge del-edges :test #'equal) "X " "")
-												  (second rule-edge)
+												  (lab (second rule-edge))
 												  (if (eq rule-edges add-edges) "dashed" "solid")
 												  (cond
 												   ((eq rule-edges add-edges) "red")
@@ -593,7 +579,7 @@
 											  (o (fourth rule-edge)))
 										  (let ((fcn (format nil "~a-~a-~a-~a-~a" p-rule-name fcn-name i1 i2 o))
 												(color (! (g hget) fcn-name 'color)))
-											(format s "\"~a\" [label=\"~a\",fontname=arial];~%" fcn fcn-name)
+											(format s "\"~a\" [label=\"~a\",fontname=arial];~%" fcn (lab fcn-name))
 											(when color
 											  (format s "\"~a\" [color=~a,style=filled]~%" fcn color))
 											(format s "\"~a-~a\" -> \"~a\"" p-rule-name i1 fcn)
@@ -611,7 +597,7 @@
 									   (t
 										(dotimes (i l)
 										  (let ((rule-node (nth i rule-edge)))
-											(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name rule-node rule-node)))
+											(format s "\"~a-~a\" [label=\"~a\",fontname=arial];~%" p-rule-name rule-node (lab rule-node))))
 										(dotimes (i l)
 										  (let ((rule-node (nth i rule-edge)))
 											(format s "\"~a-~a\"" p-rule-name rule-node)

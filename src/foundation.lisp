@@ -52,13 +52,14 @@
   (fft-hb-delta in-node-color springgreen)
   (fft-hb-delta color turquoise)
 
-  (color gv-attr)
+  ; * = both a gv node and gv edge attribute
+  (color gv-attr)		; *
   (shape gv-attr)
-  (label gv-attr)
-  (fontname gv-attr)
-  (fontsize gv-attr)
-  (fontcolor gv-attr)
-  (style gv-attr)
+  (label gv-attr)		; *
+  (fontname gv-attr)	; *
+  (fontsize gv-attr)	; *
+  (fontcolor gv-attr)	; *
+  (style gv-attr)		; *
   (width gv-attr)
   (height gv-attr)
   (fixedsize gv-attr)

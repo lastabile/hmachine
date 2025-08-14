@@ -92,8 +92,6 @@
   (?tree-zero-rule name tree-zero-rule)
   (?rp lrp-rule ?tree-max-rule)
   (?tree-max-rule name tree-max-rule)
-  ;; (?rp lrp-rule ?tree-top-propagate-rule)
-  ;; (?tree-top-propagate-rule name tree-top-propagate-rule)
   (?rp lrp-rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
   (?rp lrp-rule ?tree-elem-zero-rule)
@@ -108,8 +106,6 @@
   (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
   (?x rule ?tree-elem-zero-rule)
-  ;; (?x rule ?tree-top-propagate-rule)
-  ;; (?y rule ?tree-top-propagate-rule)
   (?y rule ?tree-max-rule)
   (?y rule ?tree-loop-rule)
   ;; (queue ?x ?y)
@@ -118,22 +114,6 @@
   (?this-obj rule ?this-rule)
   (?p rule ?tree-loop-rule)
   (?p rule ?tree-elem-zero-rule)))
-
-(rule
- (name tree-top-propagate-rule)
- (local)
- (root-var ?p)
- (pred
-  (?x aup ?p)
-  (?p top ?t)
-  (?t local-rule-pool ?rp))
- (add
-  (print tree-top-propagate-rule ?this-obj ?x ?p)
-  (?x top ?t)
-  (?x rule ?this-rule)
-  (?x local-rule-pool ?rp))
- (del
-  (?this-obj rule ?this-rule)))
 
 (rule
  (name tree-elem-rule)

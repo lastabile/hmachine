@@ -1808,7 +1808,6 @@
 																		  nn)
 																		sn))))
 													;; Bound value will be a list if the var was a rest var, so append the contents in that case
-													;; (print (list 'ace1  new-edge new-node))
 													(setq new-edge (append new-edge
 																		   (cond
 																			 ((listp new-node)
@@ -2381,7 +2380,7 @@
 			  (lambda ()
 				(let ((rulegraph (! ((get-rule-components rule-node) pred-rulegraph))))
 				  (let ((root-vars (get-root-vars rule-node)))
-					(let ((h (make-hash-table :size 7 :test hash-test-name)))
+					(let ((h (make-hash-table :size 7 :test hash-test-name))) 
 					  (let ((possible-match-fcn (possible-match-fcn rule-node obj-node rulegraph)))
 						(when possible-match-fcn
 						  (block b
@@ -3171,6 +3170,71 @@
 					(remhash s1 h)))))
 			(hash-table-value-to-list h))))
 
+
+	  ($comment ;; This is old; brought back to see if I want to ressureect it
+	   
+	   ;; n^2 scan of rules
+
+	   (defm rule-dep-graph (&key rules except-rules)
+		 (timer 'rule-dep-graph 
+		   (lambda ()
+			 (let ((rulesq (mapcad (lambda (x) ;; Eqv to (query '((?r type rule)(?r name ?n)) '(?r ?n)), but does not create edges
+									 (let ((n (hget x 'name)))
+									   (and n (list x n))))
+								   (hget-inverse-all 'rule 'type))))
+			   (let ((rulesq (mapcad (lambda (x) (when (not (is-new-pool-node (first x))) x)) rulesq))) ;; Hack!!!!!! Don't have good way of filtering out "orphan" rules like those tied NNx nodes
+				 (print rulesq)
+				 ;; (or local-pool-add-node (setq local-pool-add-node (list-to-edge-elem-node '(?x local-rule-pool ?y))))
+				 ;; (or global-pool-add-node (setq global-pool-add-node (list-to-edge-elem-node '(?x global-rule-pool ?y))))
+				 (dolist (r1q rulesq)
+				   (let ((r1 (first r1q))
+						 (r1n (second r1q)))
+					 (add-edge `(,r1 arity ,(length (second (filter-new-node-pred-edges (! ((get-rule-components r1) preds)))))))
+					 (dolist (r2q rulesq)
+					   (let ((r2 (first r2q))
+							 (r2n (second r2q)))
+						 (when (and
+								(and (not (member r1n except-rules :test #'eq))
+									 (not (member r2n except-rules :test #'eq)))
+								(or (null rules)
+									(and (member r1n rules :test #'eq)
+										 (member r2n rules :test #'eq))))
+						   (let ((local-pool-add-node (list-to-edge-elem-node '(?x local-rule-pool ?y))))
+							 (let ((global-pool-add-node (list-to-edge-elem-node '(?x global-rule-pool ?y))))
+							   (let ((r1as (append (hget-all r1 'add) (list local-pool-add-node global-pool-add-node))))
+								 (let ((r2ps (hget-all r2 'pred)))
+								   (dolist (r1a r1as)
+									 (dolist (r2p r2ps)
+									   (let ((r1ae (edge-elem-node-to-list r1a)))
+										 (let ((r2pe (edge-elem-node-to-list r2p)))
+										   (let ((r1aes (format nil "~a" r1ae)))
+											 (let ((r2pes (format nil "~a" r2pe)))
+											   (when (or (match-one-edge r1ae r2pe nil nil nil)
+														 (match-one-edge r2pe r1ae nil nil nil))
+												 (print (list (list r1n r1ae) (list r2n r2pe)))
+												 ;; (add-edge (list 'rd 1 r1n "" "" r2n))
+												 ;; (add-edge (list 'rd 2 r1n r1aes r2pes r2n))
+												 (add-edge (list r1 'rd r2))
+												 ;; (add-edge (list 'rr r1n r1a r2p r2n))
+
+												 ($comment ;; For work with rd-based eval, these extra edges clutter the system 
+												  ;; add and pred relations already present -- need x versions to avoid display overload ; ; ; ; ; ;
+												  (add-edge (list r1 'xadd r1a))
+												  (add-edge (list r1a 'rule-dep r2p))
+												  (add-edge (list r2p 'xpred r2))
+												  (add-edge (list r1a 'as-string r1aes))
+												  (add-edge (list r2p 'as-string r2pes))
+												  )
+
+												 (let ((r1a-r1aes (symcat r1a '- r1aes)))
+												   (let ((r2p-r2pes (symcat r2p '- r2pes)))
+													 (add-edge (list r1 'xxadd r1a-r1aes))
+													 (add-edge (list r1a-r1aes 'xrule-dep r2p-r2pes))
+													 (add-edge (list r2p-r2pes 'xxpred r2))))
+
+
+												 ))))))))))))))))))))))
+
 	  ;; Max number of times d a rule r was matched by some distinct edge e. List of (r d), sorted by d.
 	  
 	  (defm dimensions ()
@@ -3719,7 +3783,7 @@
 	  ;;
 	  ;; Could use breadth fcn -- a little more elegant
 
-	  (defm path (n1 n2 &key attr excl-set trace)
+	  (defm path (n1 n2 &key attr excl-set trace degree-max)
 		(let ((visit-hash (make-hash-table :test #'equal)))
 		  (defr
 			(defl filter-edges (edges)
@@ -3736,7 +3800,11 @@
 							   attr)
 						  (filter-edges (hget-all bnode attr)))
 						 ((is-node bnode)
-						  (filter-edges (get-edges bnode)))
+						  (let ((edges (filter-edges (get-edges bnode))))
+							(let ((l (length edges)))
+							  (if (or (null degree-max) (< l degree-max))
+								  edges
+								  nil))))
 						 ((is-edge bnode)
 						  bnode)
 						 (t
@@ -4486,7 +4554,7 @@
 		(mod (+ (sxhash (env-trig-entry-rule-node e))
 				(env-hash (env-trig-entry-env e))
 				(env-trig-entry-adds-hash e))
-			 most-positive-fixnum))
+			 most-pos-32-bit-signed-fixnum)) ; was most-positive-fixnum but crashes on ubuntu clisp
 	  (let ((hash-test-name (hdefine-hash-table-test #'env-trig-entry-equal #'env-trig-entry-hash)))
 		(let ((env-triggered-table (make-hash-table :test hash-test-name)))
 		  (let ((lte (make-env-trig-entry)))
