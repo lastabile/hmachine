@@ -215,10 +215,10 @@
 						(set-gv-attr n 'fontname 'arial)
 						(set-gv-attr n 'style 'filled)
 
-						(print (list 'las42 n (! (g hget-all) n 'type)))
+						;; (print (list 'las42 n (! (g hget-all) n 'type)))
 						(when (memq 'rule (! (g hget-all) n 'type))
 						  (let ((name (! (g hget) n 'name)))
-							(print (list 'las57 n (! (g hget-all) n 'type) (! (g hget) n 'name)))
+							;; (print (list 'las57 n (! (g hget-all) n 'type) (! (g hget) n 'name)))
 							(set-gv-attr n 'label name)
 							(set-gv-attr n 'shape 'rectangle)
 							(set-gv-attr n 'color 'mistyrose)))
@@ -503,7 +503,7 @@
 						l
 						""))
 				  (defl dump-gv-rule (rule)
-					(print (list 'las86 rule (! (g hget) rule 'name)))
+					;; (print (list 'las86 rule (! (g hget) rule 'name)))
 					(when (or (not omit-unmatched-rules)
 							  (> (! (g get-matched) rule) 0))
 					  (let ((rule-components (! (g get-rule-components) rule))

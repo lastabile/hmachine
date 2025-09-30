@@ -1200,6 +1200,24 @@
 					  (ptag 'eo-success node)))
 				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))		;; Note failed-rules will not include those just deleted (which may have failed)
 					(ptag 'eo-match-status node match-status)
+					
+					;; LAS42
+ 					(when r
+ 					  (add-edge (list node 'execed)) ;; Exec'ed and added new edges
+ 					  (add-edge (list (hget 'global-node 'prev-exec) 'next-exec node))
+ 					  (dolist (e (get-edges-from-subqet '(global-node prev-exec))) (rem-edge e))
+ 					  (add-edge (list 'global-node 'prev-exec node))
+					  ($nocomment  ;; e1
+					   (print (list 'las42 (get-edges-from-subqet (list node 'execed-rules))))
+					   (let ((new-e (cons node (cons 'execed-rules (hunion (rest (rest (get-edges-from-subqet (list node 'execed-rules))))  successful-rules)))))
+						 (dolist (e (get-edges-from-subqet `(,node execed-rules))) (rem-edge e))
+						 (add-edge new-e)))
+					  ($comment    ;; e2
+					   (when (null (get-edges-from-subqet `(,node execed-rules)))
+						 (let ((new-e (cons node (cons 'execed-rules successful-rules))))
+						   (add-edge new-e))))
+					  )
+					
 					(funcall cont r match-status matched-edges successful-rules failed-rules))))))))
 
 	  (defm execute-all-objs (&key (rule-mode :local-global))
@@ -1807,6 +1825,12 @@
 																						   (new-obj-node))))
 																		  nn)
 																		sn))))
+													
+													;; LAS42
+													(when (null (get-edges-from-subqet (list new-node 'added-by)))
+													  (let ((l (list new-node 'added-by rule-node node)))
+ 														(add-edge l)))
+													
 													;; Bound value will be a list if the var was a rest var, so append the contents in that case
 													(setq new-edge (append new-edge
 																		   (cond
@@ -5187,6 +5211,32 @@
 					  (r level ,levels)
 					  (r rule-30-top)
 					  (r local-rule-pool local-rule-pool-node))
+					 (del
+					  (global-node rule ?this-rule))))
+	  (timer 'main
+		(lambda ()
+		  (execute-global-all-objs-loop))))))
+
+(defc tree-test foundation nil
+  (let ()
+	(defm init ()
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (foundation-init)
+	  (read-rule-file "tree.lisp")
+	  )
+	(defm run (levels)
+	  (add-natural-number-edges levels)
+	  (define-rule `(rule
+					 (name init)
+					 (attach-to global-node)
+					 (pred
+					  (global-node rule ?r)
+					  (?r name init))
+					 (add
+					  (print init)
+					  (tree-rule x ,levels)
+					  (x local-rule-pool local-rule-pool-node))
 					 (del
 					  (global-node rule ?this-rule))))
 	  (timer 'main
