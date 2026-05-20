@@ -32,8 +32,7 @@
 
 
 
-
-
+;; The following are just for display: rule1, rule2, rule3, is-even, ran
 
 (rule
  (name fwd-fe-rule)
@@ -65,14 +64,18 @@
   (print "?nn-copy-rule-rule" ?nn-copy-rule-rule)
 |#
   (?m even-func ?q)
+  (?q is-even)
   (?m local-rule-pool ?lrp)
   (?fwd-fe-rule copy-rule ?nn-fwd-fe-rule)
   (?fwd-fe-rule local-rule-pool ?lrp)
   (?copy-rule-rule copy-rule ?nn-copy-rule-rule)
   (?copy-rule-rule local-rule-pool ?lrp)
   (?nn-fwd-fe-rule rule ?nn-copy-rule-rule)
+  (?nn-fwd-fe-rule rule1 ?nn-copy-rule-rule)
   (?nn-copy-rule-rule rule ?copy-rule-rule)
+  (?nn-copy-rule-rule rule2 ?copy-rule-rule)
   (?m rule ?nn-fwd-fe-rule)
+  (?m rule3 ?nn-fwd-fe-rule)
   (?m fwd-fe-rule ?nn-fwd-fe-rule)
   (?m copy-rule-rule ?nn-copy-rule-rule)
   (?this-obj ran ?this-rule)
@@ -110,6 +113,7 @@
  (add
   (print fe-0-rule 0)
   (0 even-func 2)
+  (2 is-even)
   (0 fwd-fe-rule ?fwd-fe-rule)
   (0 copy-rule-rule ?copy-rule-rule)
   (0 rule ?fwd-fe-rule))

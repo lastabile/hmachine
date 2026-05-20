@@ -508,31 +508,31 @@
    (setq y (! (x spanning-dag) 'kernel 'r))
    )
 
-    (let ()
-      (! (y define-rule) '(rule
-                           (name transred)
-                           (global)
-                           (distinct-vars t)
-                           (pred
-                            (?x r ?y)
-                            (?y r ?z)
-                            (?x r ?z))
-                           (add
-                            (print transred ?x ?y ?z))
-                           (del
-                            (?x r ?z))))
-      (let ((*print-tags* (and nil '(s0 s2))))
-        (! (y execute-global-all-objs-loop))
-        ))
-    (let ((d (make-dumper)))
-      (! (d set-graph) x)
-      (! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
-      (! (d gv-to-image) "y"))
-    ($nocomment
-     (let ((d (make-dumper)))
-       (! (d set-graph) y)
-       (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
-       (! (d gv-to-image) "y1"))))
+  (let ()
+    (! (y define-rule) '(rule
+                         (name transred)
+                         (global)
+                         (distinct-vars t)
+                         (pred
+                          (?x r ?y)
+                          (?y r ?z)
+                          (?x r ?z))
+                         (add
+                          (print transred ?x ?y ?z))
+                         (del
+                          (?x r ?z))))
+    (let ((*print-tags* (and nil '(s0 s2))))
+      (! (y execute-global-all-objs-loop))
+      ))
+  (let ((d (make-dumper)))
+    (! (d set-graph) x)
+    (! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
+    (! (d gv-to-image) "y"))
+  ($nocomment
+   (let ((d (make-dumper)))
+     (! (d set-graph) y)
+     (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
+     (! (d gv-to-image) "y1"))))
 
 
 (let ((d (make-dumper)))
@@ -1003,15 +1003,15 @@
           ;; (! (g execute-global-all-objs-loop)) ;; Temp! until we get queuing work right.
           ))))
 
-  ($comment
+  ($nocomment
    (let ((*print-tags* (and nil '(am2))))   ;; am2 produces too much output
      (with-redirected-stdout "fetest"
                              (lambda (s)
-                               (f 10)))))                               ;; 20 ;; The basic single run
+                               (f 50)))))                               ;; 20 ;; The basic single run
 
   ;; Perf runs
   ;; Nat to 100
-  ($nocomment                               ;; Perf runs
+  ($comment                               ;; Perf runs
    (with-open-file (s "feperf" :direction :output)
      (let ((std *standard-output*))
        (let ((*standard-output* s))
@@ -4115,16 +4115,17 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
       (setq g (make-objgraph))
       (! (g rem-edge) '(global-node local-rule-pool local-rule-pool-node))
       (mapc (lambda (x) (! (g add-edge) x)) edges)
-      (print (! (g euler-char-genus)))
+      (print (list 'las57 (! (g euler-char-genus))))
       (when gv
         (let ((d (make-dumper)))
           (! (d set-graph) g)
           (! (d dump-gv-edges) "x.gv" :rules nil :emit-legend nil :as-2d-asc-facets t :attrs t)
-          (! (d gv-to-image) "x"))))
-    (f '((1 2 5)(5 2 3)(5 3 6)(3 6 4)(7 1 5)(6 4 8)))       ;; Strip
-    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 b)(b a 5)(6 b a)))       ;; Mobius
-    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b)))       ;; Cylinder
-    (f '((1 2 3)(1 3 4)(2 3 4)(1 2 4)))                     ;; Tetrahedron
+          (! (d gv-to-image) "x" :n2 t))))
+    (f '((1 2)(2 3)(3 1)) :gv nil)									;; Circle
+	(f '((1 2 5)(5 2 3)(5 3 6)(3 6 4)(7 1 5)(6 4 8)) :gv nil)       ;; Strip
+    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 b)(b a 5)(6 b a)) :gv nil)	    ;; Mobius
+    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b)))				;; Cylinder
+    (f '((1 2 3)(1 3 4)(2 3 4)(1 2 4)))								;; Tetrahedron
     (f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b) (a 20 50)(50 20 30)(50 30 60)(30 60 a)(b a 50)(60 a b)))    ;; Double cylinder
     (f '(       ;; Unfolded torus -- see Munkres page 17
          (a1 d1 f)(a1 b1 f)(b1 f c1)(c1 g a3)(a3 g d2)
@@ -4135,8 +4136,15 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
          (a d f)(a b f)(b f c)(c g a)(a g d)
          (d f e)(e f i)(f i h)(f g h)(g j h)(i j h)(j g d)(j e d)
          (e a i)(a i b)(i b j)(b c j)(c j a)(a j e)
-         ) :gv t)
+         ) :gv nil)
+	(f '(		;; Another Torus  https://arxiv.org/pdf/1304.7846
+		 (e i d)(e d f)(f d c)(f c g)(g c i)(g e i)
+		 (i h a)(i a d)(d a b)(d b c)(c b h)(c h i)
+		 (h e f)(h f a)(a f g)(a g b)(b g e)(b e h)
+		 ) :gv t)
     nil))
+
+
 
 (length (! (g get-successful-exec-obj-list)))
 
@@ -4338,6 +4346,21 @@ nes, "xxx5" with lines, "xxx6" with lines
                               )))))
       (! (d gv-to-image) "exec")
       )))
+
+
+
+
+(let ((nn 1))
+  (defun tree (node depth cont)
+    (if (= depth 0)
+        (funcall cont)
+        (let ()
+          (print (list nn 'up node))
+          (print (list (+ nn 1) 'up node))
+          (let ((n nn))
+            (setq nn (+ nn 2))
+            (tree n (- depth 1) (lambda () (tree (+ n 1) (- depth 1) cont))))))))
+
 
 
 

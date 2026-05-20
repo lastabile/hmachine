@@ -118,13 +118,16 @@
 ;;
 ;; auto-add-gnlrp -- We still auto-add the edge (global-node local-rule-pool local-rule-pool) when make objgraph.
 ;;
-;; debug-tool -- Good technique for debugging. Length limits to avoid screen overload.
+;; debug-tools -- Good techniques for debugging:
+;;				- Length limits to avoid screen overload:
 ;; 
 ;;				(let ((x (let ((*print-level* 1))
 ;;						   (let ((*print-length* 1))
 ;; 							 (show-stack) 
 ;; 							 )
 ;; 						   nil))))
+;;				- Traceback:
+;;					(system::print-backtrace))
 ;;
 ;; multi-types -- Allow the attribute "type" to take on multi values, which means using memq instead of eq in the code.
 ;;					Discharged 6/4/24
@@ -1201,22 +1204,24 @@
 				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))		;; Note failed-rules will not include those just deleted (which may have failed)
 					(ptag 'eo-match-status node match-status)
 					
-					;; LAS42
- 					(when r
- 					  (add-edge (list node 'execed)) ;; Exec'ed and added new edges
- 					  (add-edge (list (hget 'global-node 'prev-exec) 'next-exec node))
- 					  (dolist (e (get-edges-from-subqet '(global-node prev-exec))) (rem-edge e))
- 					  (add-edge (list 'global-node 'prev-exec node))
-					  ($nocomment  ;; e1
-					   (print (list 'las42 (get-edges-from-subqet (list node 'execed-rules))))
-					   (let ((new-e (cons node (cons 'execed-rules (hunion (rest (rest (get-edges-from-subqet (list node 'execed-rules))))  successful-rules)))))
-						 (dolist (e (get-edges-from-subqet `(,node execed-rules))) (rem-edge e))
-						 (add-edge new-e)))
-					  ($comment    ;; e2
-					   (when (null (get-edges-from-subqet `(,node execed-rules)))
-						 (let ((new-e (cons node (cons 'execed-rules successful-rules))))
-						   (add-edge new-e))))
-					  )
+					($comment
+					 ;; LAS42
+ 					 (when r
+ 					   (add-edge (list node 'execed)) ;; Exec'ed and added new edges
+ 					   (add-edge (list (hget 'global-node 'prev-exec) 'next-exec node))
+ 					   (dolist (e (get-edges-from-subqet '(global-node prev-exec))) (rem-edge e))
+ 					   (add-edge (list 'global-node 'prev-exec node))
+					   ($nocomment ;; e1
+						(print (list 'las42 (get-edges-from-subqet (list node 'execed-rules))))
+						(let ((new-e (cons node (cons 'execed-rules (hunion (rest (rest (get-edges-from-subqet (list node 'execed-rules))))  successful-rules)))))
+						  (dolist (e (get-edges-from-subqet `(,node execed-rules))) (rem-edge e))
+						  (add-edge new-e)))
+					   ($comment ;; e2
+						(when (null (get-edges-from-subqet `(,node execed-rules)))
+						  (let ((new-e (cons node (cons 'execed-rules successful-rules))))
+							(add-edge new-e))))
+					   )
+					 )
 					
 					(funcall cont r match-status matched-edges successful-rules failed-rules))))))))
 
@@ -1825,11 +1830,12 @@
 																						   (new-obj-node))))
 																		  nn)
 																		sn))))
-													
-													;; LAS42
-													(when (null (get-edges-from-subqet (list new-node 'added-by)))
-													  (let ((l (list new-node 'added-by rule-node node)))
- 														(add-edge l)))
+													($comment
+													 ;; LAS42
+													 (when (null (get-edges-from-subqet (list new-node 'added-by)))
+													   (let ((l (list new-node 'added-by rule-node node)))
+ 														 (add-edge l)))
+													 )
 													
 													;; Bound value will be a list if the var was a rest var, so append the contents in that case
 													(setq new-edge (append new-edge
@@ -2677,15 +2683,14 @@
 				 ((null pat-edge)
 				  '((t t))) ;; literal-match case; dummy binding
 				 ;; If we have only one of the roots, then whole edge does not match   better-root-var
-				 ((or (and root-var
-						   (not (eq root-var :undefined))
-						   (equal (first pat-edge) root-var)
-						   (not (equal (first obj-edge) obj-node)))
-					  (and root-var
-						   (not (eq root-var :undefined))
-						   (not (equal (first pat-edge) root-var))
-						   (equal (first obj-edge) obj-node)))
-				  ;; (print (list 'moea1 pat-edge obj-edge root-var obj-node))		;; When this is in it looks like only "xis" picks up this case    better-root-var
+				 ((and root-var
+					   (not (eq root-var :undefined))
+					   (or (if (equal (first pat-edge) root-var)
+							   (not (equal (first obj-edge) obj-node))
+							   (equal (first obj-edge) obj-node))))
+				  ;; When this is in it looks like only "xis" picks up this case    better-root-var
+				  ;; 5/14/26 copy-rule-rule does too, in fe-test
+				  ;; (print (list 'moea1 (hget rule-node 'name) pat-edge obj-edge root-var obj-node))
 				  (return-from match-one-edge1 nil))
 				 ((and (is-var-name (first pat-edge))
 					   (or (null pred-info)
@@ -4218,8 +4223,8 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (objgraph obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes
 			  (macrolet ((xprint (tag &rest x)
-								 ;; nil
-								 `(ptag ,tag ,@x)
+						   ;; nil
+						   `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
