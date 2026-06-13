@@ -215,10 +215,10 @@
 						(set-gv-attr n 'fontname 'arial)
 						(set-gv-attr n 'style 'filled)
 
-						(print (list 'las42 n (! (g hget-all) n 'type)))
+						;; (print (list 'las42 n (! (g hget-all) n 'type)))
 						(when (memq 'rule (! (g hget-all) n 'type))
 						  (let ((name (! (g hget) n 'name)))
-							(print (list 'las57 n (! (g hget-all) n 'type) (! (g hget) n 'name)))
+							;; (print (list 'las57 n (! (g hget-all) n 'type) (! (g hget) n 'name)))
 							(set-gv-attr n 'label name)
 							(set-gv-attr n 'shape 'rectangle)
 							(set-gv-attr n 'color 'mistyrose)))
@@ -503,7 +503,7 @@
 						l
 						""))
 				  (defl dump-gv-rule (rule)
-					(print (list 'las86 rule (! (g hget) rule 'name)))
+					;; (print (list 'las86 rule (! (g hget) rule 'name)))
 					(when (or (not omit-unmatched-rules)
 							  (> (! (g get-matched) rule) 0))
 					  (let ((rule-components (! (g get-rule-components) rule))
@@ -660,7 +660,12 @@
 ;; Experiments so far show that 1001 levels is pushing it for browsers and is really slow. The svg file in that case is a
 ;; good 74M.  A good large size which is tolerably slow is 401.
 
-(defun ca-to-svg (file n rule-no &key colorized (viewbox '(10000.0 10000.0)) xlate)
+(defun ca-to-svg (file n rule-no
+					   &key
+					   colorized
+					   (viewbox '(10000.0 10000.0))
+					   xlate
+					   (color-list '(cyan magenta green red turquoise blue pink orange)))
   (with-open-file (s file :direction :output)
 	(defr
 	  (defl make-rule-array (rule-no)
@@ -673,7 +678,7 @@
 		  r))
 	  (defl make-rule-color-array ()
 		(let ((r (make-array '(2 2 2))))
-		  (let ((colors (make-array 8 :initial-contents '(cyan magenta green red turquoise blue pink orange))))
+		  (let ((colors (make-array 8 :initial-contents color-list)))
 			(let ((c 0))
 			  (dotimes (i 2)
 				(dotimes (j 2)

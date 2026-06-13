@@ -5270,6 +5270,68 @@
 		(lambda ()
 		  (execute-global-all-objs-loop))))))
 
+(defc tree-test foundation (&key (rule-file "tree.lisp"))
+  (let ()
+	(defm init ()
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (foundation-init)
+	  (read-rule-file rule-file)
+	  )
+	(defm run (n &key (rule-mode :local-global))
+	  (define-rule `(rule
+					 (name init)
+					 (attach-to global-node)
+					 (pred
+					  (global-node rule ?r)
+					  (?r name init))
+					 (add
+					  (print init)
+					  (tree-rule x ,n)
+					  (x local-rule-pool local-rule-pool-node)
+					  (queue x)
+					  )
+					 (del
+					  (global-node rule ?this-rule))))
+	  (add-natural-number-edges n)
+	  (! ((get-edge-to-trace) init-trace) self)
+	  (timer 'main
+		(lambda ()
+		  (execute-global-all-objs-loop))))))
+
+(defc xtree-test base-graph nil
+  (let ()
+	(defm init ()
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (base-graph-init)
+	  )
+	(defm run (n &key (rule-mode :local-global))
+	  (add-natural-number-edges n)
+	  (read-rule-file "xtree.lisp")
+	  (print 'run-one)
+	  (timer 'main
+		(lambda ()
+		  (execute-global-all-objs-loop)))
+	  (define-rule `(rule
+					 (name init)
+					 (attach-to global-node)
+					 (pred
+					  (global-node rule ?r)
+					  (?r name init))
+					 (add
+					  (print init)
+					  (tree-top top x levels ,n)
+					  (queue x)
+					  )
+					 (del
+					  (global-node rule ?this-rule))))
+	  (! ((get-edge-to-trace) init-trace) self)
+	  (print 'run-two)
+	  (timer 'main
+		(lambda ()
+		  (execute-global-all-objs-loop))))))
+
 (defc the-graph foundation nil
   (let ()
 

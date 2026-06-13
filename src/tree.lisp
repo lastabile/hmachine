@@ -30,7 +30,6 @@
  (add
   (print tree-next-rule ?root-var ?this-obj ?x00 ?x01 ?x10 ?x11 ?p0 ?p1)
   (?x01 tree-next ?x10)
-  (?x01 x-tree-next ?x10)		;; for diag
   (?this-obj xis-not treeobj)
   (?this-obj xis-not treeobj-2)
   ;; (queue ?x10)
@@ -57,6 +56,7 @@
 ;; This rule was modified to conform to the sequential model noted in the header to this file. One clause was added,
 ;; which requires a prev next node.
 
+(comment
 (rule
  (name tree-loop-rule)
  (local)
@@ -73,6 +73,44 @@
   (print tree-loop-rule ?this-obj ?x ?y ?root-var)
   (?y next ?x)
   ;; (queue)
+  )
+ (del
+  (?this-obj rule ?this-rule)
+  ))
+)
+
+(rule
+ (name tree-loop-rule)
+ (local)
+ (pred
+  (?x l 0)
+  (?y l 0)
+  (?x zero-max-span ?y)
+  )
+ (add
+  (print tree-loop-rule ?this-obj ?x ?y ?root-var)
+  (?y next ?x)
+  ;; (queue)
+  )
+ (del
+  (?this-obj rule ?this-rule)
+  ))
+
+(rule
+ (name tree-span-rule)
+ (local)
+ (pred
+  (?xu zero-max-span ?yu)
+  (?xu zero)
+  (?yu max)
+  (?x ul ?xu)
+  (?y ur ?yu)
+  (?x zero)
+  (?y max)
+  )
+ (add
+  (print tree-span-rule ?x ?xu ?y ?yu)
+  (?x zero-max-span ?y)
   )
  (del
   (?this-obj rule ?this-rule)
@@ -94,6 +132,8 @@
   (?tree-max-rule name tree-max-rule)
   (?rp lrp-rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
+  (?rp lrp-rule ?tree-span-rule)
+  (?tree-span-rule name tree-span-rule)
   (?rp lrp-rule ?tree-elem-zero-rule)
   (?tree-elem-zero-rule name tree-elem-zero-rule)
   )
@@ -103,16 +143,20 @@
   (?y top ?p)
   (?x zero)
   (?y max)
+  (?x zero-max-span ?y)
   (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
+  (?x rule ?tree-span-rule)
   (?x rule ?tree-elem-zero-rule)
   (?y rule ?tree-max-rule)
   (?y rule ?tree-loop-rule)
+  (?y rule ?tree-span-rule)
   ;; (queue ?x ?y)
   )
  (del
   (?this-obj rule ?this-rule)
   (?p rule ?tree-loop-rule)
+  (?p rule ?tree-span-rule)
   (?p rule ?tree-elem-zero-rule)))
 
 (rule
@@ -144,6 +188,8 @@
   (?x zero)
   (?x rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
+  (?x rule ?tree-span-rule)
+  (?tree-span-rule name tree-span-rule)
   )
  (add
   (print tree-elem-zero-rule ?this-obj ?t ?x)
@@ -151,6 +197,7 @@
  (del
   (?this-obj rule ?this-rule)
   (?x rule ?tree-loop-rule)
+  ;; (?x rule ?tree-span-rule)
   ))
 
 (rule
@@ -166,6 +213,8 @@
   (?tree-zero-rule name tree-zero-rule)
   (?p rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
+  (?p rule ?tree-span-rule)
+  (?tree-span-rule name tree-span-rule)
   (?p rule ?tree-elem-zero-rule)
   (?tree-elem-zero-rule name tree-elem-zero-rule)
   )
@@ -174,12 +223,14 @@
   (?x zero)
   (?x rule ?tree-zero-rule)
   (?x rule ?tree-loop-rule)
+  (?x rule ?tree-span-rule)
   (?x rule ?tree-elem-zero-rule)
-  (?x rule-order ?tree-zero-rule ?tree-elem-zero-rule ?tree-loop-rule)
+  (?x rule-order ?tree-zero-rule ?tree-elem-zero-rule ?tree-span-rule ?tree-loop-rule)
   )
  (del
   (?p rule ?tree-zero-rule)
   (?p rule ?tree-loop-rule)
+  ;; (?p rule ?tree-span-rule)
   (?p rule ?tree-elem-zero-rule)))
 
 (rule
@@ -195,17 +246,21 @@
   (?tree-max-rule name tree-max-rule)
   (?p rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
+  (?p rule ?tree-span-rule)
+  (?tree-span-rule name tree-span-rule)
   )
  (add
   (print tree-max-rule ?this-obj ?x ?y ?p)
   (?y max)
   (?y rule ?tree-max-rule)
   (?y rule ?tree-loop-rule)
-  (?y rule-order ?tree-max-rule ?tree-loop-rule)
+  (?y rule ?tree-span-rule)
+  (?y rule-order ?tree-max-rule ?tree-span-rule ?tree-loop-rule)
   )
  (del
   (?p rule ?tree-max-rule)
   (?p rule ?tree-loop-rule)
+  ;; (?p rule ?tree-span-rule)
   )
  )
 
@@ -320,6 +375,8 @@
   (?tree-top-order-rule name tree-top-order-rule)
   (?p lrp-rule ?tree-loop-rule)
   (?tree-loop-rule name tree-loop-rule)
+  (?p lrp-rule ?tree-span-rule)
+  (?tree-span-rule name tree-span-rule)
   (?p lrp-rule ?tree-elem-zero-rule)
   (?tree-elem-zero-rule name  tree-elem-zero-rule)
   (tree-rule ?x ?l))			;; Tie the data to the node tree-rule since it's an easy way to get all the pred edges connected, as required by H
@@ -335,6 +392,7 @@
   (?x type array)
   (?x rule ?tree-top-order-rule)
   (?x rule ?tree-loop-rule)
+  (?x rule ?tree-span-rule)
   (?x rule ?tree-elem-zero-rule)))
 
 (rule

@@ -91,19 +91,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ;; See below initial test of "animation." Doing that here for fft.
 
 (let ((i 0))
@@ -947,6 +934,42 @@
   (! (g clear-queue))
   (! (g add) room 'event 'occupied)
   (! (g execute-queue)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Tree test
+
+(let ((n 3))
+  (with-redirected-stdout (and t "treeout")
+    (lambda (s)
+      (setq g (make-tree-test))
+	  (! ((! (g get-edge-to-trace)) init-trace) g)
+	  ;; (! (g trace-rule) 'tree-loop-rule)
+      (time (! (g run) n)))))
+
+(let ((d (make-dumper)))
+      (! (d set-graph) g)
+      (! (d dump-gv-edges) "tree.gv" :rules nil
+		 :attrs
+		 '(elem aup next tree-next zero max zero-max-span)
+		 :separate-number-nodes t
+		 )
+      (! (d gv-to-image) "tree"))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; xtree test -- prep for GA experiment
+
+(let ((n 3))
+  (with-redirected-stdout (and t "treeout")
+    (lambda (s)
+      (setq g (make-xtree-test))
+	  (! ((! (g get-edge-to-trace)) init-trace) g)
+	  ;; (! (g trace-rule) 'tree-loop-rule)
+      (time (! (g run) n)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;; fe-rule-test
@@ -4249,9 +4272,41 @@ nes, "xxx5" with lines, "xxx6" with lines
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; These bits test filtering and graphing a set of edges based on node dimension. The function f here will produce a
+;; graph g1 which only contains a given edge of g if all nodes in the edge have a dim less than the given limit.  We also
+;; have an experiment where we subtract a smaller run of fft from a larger one. This removes rules and other common
+;; data. Interesting but not clear is useful.
+;;
+(defun f (g dim-limit)
+  (let ((node-dist (make-hash-table)))
+	(dolist (n (! (g get-all-nodes)))
+	  (setf (gethash n node-dist) (length (! (g get-edges) n))))
+	(let ((g1 (make-objgraph)))
+	  (dolist (e (! (g get-all-edges)))
+		(let ((e-dist (mapcad (lambda (n) (if (< (gethash n node-dist) dim-limit) nil t)) e)))
+		  (when (null e-dist)
+			(! (g1 add-edge) e))))
+	  (setq xxx g1)
+	  ($nocomment 
+	   (let ((d (make-dumper)))
+		 (! (d set-graph) g1)
+		 (! (d dump-gv-edges) "xxfft.gv" :rules nil :attrs t)
+		 (! (d gv-to-image) "xxfft"))))))
 
-
-
+(let ((n 0))
+  (let ((m 3))
+	(with-redirected-stdout (and t "fftout")
+	  (lambda (s)
+		(let ((g (make-fft-test)))
+		  (time (! (g run) n))
+		  (let ((g1 (make-fft-test)))
+			(time (! (g1 run) m))
+			(let ((diff (set-subtract (! (g1 get-all-edges)) (! (g get-all-edges)))))
+			  (setq g2 (make-objgraph))
+			  (dolist (e diff)
+				(! (g2 add-edge) e)))))))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;
 ;; Accumulation of useful queries
