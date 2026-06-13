@@ -38,7 +38,7 @@
         (time (! (g run) n))))))
 
 
-;; Experiment adapting the above to do dataflow, rtule30, and weave/delta only, no butterflies. Can be artistically
+;; Experiment adapting the above to do dataflow, rule30, and weave/delta only, no butterflies. Can be artistically
 ;; interesting in graphviz.
 
 (let ((n 3))
@@ -88,8 +88,6 @@
         ;; (! (g trace-rule) 'cas-next)
         (let ((*print-tags* (and nil '(s0 s2)))) ;; use (get-tag-list) to see all compiled tags
           (time (! (g run) n :rule-30-levels m)))))))
-
-
 
 ;; See below initial test of "animation." Doing that here for fft.
 
@@ -486,31 +484,31 @@
    (setq y (! (x spanning-dag) 'kernel 'r))
    )
 
-    (let ()
-      (! (y define-rule) '(rule
-                           (name transred)
-                           (global)
-                           (distinct-vars t)
-                           (pred
-                            (?x r ?y)
-                            (?y r ?z)
-                            (?x r ?z))
-                           (add
-                            (print transred ?x ?y ?z))
-                           (del
-                            (?x r ?z))))
-      (let ((*print-tags* (and nil '(s0 s2))))
-        (! (y execute-global-all-objs-loop))
-        ))
-    (let ((d (make-dumper)))
-      (! (d set-graph) x)
-      (! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
-      (! (d gv-to-image) "y"))
-    ($nocomment
-     (let ((d (make-dumper)))
-       (! (d set-graph) y)
-       (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
-       (! (d gv-to-image) "y1"))))
+  (let ()
+    (! (y define-rule) '(rule
+                         (name transred)
+                         (global)
+                         (distinct-vars t)
+                         (pred
+                          (?x r ?y)
+                          (?y r ?z)
+                          (?x r ?z))
+                         (add
+                          (print transred ?x ?y ?z))
+                         (del
+                          (?x r ?z))))
+    (let ((*print-tags* (and nil '(s0 s2))))
+      (! (y execute-global-all-objs-loop))
+      ))
+  (let ((d (make-dumper)))
+    (! (d set-graph) x)
+    (! (d dump-gv-edges) "y.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(freq))
+    (! (d gv-to-image) "y"))
+  ($nocomment
+   (let ((d (make-dumper)))
+     (! (d set-graph) y)
+     (! (d dump-gv-edges) "y1.gv" :rules nil :separate-number-nodes t :gv-graph-props "ranksep=3.0;" :attrs '(r))
+     (! (d gv-to-image) "y1"))))
 
 
 (let ((d (make-dumper)))
@@ -1017,15 +1015,15 @@
           ;; (! (g execute-global-all-objs-loop)) ;; Temp! until we get queuing work right.
           ))))
 
-  ($comment
+  ($nocomment
    (let ((*print-tags* (and nil '(am2))))   ;; am2 produces too much output
      (with-redirected-stdout "fetest"
                              (lambda (s)
-                               (f 10)))))                               ;; 20 ;; The basic single run
+                               (f 50)))))                               ;; 20 ;; The basic single run
 
   ;; Perf runs
   ;; Nat to 100
-  ($nocomment                               ;; Perf runs
+  ($comment                               ;; Perf runs
    (with-open-file (s "feperf" :direction :output)
      (let ((std *standard-output*))
        (let ((*standard-output* s))
@@ -4158,6 +4156,8 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
 		 ) :gv t)
     nil))
 
+
+
 (length (! (g get-successful-exec-obj-list)))
 
 (dolists ((x y) ((! (g get-successful-exec-obj-list)) (rest (! (g get-successful-exec-obj-list)))))
@@ -4271,6 +4271,107 @@ nes, "xxx5" with lines, "xxx6" with lines
           (print (list n1 n2 p)))))))
 
 
+;;;;;;;;;;;;
+
+(defr
+  (defl rv-node (n rn v)
+    (if (and (not (is-new-obj-node n))
+             (equal n v))
+        v
+        (symcat rn '-- v)))
+  (let ()
+    (let ()
+      (setq g1 (make-foundation))
+      (! (g1 execute-global-all-objs-loop))
+      (let ((freq-table (make-sur-map)))
+        (let ((max-freq-table (make-sur-map)))
+          (let ((exec-info (! (g query)
+                              '((?n1 next-exec ?n2)
+                                (?n1 execed)
+                                (?n2 execed)
+                                (?n1 added-by ?r1 ?v1)
+                                (?n2 added-by ?r2 ?v2)
+                                (?r1 name ?rn1)
+                                (?r2 name ?rn2))
+                              '(?n1 ?n2 ?r1 ?rn1 ?v1 ?r2 ?rn2 ?v2))))
+            (dolist (info exec-info)
+              (mlet (((n1 n2 r1 rn1 v1 r2 rn2 v2) info))
+                (let ((rv1 (list r1 v1)))
+                  (let ((rv2 (list r2 v2)))
+                    (let ((rvs (list rv1 rv2)))
+                      (let ((f (! (freq-table lookup-one) rvs)))
+                        (! (freq-table insert-one) rvs (+ (or f 0) 1))
+                        (! (freq-table insert-one) rv1  (+ (or (! (freq-table lookup-one) rv1) 0) 1))))))))
+
+            (dolist (info exec-info)
+              (mlet (((n1 n2 r1 rn1 v1 r2 rn2 v2) info))
+                (let ((rv1 (list r1 v1)))
+                  (let ((rv2 (list r2 v2)))
+                    (let ((rvs (list rv1 rv2)))
+                      (let ((f (! (freq-table lookup-one) rvs)))
+                        (! (max-freq-table insert-one)
+                           rv1
+                           (max (or (! (max-freq-table lookup-one) rv1) 0)
+                                (float (/ (! (freq-table lookup-one) rvs)
+                                          (! (freq-table lookup-one) rv1)))))))))))
+          
+            (print (! (max-freq-table as-list)))
+        
+            (dolist (info exec-info)
+              (mlet (((n1 n2 r1 rn1 v1 r2 rn2 v2) info))
+                (let ((rv1 (list r1 v1)))
+                  (let ((rv2 (list r2 v2)))
+                    (let ((rvs (list rv1 rv2)))
+                      (let ((rvn1 (rv-node n1 rn1 v1)))
+                        (let ((rvn2 (rv-node n2 rn2 v2)))
+                          (let ((tot (! (freq-table lookup-one) rv1)))
+                            (let ((cnt (! (freq-table lookup-one) rvs)))
+                              (let ((f (format nil "~3,3f ~a/~a" (float (/ cnt tot)) cnt tot)))
+                                (let ((rules1 (! (g hget-all) n1 'rule)))
+                                  (let ((rules2 (! (g hget-all) n2 'rule)))
+                                    (when (not (intersect (list rn1 rn2) '(rule-30-max-rule-gen)))
+                                      (! (g1 add-edge) (list rvn1 'next-var-exec rvn2))
+                                      (when t ;; (> f .3)
+                                        (! (g1 add-edge) (list rvn1 'freq f rvn2)))
+                                      ;; (! (g1 add-edge) (list r1 'type 'gv-cluster))
+                                      ;; (! (g1 add-edge) (list r1 'gv-cluster-relation 'v))
+                                      (! (g1 add-edge) (list r1 'v rvn1))
+                                      ;; (! (g1 add-edge) (list r1 'name rn1))
+                                      ;; (! (g1 add-edge) (list rvn1 'label v1))
+                                      (dolist (r rules1)
+                                        (! (g1 add-edge) (list r 'name (! (g hget) r 'name)))
+                                        (! (g1 add-edge) (list r 'type 'rule))
+                                        (! (g1 add-edge) (list rvn1 'rule r)))
+                                      (dolist (r rules2)
+                                        (! (g1 add-edge) (list r 'name (! (g hget) r 'name)))
+                                        (! (g1 add-edge) (list r 'type 'rule))
+                                        (! (g1 add-edge) (list rvn2 'rule r))))))))))))))))))))
+
+    (let ((d (make-dumper)))
+      (! (d set-graph) g1)
+      (! (d dump-gv-edges) "exec.gv" :rules nil :gv-graph-props "ranksep=1.5;" :attrs-fcn
+         (lambda (e)
+           (or (intersect e '(
+                              freq
+                              ;; rule
+                              ;; v
+                              )))))
+      (! (d gv-to-image) "exec")
+      )))
+
+
+
+
+(let ((nn 1))
+  (defun tree (node depth cont)
+    (if (= depth 0)
+        (funcall cont)
+        (let ()
+          (print (list nn 'up node))
+          (print (list (+ nn 1) 'up node))
+          (let ((n nn))
+            (setq nn (+ nn 2))
+            (tree n (- depth 1) (lambda () (tree (+ n 1) (- depth 1) cont))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; These bits test filtering and graphing a set of edges based on node dimension. The function f here will produce a

@@ -310,7 +310,7 @@
   ;; (queue ?nn1 ?nn2)
   ))
 
-(rule						
+(rule
  (name tree-leaf-rule)
  (local)
  (pred
