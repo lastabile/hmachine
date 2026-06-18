@@ -45,6 +45,8 @@
   (hcload "top-obj")
   (hcompile "h" :warnings warnings)
   (hcload "h")
+  (hcompile "xtree-test" :warnings warnings)
+  (hcload "xtree-test")
   (hcompile "dumper" :warnings warnings)
   (hcload "dumper")
   nil)
@@ -57,6 +59,7 @@
   (hiload "top-obj")
   (hiload "h")
   (hiload "dumper")
+  (hiload "xtree-test")
   nil)
 
 (defun load-compiled (&key (warnings nil))
@@ -67,4 +70,5 @@
   (hcload "top-obj")
   (hcload "h")
   (hcload "dumper")
+  (hcload "xtree-test")
   nil)

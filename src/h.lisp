@@ -719,6 +719,12 @@
 					 (setq r (cons v r)))
 				   h)
 		  r)))
+	(defm all-vars ()
+	  (let ((nodes (all-nodes)))
+		(let ((std-vars (! ((make-std-vars) base-vars))))
+		  (set-subtract (mapcad (lambda (node) (when (is-var-name node) node)) nodes)
+						std-vars))))
+		
 	))
 
 (defstruct queue-entry
@@ -1513,8 +1519,8 @@
 							  (setq r (cons (if edge sup (third sup)) r)))))))
 				  r))))))
 
-	  (defm get-rule-components (rule-node)
-		(! (self get-rule-components-aux) rule-node))
+	  (defm get-rule-components (rule-node &key no-cache)
+		(! (self get-rule-components-aux) rule-node no-cache))
 
 	  (defm invalidate-rule-components-cache-entry (rule-node)
 		(timer 'invalidate-rule-components-cache-entry
@@ -1524,7 +1530,7 @@
 	  (let ((rule-components-cache (make-sur-map)))
 		(defm invalidate-rule-components-cache-entry-aux (rule-node)
 		  (! (rule-components-cache remove) rule-node))
-		(defm get-rule-components-aux (rule-node)
+		(defm get-rule-components-aux (rule-node no-cache)
 		  (defr
 			(defl get-clause-edges (clause-type)
 			  (let ((edges (get-edges-from-subqet (list rule-node clause-type))))
@@ -1534,7 +1540,7 @@
 						edges)))
 			(timer 'get-rule-components
 			  (lambda ()
-				(let ((rule-comps (! (rule-components-cache lookup-one) rule-node)))
+				(let ((rule-comps (when (not no-cache) (! (rule-components-cache lookup-one) rule-node))))
 				  (or rule-comps
 					  (let ((pred-list (get-clause-edges 'pred)))
 						(let ((del-list (get-clause-edges 'del)))
@@ -5350,39 +5356,6 @@
 					  (global-node rule ?this-rule))))
 	  (add-natural-number-edges n)
 	  (! ((get-edge-to-trace) init-trace) self)
-	  (timer 'main
-		(lambda ()
-		  (execute-global-all-objs-loop))))))
-
-(defc xtree-test base-graph nil
-  (let ()
-	(defm init ()
-	  (clear-counters)
-	  (clear-perf-stats)
-	  (base-graph-init)
-	  )
-	(defm run (n &key (rule-mode :local-global))
-	  (add-natural-number-edges n)
-	  (read-rule-file "xtree.lisp")
-	  (print 'run-one)
-	  (timer 'main
-		(lambda ()
-		  (execute-global-all-objs-loop)))
-	  (define-rule `(rule
-					 (name init)
-					 (attach-to global-node)
-					 (pred
-					  (global-node rule ?r)
-					  (?r name init))
-					 (add
-					  (print init)
-					  (tree-top top x levels ,n)
-					  (queue x)
-					  )
-					 (del
-					  (global-node rule ?this-rule))))
-	  (! ((get-edge-to-trace) init-trace) self)
-	  (print 'run-two)
 	  (timer 'main
 		(lambda ()
 		  (execute-global-all-objs-loop))))))

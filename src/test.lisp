@@ -941,31 +941,48 @@
   (with-redirected-stdout (and t "treeout")
     (lambda (s)
       (setq g (make-tree-test))
-	  (! ((! (g get-edge-to-trace)) init-trace) g)
-	  ;; (! (g trace-rule) 'tree-loop-rule)
+      (! ((! (g get-edge-to-trace)) init-trace) g)
+      ;; (! (g trace-rule) 'tree-loop-rule)
       (time (! (g run) n)))))
 
 (let ((d (make-dumper)))
       (! (d set-graph) g)
       (! (d dump-gv-edges) "tree.gv" :rules nil
-		 :attrs
-		 '(elem aup next tree-next zero max zero-max-span)
-		 :separate-number-nodes t
-		 )
+         :attrs
+         '(elem aup next tree-next zero max zero-max-span)
+         :separate-number-nodes t
+         )
       (! (d gv-to-image) "tree"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; xtree test -- prep for GA experiment
 
-(let ((n 3))
-  (with-redirected-stdout (and t "treeout")
-    (lambda (s)
-      (setq g (make-xtree-test))
-	  (! ((! (g get-edge-to-trace)) init-trace) g)
-	  ;; (! (g trace-rule) 'tree-loop-rule)
-      (time (! (g run) n)))))
+(let ()
+  (clear-counters)
+  (clear-perf-stats)
+  (setq rule-names '(tree-loop-rule tree-max-rule tree-next-level0-rule tree-next-rule tree-rule tree-span-rule tree-top-order-rule tree-top-rule tree-zero-rule))
+  (let ((n 3))
+    (with-redirected-stdout (and t "treeout")
+      (lambda (s)
+        (setq g (make-xtree-test))
+        (! ((! (g get-edge-to-trace)) init-trace) g)
+        ;; (! (g trace-rule) 'tree-loop-rule)
+        (time (! (g run) n)))))
+  (let ((n 3))
+    (with-redirected-stdout (and t "treeout1")
+      (lambda (s)
+        (setq g1 (make-xtree-test))
+        (! ((! (g1 get-edge-to-trace)) init-trace) g1)
+        ;; (! (g1 trace-rule) 'tree-loop-rule)
+        (time (! (g1 run) n)))))
+  (setq r (! (g hget-all-list) rule-names '((inv name))))
+  (setq x (make-gene r g))
+  (setq r1 (! (g1 hget-all-list) rule-names '((inv name))))
+  (setq x1 (make-gene r1 g1))
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -4133,11 +4150,11 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
           (! (d set-graph) g)
           (! (d dump-gv-edges) "x.gv" :rules nil :emit-legend nil :as-2d-asc-facets t :attrs t)
           (! (d gv-to-image) "x" :n2 t))))
-    (f '((1 2)(2 3)(3 1)) :gv nil)									;; Circle
-	(f '((1 2 5)(5 2 3)(5 3 6)(3 6 4)(7 1 5)(6 4 8)) :gv nil)       ;; Strip
-    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 b)(b a 5)(6 b a)) :gv nil)	    ;; Mobius
-    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b)))				;; Cylinder
-    (f '((1 2 3)(1 3 4)(2 3 4)(1 2 4)))								;; Tetrahedron
+    (f '((1 2)(2 3)(3 1)) :gv nil)                                  ;; Circle
+    (f '((1 2 5)(5 2 3)(5 3 6)(3 6 4)(7 1 5)(6 4 8)) :gv nil)       ;; Strip
+    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 b)(b a 5)(6 b a)) :gv nil)       ;; Mobius
+    (f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b)))               ;; Cylinder
+    (f '((1 2 3)(1 3 4)(2 3 4)(1 2 4)))                             ;; Tetrahedron
     (f '((a 2 5)(5 2 3)(5 3 6)(3 6 a)(b a 5)(6 a b) (a 20 50)(50 20 30)(50 30 60)(30 60 a)(b a 50)(60 a b)))    ;; Double cylinder
     (f '(       ;; Unfolded torus -- see Munkres page 17
          (a1 d1 f)(a1 b1 f)(b1 f c1)(c1 g a3)(a3 g d2)
@@ -4149,11 +4166,11 @@ plot "xxx" using 1:($3/10) with lines, '' using 1:4 with lines, '' using 1:($6/1
          (d f e)(e f i)(f i h)(f g h)(g j h)(i j h)(j g d)(j e d)
          (e a i)(a i b)(i b j)(b c j)(c j a)(a j e)
          ) :gv nil)
-	(f '(		;; Another Torus  https://arxiv.org/pdf/1304.7846
-		 (e i d)(e d f)(f d c)(f c g)(g c i)(g e i)
-		 (i h a)(i a d)(d a b)(d b c)(c b h)(c h i)
-		 (h e f)(h f a)(a f g)(a g b)(b g e)(b e h)
-		 ) :gv t)
+    (f '(       ;; Another Torus  https://arxiv.org/pdf/1304.7846
+         (e i d)(e d f)(f d c)(f c g)(g c i)(g e i)
+         (i h a)(i a d)(d a b)(d b c)(c b h)(c h i)
+         (h e f)(h f a)(a f g)(a g b)(b g e)(b e h)
+         ) :gv t)
     nil))
 
 
@@ -4381,32 +4398,32 @@ nes, "xxx5" with lines, "xxx6" with lines
 ;;
 (defun f (g dim-limit)
   (let ((node-dist (make-hash-table)))
-	(dolist (n (! (g get-all-nodes)))
-	  (setf (gethash n node-dist) (length (! (g get-edges) n))))
-	(let ((g1 (make-objgraph)))
-	  (dolist (e (! (g get-all-edges)))
-		(let ((e-dist (mapcad (lambda (n) (if (< (gethash n node-dist) dim-limit) nil t)) e)))
-		  (when (null e-dist)
-			(! (g1 add-edge) e))))
-	  (setq xxx g1)
-	  ($nocomment 
-	   (let ((d (make-dumper)))
-		 (! (d set-graph) g1)
-		 (! (d dump-gv-edges) "xxfft.gv" :rules nil :attrs t)
-		 (! (d gv-to-image) "xxfft"))))))
+    (dolist (n (! (g get-all-nodes)))
+      (setf (gethash n node-dist) (length (! (g get-edges) n))))
+    (let ((g1 (make-objgraph)))
+      (dolist (e (! (g get-all-edges)))
+        (let ((e-dist (mapcad (lambda (n) (if (< (gethash n node-dist) dim-limit) nil t)) e)))
+          (when (null e-dist)
+            (! (g1 add-edge) e))))
+      (setq xxx g1)
+      ($nocomment 
+       (let ((d (make-dumper)))
+         (! (d set-graph) g1)
+         (! (d dump-gv-edges) "xxfft.gv" :rules nil :attrs t)
+         (! (d gv-to-image) "xxfft"))))))
 
 (let ((n 0))
   (let ((m 3))
-	(with-redirected-stdout (and t "fftout")
-	  (lambda (s)
-		(let ((g (make-fft-test)))
-		  (time (! (g run) n))
-		  (let ((g1 (make-fft-test)))
-			(time (! (g1 run) m))
-			(let ((diff (set-subtract (! (g1 get-all-edges)) (! (g get-all-edges)))))
-			  (setq g2 (make-objgraph))
-			  (dolist (e diff)
-				(! (g2 add-edge) e)))))))))
+    (with-redirected-stdout (and t "fftout")
+      (lambda (s)
+        (let ((g (make-fft-test)))
+          (time (! (g run) n))
+          (let ((g1 (make-fft-test)))
+            (time (! (g1 run) m))
+            (let ((diff (set-subtract (! (g1 get-all-edges)) (! (g get-all-edges)))))
+              (setq g2 (make-objgraph))
+              (dolist (e diff)
+                (! (g2 add-edge) e)))))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;
@@ -4425,4 +4442,5 @@ nes, "xxx5" with lines, "xxx6" with lines
 
 ;; Local Variables:
 ;; eval: (emacs-file-locals)
+;; eval: (setq-local indent-tabs-mode nil)
 ;; End:

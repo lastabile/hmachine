@@ -86,30 +86,6 @@
   (defr
 	(defl symbol-cat (x y z)
 	  (intern (concatenate 'string (symbol-name x) (symbol-name y) (symbol-name z))))
-	(defl is-dotted-symbol (x)
-	  (search "." (symbol-name x)))
-	(defl plus1 (x)
-	  (when (numberp x)
-		(+ x 1)))
-	(defl parse-dotted-symbol (x cont)
-	  (let ((x (symbol-name x)))
-		(let ((a (intern (subseq x 0 (or (search "." x) (length x))))))
-		  (let ((b (intern (subseq x (or (plus1 (search "." x)) (length x))))))
-			(funcall cont a b)))))
-	(defl old-subst-dot-form (e)			;; Dot syntax crap. (x.y z) => (! (x y) z)
-	  e)
-	(defl subst-dot-form (e)		;; Perf? Testing shows that with no symbol processing it's a wash
-	  (cond
-	   ((and (listp e)
-			 (symbolp (first e))
-			 (is-dotted-symbol (first e)))
-		(parse-dotted-symbol (first e)
-							 (lambda (x f)
-							   `(! (,x ,f) ,@(subst-dot-form (rest e))))))
-	   ((or (null e) (numberp e) (symbolp e) (not (listp e)))		;; Numbers can have dots and we don't want numbers
-		e)
-	   (t (cons (subst-dot-form (first e))
-				(subst-dot-form (rest e))))))
 	(defl get-inherited-make-args (class-name)
 	  (let ((class-name-list (reverse (get-inheritance-chain class-name)))) ;; Get bottom-up, left-to-right
 		(let ((req-args nil))
@@ -162,6 +138,7 @@
 					  ,@(mapcar (lambda (e) (process-body e)) subexprs)
 					  ,(process-class (rest class-name-list))))))
 		(defl process-body (body)
+		  ;; (print (list 'las57 body))
 		  (let ((e body))
 			(cond ((and (listp e)
 						(listp (first e))
@@ -177,7 +154,7 @@
 			   (let ((m (gethash mname method-lookup-hash)))
 				 (lambda (x)
 				   (apply m x))))
-			(let ((body (subst-dot-form (get-body (first class-name-list)))))
+			(let ((body (get-body (first class-name-list))))
 			  (process-body body)))))
 	(add-class class-name superclass-name make-args body)									;; Need to add the class both at compile-time...
 	(let ((inherited-make-args (get-inherited-make-args class-name)))
