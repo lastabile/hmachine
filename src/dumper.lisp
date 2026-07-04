@@ -31,7 +31,7 @@
 	   (t x)))
 
 	(defm designated-rule-entry-node (rule-node)
-	  (let ((preds (! ((! (g get-rule-components) rule-node) preds))))
+	  (let ((preds (! ((! (g get-rule-components) rule-node :no-cache t) preds))))
 		(let ((s (sort preds (lambda (x y) (< (sxhash x) (sxhash y))))))
 		  (symcat nest-prefix '- (! (g hget) rule-node 'name) '- (first (first s))))))
 
@@ -506,7 +506,7 @@
 					;; (print (list 'las86 rule (! (g hget) rule 'name)))
 					(when (or (not omit-unmatched-rules)
 							  (> (! (g get-matched) rule) 0))
-					  (let ((rule-components (! (g get-rule-components) rule))
+					  (let ((rule-components (! (g get-rule-components) rule :no-cache t))
 							(rule-name (! (g hget) rule 'name)))
 						(let ((p-rule-name (symcat #| nest-prefix '- |# rule-name)))
 						  (let ((pred-edges (! (rule-components preds)))
@@ -558,7 +558,7 @@
 										(create-node-entry (first rule-edge) :rule-name p-rule-name :is-new-node-var t))
 									   ((= l 3)
 										;; (when (admit-edge (list (second rule-edge)))						;; !!!!!!!!!!!!!!!!!!!
-										(when (not (member (second rule-edge) omitted-attrs :test #'eq)) ;; Do we ever want to prune these out in rule displays?
+										(when (not (member (second rule-edge) omitted-attrs :test #'eq)) ;; Do we ever want to prune these out in rule displays? 
 										  (create-node-entry (first rule-edge) :rule-name p-rule-name)
 										  (create-node-entry (third rule-edge) :rule-name p-rule-name)
 										  (format s "\"~a-~a\" -> \"~a-~a\" [label=\"~a~a\",style=~a,fontname=arial,color=~a];~%"
@@ -856,6 +856,8 @@
 			 )))
 	  (defm get-vars ()	;; Must be overridden
 		vars)
+	  (defm base-perf-stats-info-get-vars ()
+		(get-vars))
 	  (defm get-filename ()
 		filename))))
 

@@ -72,3 +72,16 @@
   (hcload "dumper")
   (hcload "xtree-test")
   nil)
+
+;; Load base things esp perf meas compiled, everything else interp
+
+(defun load-mixed (&key (warnings nil))
+  (hcload "base-utils")
+  (hcload "utils")
+  (hcload "file-utils")
+  (hcload "hoss")
+  (hcload "top-obj")
+  (hcload "h")
+  (hcload "dumper")
+  (hiload "xtree-test")
+  nil)

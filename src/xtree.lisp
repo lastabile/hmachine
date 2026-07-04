@@ -142,12 +142,12 @@
   (?nn1 ul ?x)	;; ul = up-left
   (?nn1 l ?l1)
   (?nn1 top ?t)
-  (?nn1 is treeobj)
+  ;; (?nn1 is treeobj)
   (?nn2 aup ?x)
   (?nn2 ur ?x)	;; ur = up-right
   (?nn2 l ?l1)
   (?nn2 top ?t)
-  (?nn2 is treeobj)
+  ;; (?nn2 is treeobj)
   (?nn1 tree-next ?nn2)
   ))
 
@@ -158,12 +158,13 @@
   (tree-top top ?x levels ?l))
  (add
   (print tree-top-rule ?x ?l)
-  (?x is treeobj)
+  ;; (?x is treeobj)
   (?x l ?l)
   (?x top)
   (?x top ?x)
   ))
 
+(comment
 (rule
  (name treeobj-rule)
  (attach-to global-node)
@@ -199,6 +200,7 @@
   )
  (del
   (global-node rule ?this-rule)))
+)
 
 
 

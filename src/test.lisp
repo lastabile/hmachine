@@ -29,7 +29,7 @@
 ;; Basic test/benchmark, with deltas and rule-30
 
 (let ((n 3))
-  (with-redirected-stdout (and t "fftout")
+  (with-redirected-stdout (or nil "fftout")
     (lambda (s)
       (setq g (make-fft-test))
       (! ((! (g get-edge-to-trace)) init-trace) g)
@@ -43,7 +43,7 @@
 
 (let ((n 3))
   (let ((m 3))
-    (with-redirected-stdout (and t "fftout")
+    (with-redirected-stdout (or nil "fftout")
       (lambda (s)
         (setq g (make-fft-test))
         (mapcar (lambda (r) (! (g add-edge) `(,(first r) disabled)))
@@ -137,7 +137,7 @@
 ;;
 
 (let ((n 3))
-  (with-redirected-stdout (and t "fftout")
+  (with-redirected-stdout (or nil "fftout")
     (lambda (s)
       (setq g (make-pure-fft-test))
       (let ((*print-tags* (and nil t)))
@@ -435,7 +435,7 @@
                        (del
                         (global-node rule ?this-rule))))
   (time
-   (with-redirected-stdout (and t "fftout")
+   (with-redirected-stdout (or nil "fftout")
      (lambda (s)
        (timer 'main
          (lambda ()
@@ -872,7 +872,7 @@
 (dotimes (i 7)
 
 (let ((n i))
-  (with-redirected-stdout (and t "fftout")
+  (with-redirected-stdout (or nil "fftout")
     (lambda (s)
       (setq g (make-fft-test))
       ;; (! (g break-rule) 'weave-next-rule t (lambda (trace-info) (print (list 'w1 (mapcad (lambda (x) (when (! (g edge-exists) x) x)) (! (g superqets) '(weave-next-root)))))))
@@ -938,7 +938,7 @@
 ;; Tree test
 
 (let ((n 3))
-  (with-redirected-stdout (and t "treeout")
+  (with-redirected-stdout (or nil "treeout")
     (lambda (s)
       (setq g (make-tree-test))
       (! ((! (g get-edge-to-trace)) init-trace) g)
@@ -955,37 +955,6 @@
       (! (d gv-to-image) "tree"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; xtree test -- prep for GA experiment
-
-(let ()
-  (clear-counters)
-  (clear-perf-stats)
-  (setq rule-names '(tree-loop-rule tree-max-rule tree-next-level0-rule tree-next-rule tree-rule tree-span-rule tree-top-order-rule tree-top-rule tree-zero-rule))
-  (let ((n 3))
-    (with-redirected-stdout (and t "treeout")
-      (lambda (s)
-        (setq g (make-xtree-test))
-        (! ((! (g get-edge-to-trace)) init-trace) g)
-        ;; (! (g trace-rule) 'tree-loop-rule)
-        (time (! (g run) n)))))
-  (let ((n 3))
-    (with-redirected-stdout (and t "treeout1")
-      (lambda (s)
-        (setq g1 (make-xtree-test))
-        (! ((! (g1 get-edge-to-trace)) init-trace) g1)
-        ;; (! (g1 trace-rule) 'tree-loop-rule)
-        (time (! (g1 run) n)))))
-  (setq r (! (g hget-all-list) rule-names '((inv name))))
-  (setq x (make-gene r g))
-  (setq r1 (! (g1 hget-all-list) rule-names '((inv name))))
-  (setq x1 (make-gene r1 g1))
-  )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 ;; fe-rule-test
 
@@ -2749,7 +2718,7 @@ color-color
               (lambda (std)
                 (! (g run) n)))))
     (let ((n 3))
-      (with-redirected-stdout (and t "fftout")
+      (with-redirected-stdout (or nil "fftout")
         (lambda (s)
           (setq g (make-fft-test))
           (! ((! (g get-edge-to-trace)) init-trace) g)
@@ -4256,7 +4225,7 @@ nes, "xxx5" with lines, "xxx6" with lines
 (dotimes (i 7)
   (let ((n i))
     (with-redirected-stdout
-     (and t "fftout")
+     (or nil "fftout")
      (lambda (s)
        (setq g (make-fft-test))
        (! ((! (g get-edge-to-trace)) init-trace) g)
@@ -4414,7 +4383,7 @@ nes, "xxx5" with lines, "xxx6" with lines
 
 (let ((n 0))
   (let ((m 3))
-    (with-redirected-stdout (and t "fftout")
+    (with-redirected-stdout (or nil "fftout")
       (lambda (s)
         (let ((g (make-fft-test)))
           (time (! (g run) n))

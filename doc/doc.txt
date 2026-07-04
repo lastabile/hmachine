@@ -1143,6 +1143,42 @@ This is somewhat interesting in that each method in a class can be in
 its own closure in a tree of envs, each part of the same object. The
 method refers to the local scope and higher.
 
+
+Addendum 6/29/26
+----------------
+
+A major flaw was discovered with the nested defms, in that when they
+appear in a superclass they cause nested classes to do process-class
+again, thus repeating much setup of local fcns and methods. It also
+returned the basic lambda-expr, which is discarded except for one.
+
+The solution was to check if a list of clasa names was already
+processed, and return nil if so. This also resulted in noting that the
+lambda-expr to be returned was a constant, and thus could be moved to
+the main defc-fcn.
+
+Build is clearly much faster, but other tests -- well maybe but still
+checking.
+
+Yes, runtime not much faster. Also looked at trimming stuff down in
+Hoss, and came up with this:
+
+ - We don't need to generate class-methods, e.g., if x inherits from
+   y, and x defines f, then we make x-f as well as f. This is not
+   really needed except for init(), so that's left in. Else, if you
+   want the super to be exposed, define an explicit method. So we
+   eliminate a local def and a method entry.
+
+- Support "super"? Detect maybe via ! macro?
+
+		(! (g x) y z)
+
+		(! (self x) y z)
+
+		(! (super x) y z)
+
+
+
 ----------------------------------------------------------
 2/15/17 -- Got rid of partial-match code based on envs and cross-aux2
 
