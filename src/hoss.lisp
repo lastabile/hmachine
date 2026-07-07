@@ -96,7 +96,8 @@
 	  (defc-fcn class-name superclass-name make-args body)))
 
 (defun defc-fcn (class-name superclass-name make-args body)
-  (let ((method-name-table (make-hash-table :test #'eq)))
+  (let ((method-index-table (make-hash-table :test #'eq))
+		(method-index 0))
 	(defr
 	  (defl symbol-cat (x y z)
 		(intern (concatenate 'string (symbol-name x) (symbol-name y) (symbol-name z))))
@@ -126,7 +127,8 @@
 											(let ((method-name (second d))
 												  (args (third d))
 												  (class-name (first class-name-list)))
-											  (setf (gethash method-name method-name-table) t)
+											  (setf (gethash method-name method-index-table) method-index)
+											  (setq method-index (+ method-index 1))
 											  (let ((class-method-name (symbol-cat class-name '- method-name)))
 												`(,@(when (eq method-name 'init)
 													  `((,class-method-name (&rest all-args) (apply (function ,method-name) all-args))))
@@ -148,9 +150,9 @@
 											  (class-name (first class-name-list)))
 										  (let ((class-method-name (symbol-cat class-name '- method-name)))
 											`(let ()
-											   (setf (gethash ',method-name method-lookup-hash) (function ,method-name))
-											   ;; 6/30/26 Removed this as it's very unlikely to be invoked from outside the class
-											   #| (setf (gethash ',class-method-name method-lookup-hash) (function ,method-name)) |# )))))
+											   #| (setf (gethash ',method-name method-lookup-hash) (function ,method-name)) |#
+											   (setf (svref method-vector ,(gethash method-name method-index-table))
+													 (function ,method-name)))))))
 								  defms)
 						,@(mapcar (lambda (e) (process-body e)) subexprs)
 						,(process-class (rest class-name-list))))))
@@ -175,19 +177,23 @@
 	  (add-class class-name superclass-name make-args body)								;; Need to add the class both at compile-time...
 	  (let ((inherited-make-args (get-inherited-make-args class-name)))
 		(let ((processed-class (process-class (get-inheritance-chain class-name))))
-		  (let ((hash-size (nearest-prime-greater-than (* 3 (hash-table-count method-name-table)))))
-			`(let ()
-			   (add-class ',class-name ',superclass-name ',make-args ',body)			;; ...and run time. -- ?? Is this still useful?
+		  (let ((hash-size (nearest-prime-greater-than (* 3 (hash-table-count method-index-table)))))
+			`(let ((method-index-lookup-hash (make-hash-table :test #'eq :size ,hash-size)))
+			   (let ()
+				 ,@(mapcar (lambda (method-name) `(setf (gethash ',method-name method-index-lookup-hash) ,(gethash method-name method-index-table)))
+						   (hash-table-key-to-list method-index-table)))
+			   (add-class ',class-name ',superclass-name ',make-args ',body)			;; ...and run time (i.e., load-time). Is this still useful?
 			   (defun ,(intern (format nil "MAKE-~a" class-name)) (,@inherited-make-args)
-				 (add-make-call ',class-name) ;; Activate this to record class stats
-				 (let ((method-lookup-hash (make-hash-table :test #'eq :size ,hash-size)))
+				 ;; (add-make-call ',class-name) ;; Activate this to record class stats
+				 (let ((method-vector (make-array ,method-index)))
 				   (declare (optimize (speed 3)))
 				   (let ()
 					 ,processed-class
-					 (let ((self (lambda (mname)
-								   (let ((m (gethash mname method-lookup-hash)))
-									 (lambda (x)
-									   (apply m x))))))
+					 (let ((self
+							(lambda (mname)
+							  (let ((m (svref method-vector (gethash mname method-index-lookup-hash))))
+								(lambda (x)
+								  (apply m x))))))
 					   (! (self set-self) self)
 					   (! (self init))
 					   self)))))))))))
