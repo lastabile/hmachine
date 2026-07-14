@@ -184,7 +184,7 @@
 						   (hash-table-key-to-list method-index-table)))
 			   (add-class ',class-name ',superclass-name ',make-args ',body)			;; ...and run time (i.e., load-time). Is this still useful?
 			   (defun ,(intern (format nil "MAKE-~a" class-name)) (,@inherited-make-args)
-				 ;; (add-make-call ',class-name) ;; Activate this to record class stats
+				 (add-make-call ',class-name) ;; Activate this to record class stats
 				 (let ((method-vector (make-array ,method-index)))
 				   (declare (optimize (speed 3)))
 				   (let ()

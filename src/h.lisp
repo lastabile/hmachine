@@ -1530,7 +1530,7 @@
 							  (setq r (cons (if edge sup (third sup)) r)))))))
 				  r))))))
 
-	  (defm get-rule-components (rule-node &key no-cache)
+	  (defm get-rule-components (rule-node &key (no-cache nil))
 		(! (self get-rule-components-aux) rule-node no-cache))
 
 	  (defm invalidate-rule-components-cache-entry (rule-node)

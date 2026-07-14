@@ -1,32 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ($comment
  
 (let ()
@@ -239,35 +211,37 @@
       (defm as-list ()
         (list to-rulename to-var rulename-to-add)))))
 
-($comment
- (defstruct (rule-var-add-nuc (:conc-name nuc-))
-   to-rulename
-   to-var
-   rulename-to-add
-   rulenames
-   nrules
-   mutate-prob-space-size)
-
- (defun make-nuc (to-rulename to-var rulename-to-add rulenames)
-   (let ((nuc (make-rule-var-add-nuc
-               :to-rulename to-rulename :to-var to-var
-               :rulename-to-add rulename-to-add :rulenames rulenames)))
-     (let ((nrules (length rulenames)))
-       (let ((mutate-prob-space-size (* 2 nrules)))
-         (setf (nuc-nrules nuc) nrules)
-         (setf (nuc-mutate-prob-space-size nuc) mutate-prob-space-size)
-         nuc))))
-
- (defun nuc-mutate (nuc)
-   (timer 'nuc-mutate-defstruct
-     (lambda ()
-       (let ((new-rulename (rand-select (nuc-rulenames nuc) (nuc-mutate-prob-space-size nuc))))
-         (when new-rulename
-           (setf (nuc-rulename-to-add nuc) new-rulename))))))
-
- (defun nuc-as-list (nuc)
-   (list (nuc-to-rulename nuc) (nuc-to-var nuc)(nuc-rulename-to-add nuc)))
- )
+(defc new-org nil (gene)
+  (let ((n 3)
+        (kpis nil)
+        (g nil)
+        (n-goal-edges 33.0))
+    (defm get-g ()      ;; Debug
+      g)
+    (defm distribute ()
+      (! (gene distribute) g)
+      (! (g clear-rule-components-cache)))
+    (defm progress ()
+      (let ((l (length (union (! (g query) '((?x1 next ?x2)) :edges)
+                              (union (! (g query) '((?x1 tree-next ?x2)) :edges)
+                                     (! (g query) '((?x1 aup ?x2)) :edges))))))
+        (/ l n-goal-edges)))
+    (defm get-stored-kpis ()
+      kpis)
+    (defm run ()
+      (clear-counters)
+      (clear-perf-stats)
+      (setq g (make-base-graph))
+      (! (g add-natural-number-edges) n)
+      (! (g read-rule-file) "xtree.lisp")
+      (! (g add-edge) `(tree-top top x levels ,n))
+      (! (g clear-rule-components-cache))
+      (with-redirected-stdout (and nil "treeout")
+                              (lambda (s)
+                                (timer 'main
+                                  (lambda ()
+                                    (! (g execute-global-all-objs-loop))))))
+      (setq kpis (list (progress) (get-kpis))))))
 
 (defc org nil (rulenames)
   (let ((n 3)
