@@ -4409,6 +4409,11 @@ nes, "xxx5" with lines, "xxx6" with lines
 
 (! (g query) '((?r1 type rule)(?r1 name ?n1)(?r2 type rule)(?r2 name ?n2)(?r1 attach-to ?u)(?r1 pred ?x ?a ?y)(?r2 add ?z ?a ?t)))
 
+
+
+
+
+
 ;; Local Variables:
 ;; eval: (emacs-file-locals)
 ;; eval: (setq-local indent-tabs-mode nil)

@@ -87,6 +87,7 @@
 ;;
 ;; qets-to-seqs -- Conversion of qets to seqs, e.g., optimize/dump qet-utils class.
 ;;				   5/21/23 -- Discharged. qet-utils class is gone. is-subqet now just uses CL search, and is a graph method.
+;;				   7/21/26 -- Note we're really using (non-circular) substrings here now.
 ;;
 ;; dump-sn -- Remove the old "sn" new-node model. Can be simpler now, say, e.g., just (?nn1 new-node).
 ;;
@@ -494,7 +495,7 @@
 	  (defm get-superqet-map ()	;; Debug only
 		superqet-map)
 
-	  (defm add-subqets (edge)	;; qets-to-seqs -- subseqs, not subqets (subsets)
+	  (defm add-subqets (edge)	;; qets-to-seqs -- substrings, not subseqs, not subqets (subsets)
 		(let ((subqet-table (make-hash-table :test #'equal :size 13)))	
 		  (defr
 			(defl first-n (l n)

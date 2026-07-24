@@ -85,7 +85,7 @@
   (seqno 0)
   (value 0))
 
-(let ((perf-hash (make-hash-table :test #'eq)))
+(let ((perf-hash (make-hash-table :test #'eq :size 4013 )))
   (let ((log-stat-list nil))
 	(let ((seqno 0))
 	  (let ((display-order ;; Any not in this list go on the end
@@ -302,6 +302,11 @@
 					(fail (div (float (- tested matched)) (float tested))))
 				(list eff red fail)))))
 		(defun get-perf-hash () perf-hash)))))
+
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Set functions
