@@ -954,6 +954,19 @@
          )
       (! (d gv-to-image) "tree"))
 
+
+;; This test shows efficiency improving with size
+
+(with-redirected-stdout (or nil "treeout")
+                        (lambda (s)
+                          (dotimes (n 8)
+                            (let ((n (+ n 1)))
+                              (setq g (make-tree-test))
+                              (! ((! (g get-edge-to-trace)) init-trace) g)
+                              ;; (! (g trace-rule) 'tree-loop-rule)
+                              (time (! (g run) n))
+                              (perf-stats)
+                              (! (g rule-stats) :sort 12)))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; fe-rule-test

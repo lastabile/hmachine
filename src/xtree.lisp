@@ -1,18 +1,6 @@
 
 
 (rule
- (name is)
- (attach-to is)
- (pred
-  (?x is ?y)
-  (?y has rule ?r))
- (add
-  (print is ?x ?y ?r)
-  (?x rule ?r))
- (del
-  (?x is ?y)))
-
-(rule
  (name tree-next-level0-rule)
  (local)
  (pred
@@ -142,12 +130,10 @@
   (?nn1 ul ?x)	;; ul = up-left
   (?nn1 l ?l1)
   (?nn1 top ?t)
-  ;; (?nn1 is treeobj)
   (?nn2 aup ?x)
   (?nn2 ur ?x)	;; ur = up-right
   (?nn2 l ?l1)
   (?nn2 top ?t)
-  ;; (?nn2 is treeobj)
   (?nn1 tree-next ?nn2)
   ))
 
@@ -158,50 +144,10 @@
   (tree-top top ?x levels ?l))
  (add
   (print tree-top-rule ?x ?l)
-  ;; (?x is treeobj)
   (?x l ?l)
   (?x top)
   (?x top ?x)
   ))
-
-(comment
-(rule
- (name treeobj-rule)
- (attach-to global-node)
- (pred
-  (global-node local-rule-pool ?p)
-  (?p lrp-rule ?tree-next-rule)
-  (?tree-next-rule name tree-next-rule)
-  (?p lrp-rule ?tree-next-level0-rule)
-  (?tree-next-level0-rule name tree-next-level0-rule)
-  (?p lrp-rule ?tree-rule)
-  (?tree-rule name tree-rule)
-  (?p lrp-rule ?tree-top-order-rule)
-  (?tree-top-order-rule name tree-top-order-rule)
-  (?p lrp-rule ?tree-loop-rule)
-  (?tree-loop-rule name tree-loop-rule)
-  (?p lrp-rule ?tree-span-rule)
-  (?tree-span-rule name tree-span-rule)
-  (?p lrp-rule ?tree-zero-rule)
-  (?tree-zero-rule name tree-zero-rule)
-  (?p lrp-rule ?tree-max-rule)
-  (?tree-max-rule name tree-max-rule)
-  )
- (add
-  (print treeobj-rule)
-  (treeobj has rule ?tree-next-level0-rule)
-  (treeobj has rule ?tree-next-rule)
-  (treeobj has rule ?tree-rule)
-  (treeobj has rule ?tree-top-order-rule)
-  (treeobj has rule ?tree-loop-rule)
-  (treeobj has rule ?tree-span-rule)
-  (treeobj has rule ?tree-zero-rule)
-  (treeobj has rule ?tree-max-rule)
-  )
- (del
-  (global-node rule ?this-rule)))
-)
-
 
 
 ;; Local Variables:
