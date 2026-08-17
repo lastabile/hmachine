@@ -56,6 +56,7 @@
                         (! (org run))
                         (setq g (! (org get-g)))
                         (let ((k (! (org get-stored-kpis))))
+                          ;; (print (list 'result-kpis k))         ;; LAS
                           (when (= (first k) 1.0)
                             (let ((s (list gene k)))
                               (push s survivors)))))))
@@ -123,7 +124,7 @@
   (let ((g graph-for-rules)
         (inh-mutate nil))
     (let ((nuclist nil))
-      (dotimes (i 2) ;; 5 ;; LAS
+      (dotimes (i 3) ;; 5 ;; LAS
         (dolist (rulename rulenames)
           (let ((rule (! (g hget-inverse) rulename 'name)))
             (let ((rc (! (g get-rule-components) rule :no-cache t)))
