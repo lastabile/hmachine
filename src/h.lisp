@@ -1218,26 +1218,6 @@
 					  (ptag 'eo-success node)))
 				  (let ((failed-rules (set-subtract (get-all-rules) successful-rules)))		;; Note failed-rules will not include those just deleted (which may have failed)
 					(ptag 'eo-match-status node match-status)
-					
-					($comment
-					 ;; LAS42
- 					 (when r
- 					   (add-edge (list node 'execed)) ;; Exec'ed and added new edges
- 					   (add-edge (list (hget 'global-node 'prev-exec) 'next-exec node))
- 					   (dolist (e (get-edges-from-subqet '(global-node prev-exec))) (rem-edge e))
- 					   (add-edge (list 'global-node 'prev-exec node))
-					   ($nocomment ;; e1
-						(print (list 'las42 (get-edges-from-subqet (list node 'execed-rules))))
-						(let ((new-e (cons node (cons 'execed-rules (hunion (rest (rest (get-edges-from-subqet (list node 'execed-rules))))  successful-rules)))))
-						  (dolist (e (get-edges-from-subqet `(,node execed-rules))) (rem-edge e))
-						  (add-edge new-e)))
-					   ($comment ;; e2
-						(when (null (get-edges-from-subqet `(,node execed-rules)))
-						  (let ((new-e (cons node (cons 'execed-rules successful-rules))))
-							(add-edge new-e))))
-					   )
-					 )
-					
 					(funcall cont r match-status matched-edges successful-rules failed-rules))))))))
 
 	  (defm execute-all-objs (&key (rule-mode :local-global))
@@ -1644,8 +1624,9 @@
  	  ;; Calls (cont <edge-creation-status> <matched-edges-list> <deleted-edges> <matched-and-new-edges-per-env>)
 	  ;; <edge-creation-status> == t if any new edges were created, else nil
 	  ;; <matched-edges-list> == edges matched, of form (edges ...), one set of edges for each env 
-	  ;; <matched-and-new-edges-per-env> ==  ((matched-edges new-edges) ...)   One set per env, where matched-edges and new-edges here are just straight lists thereof
-	  ;;																	Note can get overlap: Only want to add edge once; thus, pick an arbitrary env if it appears in more than one.
+	  ;; <matched-and-new-edges-per-env> ==  ((matched-edges new-edges) ...)	One set per env, where matched-edges and new-edges here are just straight lists thereof.
+	  ;;																		Note can get overlap: Only want to add edge once;
+	  ;;																		thus, pick an arbitrary env if it appears in more than one.
 	  ;;
 	  ;; new-rule-format: Do any sets of lists say preds/edges need to track in order anymore?
 
@@ -2848,7 +2829,7 @@
 							((eq clause-type 'root-var)
 							 (let ((root-var (second clause)))
 							   (pushe (add-edge (list rule 'root-var root-var)))))
-							((eq clause-type 'distinct-vars)
+							((eq clause-type 'distinct-vars)	;; distinct-vars is either t or nil, with default nil
 							 (let ((v (second clause)))
 							   (pushe (add-edge (list rule 'distinct-vars v)))))
 							((eq clause-type 'no-triggered)
@@ -3966,7 +3947,10 @@
 					   ("redundancy%"		"~,2f~vt"	,(lambda (e) (div (* (float (rule-stats-entry-not-new-edges e)) 100) (float (rule-stats-entry-tested e)))))
 					   ("failure%"			"~,2f~vt"	,(lambda (e) (div (* (float (rule-stats-entry-failed e)) 100) (float (rule-stats-entry-tested e)))))
 					   ))))
-
+		(defm col-info-name-to-pos (name)
+		  (position name full-col-info-list
+					:test (lambda (name col-info)
+							(equal (string-downcase (symbol-name name)) (col-info-name col-info)))))
 		(defm get-entry (rule-node)
 		  (let ((entry (! (rule-stats-table lookup-one) rule-node)))
 			(if (null entry)
@@ -4244,8 +4228,8 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes   LAS
 			  (macrolet ((xprint (tag &rest x)
-								  nil
-								  ;; `(ptag ,tag ,@x)
+						   ;; nil
+						   `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
@@ -4390,7 +4374,7 @@
 									(return-from b nil))))
 							  t))
 						  (defl doloop (lvl cnt ks env-chain)
-							(xprint 's1 ks lvl cnt doloop-cnt)
+							(xprint 's1 lvl cnt doloop-cnt ks)
 							(xprint 's14 env-chain)
 							(setq doloop-cnt (+ doloop-cnt 1))
 							(if (and (check-consts ks)
@@ -5278,6 +5262,46 @@
 	  (read-rule-file "tree.lisp")
 	  (read-rule-file "rule30.lisp")
 	  (read-rule-file "fft-delta.lisp")
+	  )
+	(defm run (fft-n &key (rule-30-levels fft-n) (rule-mode :local-global))
+	  (define-rule `(rule
+					 (name init)
+					 (attach-to global-node)
+					 (pred
+					  (global-node rule ?r)
+					  (?r name init))
+					 (add
+					  (print init)
+					  (r level ,rule-30-levels)
+					  (r rule-30-top)
+					  (tree-rule x ,fft-n)
+					  (x fft-top)
+					  (x fft xfft)
+					  (x level ,fft-n)
+					  (x color navajowhite)
+					  (x rand r)
+					  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
+					  (x local-rule-pool local-rule-pool-node)
+					  (r local-rule-pool local-rule-pool-node)
+					  ;; (queue x r)
+					  )
+					 (del
+					  (global-node rule ?this-rule))))
+	  (add-natural-number-edges (max fft-n rule-30-levels))
+	  (! ((get-edge-to-trace) init-trace) self)
+	  (timer 'main
+		(lambda ()
+		  (execute-global-all-objs-loop))))))
+
+(defc no-delta-fft-test foundation nil
+  (let ()
+	(defm init ()
+	  (clear-counters)
+	  (clear-perf-stats)
+	  (foundation-init)
+	  (read-rule-file "fft.lisp")
+	  (read-rule-file "tree.lisp")
+	  (read-rule-file "rule30.lisp")
 	  )
 	(defm run (fft-n &key (rule-30-levels fft-n) (rule-mode :local-global))
 	  (define-rule `(rule

@@ -67,7 +67,7 @@
 
 (rule
  (name fft-rule-delta4)		;; Propagate color and rand along weave-next
- (attach-to center-up)		;; Attching here Appears to help most with queuing
+ (attach-to center-up)		;; Attaching here appears to help most with queuing
  (pred
   (?x weave-next ?y)
   (?x color ?c)

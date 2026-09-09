@@ -147,8 +147,38 @@
 
 (let ((d (make-dumper)))
       (! (d set-graph) g)
-      (! (d dump-gv-edges) "xxfft.gv" :rules nil :attrs '(fft-hb fft-comb odd even d))
+      (! (d dump-gv-edges) "xxfft.gv" :rules nil
+         ;; :attrs '(fft-hb fft-comb odd even d)
+         :attrs-fcn
+         (lambda (e)  (and (intersect e '(fft-hb fft-comb odd even d) #|'(is-elem-of odd ref ran zero)|# )
+                           (or (<= (length e) 3) (memq (! (g hget) (fourth e) 'name) '(odd-zero odd-next odd-new))))))
       (! (d gv-to-image) "xxfft"))
+
+
+(let ()
+  (defr
+    (defl f (n)
+      (let ((n n))
+        (setq g (make-pure-fft-test))
+        (time (! (g run) n))))
+    (with-redirected-stdout "fftperf"
+      (lambda (orig-stdout)
+          (let ((n 9))
+            (time
+             (dotimes (i n)
+               (print (list '************* i) orig-stdout)
+               (load-compiled)
+               (gc)
+               (f i)
+               (perf-stats)
+               (! (g rule-stats))
+               (room t)))))))
+  ($comment
+     (let ()
+       (setq gp (make-gnuplot))
+       (! (gp plot-log) (make-fft-perf-stats-info))))
+
+    )
 
 ;; 8/3/23 parameterize tree-rule and fft-rule
 
@@ -317,7 +347,7 @@
                               (?r name init))
                              (add
                               (print init)
-                              (r level ,(* 1 n))
+                              (r level 10) ;; (r level ,(* 1 n))
                               (r rule-30-top)
 
                               ;; (x is treetopobj levels ,n)        ;; Supports global-tree.lisp
@@ -351,13 +381,13 @@
 
     (with-redirected-stdout "fftperf"
       (lambda (orig-stdout)
-          (let ((n 30)) ;; 7 ;; 9
+          (let ((n 9)) ;; 10
             (time
              (dotimes (i n)
                (print (list '************* i) orig-stdout)
                (load-compiled)
                (gc)
-               (f 3) ;; (f i)
+               (f i)
                (perf-stats)
                (! (g rule-stats))
                (room t)))))))
@@ -908,20 +938,36 @@
 ;; dfft is just the dataflow part, no butterflies. That's quite
 ;; simple and we don't need the tree, odd-even, or rule30.
 
-(let ((n 6))
-  (setq g (make-the-graph))
-  (! (g read-rule-file) "xdfft.lisp")
-  (mapcar (lambda (e) (! (g add-edge) e))
-          `((x fft xfft)
-            (x level ,n)
-            (x color navajowhite)))
-  (timer 'main
-    (lambda ()
-      (! (g execute-global-all-objs-loop))
-      )))
+(let ((n 4))
+  (with-redirected-stdout (or nil "dfftout")
+    (lambda (s)
+      (clear-counters)
+      (clear-perf-stats)
+      (setq g (make-foundation))
+      (! (g read-rule-file) "dfft.lisp")
+      (mapcar (lambda (e) (! (g add-edge) e))
+              `((x fft xfft)
+                (x level ,n)
+                (x fft-top)
+                (x color navajowhite)
+                (x rule ,(! (g query) '((?r type rule)(?r name fft-color-rule)) '?r))
+                #|
+                (odd style invis)
+                (even style invis)
+                (d style invis)
+                (fft-comb style invis)
+                |#
+                ))
+      (timer 'main
+        (lambda ()
+          (time 
+           (! (g execute-global-all-objs-loop)))
+          )))))
 
-
-
+(let ((d (make-dumper)))
+      (! (d set-graph) g)
+      (! (d dump-gv-edges) "dfft.gv" :rules nil :attrs '(fft-comb odd even d))
+      (! (d gv-to-image) "dfft"))
 
 
 (let ()
@@ -2505,7 +2551,8 @@ Gerry S
       (clear-perf-stats)
       (setq g (make-rule-30-test))
       (! ((! (g get-edge-to-trace)) init-trace) g)
-      (time (! (g run) 200)))))
+      (let ((*print-tags* '(S17 S0 S10 S2 S4 S14 S1 S9 S16 S11 S18)))
+        (time (! (g run) 200))))))
 
 (let ((n 5))    ;; 3
   (clear-counters)
@@ -2958,6 +3005,8 @@ color-color
   ($nocomment
    (let ()
      (setq z (! (g edge-trace-rule-graph)))
+     (! (z read-rule-file) "rule-dep.lisp")
+     (! (z execute-global-all-objs-loop))
      (let ((d (make-dumper)))
        (! (d set-graph) z)
        (! (d dump-gv-edges) "z.gv"
@@ -2968,7 +3017,7 @@ color-color
                            ;; 
                            ))
        (! (d gv-to-image) "z" :edit-svg t))))
-  ($nocomment
+  ($comment
    (let ()
      (setq y (! (g edge-trace-graph)
                 :rules-fcn (lambda (r) (or nil (memq r '(
@@ -4406,6 +4455,17 @@ nes, "xxx5" with lines, "xxx6" with lines
               (setq g2 (make-objgraph))
               (dolist (e diff)
                 (! (g2 add-edge) e)))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;
+;; Utils
+;;
+
+(defun rule-pred-clause (rule-name)
+  `((?p lrp-rule ,(symcat '? rule-name))
+    (,(symcat '? rule-name) name ,rule-name)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;

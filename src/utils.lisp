@@ -57,16 +57,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (let ((mi (machine-instance)))
-  (let ((r (equal (string-downcase (subseq mi 0 (search " " mi))) "guildenstern")))
-	(let ((l (equal (string-downcase (subseq mi 0 (search " " mi))) "gertrude")))
+  (let ((mi-str (string-downcase (subseq mi 0 (search " " mi)))))
+	(mlet (((ge gu r p)
+			(list (equal mi-str "gertrude") (equal mi-str "guildenstern")
+				  (equal mi-str "rosencrantz") (equal mi-str "polonius"))))
 	  (defun is-laptop ()
-		l)
+		ge)
 	  (defun is-desktop ()
-		r)
+		(or gu r p))
 	  (defun is-large-monitor ()
-		r)
+		(or gu r p))
 	  (defun is-small-monitor ()
-		l))))
+		ge))))
 
 ;;;;;;;;;;;;;
 ;; Perf Stats
@@ -217,7 +219,11 @@
 					  (not-new-edges (timerec-sum (or (gethash 'me-matched-not-new-edges perf-hash) (make-timerec))))
 					  (tested (timerec-sum (or (gethash 'me-tested perf-hash) (make-timerec))))
 					  (matched (timerec-sum (or (gethash 'me-matched perf-hash) (make-timerec)))))
-				  (setf (timerec-sum eff) (div (float new-edges) (float tested)))
+
+				  ;; 9/3/26 Changed these three measures to show true percentage rather than a fraction. Easier then to
+				  ;; read in gnuplot.
+				  
+				  (setf (timerec-sum eff) (* 100 (div (float new-edges) (float tested))))
 				  (setf (timerec-count eff) 1)
 
 				  ;; We used to calc it this way, and in some sense it's better than not-new-edges/tested, since it
@@ -226,10 +232,10 @@
 				  ;;
 				  ;; (setf (timerec-sum red) (div (float not-new-edges) (float matched)))
 
-				  (setf (timerec-sum red) (div (float not-new-edges) (float tested)))
+				  (setf (timerec-sum red) (* 100 (div (float not-new-edges) (float tested))))
 				  (setf (timerec-count red) 1)
 
-				  (setf (timerec-sum fail) (div (float (- tested matched)) (float tested)))
+				  (setf (timerec-sum fail) (* 100 (div (float (- tested matched)) (float tested))))
 				  (setf (timerec-count fail) 1)
 
 				  (setf (gethash 'me-efficiency perf-hash) eff)
@@ -268,7 +274,7 @@
 									(sum-time (/ (float sum) units))
 									(max-time (/ (float max) units)))
 								(format t
-										"||~a~vt~a~vt~a~vt~a~vt~a~%"
+										"||~a~vt~,3g~vt~,3g~vt~a~vt~,3g~%" ;; "||~a~vt~a~vt~a~vt~a~vt~a~%"
 										name (+ m 5) avg-time (+ m 5 (* d 1)) max-time (+ m 5 (* d 2)) count (+ m (* d 3)) sum-time)))))))))
 				(format t "~%")
 				nil))))
@@ -285,6 +291,8 @@
 							 (setq l (cons (list name timerec) l)))))
 					   perf-hash)
 			  (mapcar (lambda (e) (first e)) (sort l (lambda (e1 e2) (> (get-sum (second e1)) (get-sum (second e2)))))))))
+		(defun perf-stats-colname-to-colno (name)
+		  (position name '(avg max count sum)))
 		(defun clear-perf-stats ()
 		  (setq perf-hash (make-hash-table :test #'eq))
 		  (setq log-stat-list nil)
@@ -735,6 +743,16 @@
 			 h)
 	r))
 
+;;   Shallow copy
+
+(defun hash-table-copy (table)
+  (let ((new-table (make-hash-table :test (hash-table-test table)
+                                    :size (hash-table-size table))))
+    (maphash (lambda (key value)
+               (setf (gethash key new-table) value))
+             table)
+    new-table))
+
 ;; Hash table test defs -- implementation-dependent
 
 (defun hdefine-hash-table-test (equality-fcn hash-fcn)
@@ -806,7 +824,9 @@
 
 (defun shell-script-file (script-file)
   (print script-file)
-  (run-program "bash" :arguments (list "-o" "igncr" script-file)))		;; Takes a script file name
+  (if (is-laptop)
+	  (run-program "bash" :arguments (list "-o" "igncr" script-file))		;; Takes a script file name
+	  (run-program "bash" :arguments (list script-file))))
 
 (defun shell-cmd (cmd)
   (print (format nil cmd))

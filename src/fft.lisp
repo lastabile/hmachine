@@ -117,12 +117,10 @@
   (?e0 value ?v)
   (?nn1 new-node sn1)
   (?e0 local-rule-pool ?p)
-  (?p lrp-rule ?even-zero)
-  (?p lrp-rule ?odd-next)
+  ;; (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
   (?p lrp-rule ?odd-new)
-  (?even-zero name even-zero)
-  (?odd-next name odd-next)
+  ;; (?odd-next name odd-next)
   (?even-next name even-next)
   (?odd-new name odd-new)
   )
@@ -139,8 +137,7 @@
   (?nn1 local-rule-pool ?p)
 
   (?nn1 xis ev-od-obj)
-  (?nn1 rule ?even-zero)
-  (?nn1 rule ?odd-next)
+  ;; (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
   (?nn1 rule ?odd-new)
   ;;;; (?nn1 rule ?this-rule)
@@ -184,13 +181,11 @@
   (?e0 value ?v)
   (?nn1 new-node sn1)
   (?e0 local-rule-pool ?p)
-  (?p lrp-rule ?odd-zero)
-  (?p lrp-rule ?odd-next)
+  ;; (?p lrp-rule ?odd-next)
   (?p lrp-rule ?even-next)
   (?p lrp-rule ?even-new)
 
-  (?odd-zero name odd-zero)
-  (?odd-next name odd-next)
+  ;; (?odd-next name odd-next)
   (?even-next name even-next)
   (?even-new name even-new)
   )
@@ -207,8 +202,7 @@
   (?nn1 ref ?e0)
 
   (?nn1 xis ev-od-obj)
-  (?nn1 rule ?odd-zero)
-  (?nn1 rule ?odd-next)
+  ;; (?nn1 rule ?odd-next)
   (?nn1 rule ?even-next)
   ;;;; (?nn1 rule ?even-new)
   (?nn1 rule ?this-rule)
@@ -291,6 +285,43 @@
  (del
   (?this-obj rule ?this-rule)		;; Leaving in these dels looks ok
   ))
+
+
+(rule
+ (name even-odd-opt)
+ (attach-to global-node)
+ (root-var global-node)
+ (pred
+  (global-node local-rule-pool ?p)
+  (?p lrp-rule ?even-next)
+  (?even-next name even-next)
+  (?p lrp-rule ?odd-next)
+  (?odd-next name odd-next)
+  (?p lrp-rule ?even-zero)
+  (?even-zero name even-zero)
+  (?p lrp-rule ?odd-zero)
+  (?odd-zero name odd-zero)
+  (?p lrp-rule ?odd-new)
+  (?odd-new name odd-new)
+  (?p lrp-rule ?even-new)
+  (?even-new name even-new)
+  )
+ (add
+  (print even-odd-opt)
+
+  (?even-next del ?ae1 rule ?even-zero)
+  (?even-next del ?ae1 rule ?odd-next)
+
+  (?odd-next del ?ae0 rule ?odd-zero)
+  (?odd-next add ?ae1 rule ?odd-zero)
+  
+  (?even-new add ?nn1 rule ?even-zero)
+  (?even-new add ?nn1 rule ?odd-next)
+  ;; (?odd-new add ?nn1 rule ?odd-zero)
+  (?odd-new add ?nn1 rule ?odd-next)
+  )
+ (del
+  (?this-obj rule ?this-rule)))
 
 
 (comment ;; These don't seem to be needed anymore
@@ -662,7 +693,7 @@
 ;; Rule optimizer (for a specific rule). Adds rule propagators.
 ;; Experimental -- note this one adds more rules to a given node than needed.
 ;;
-;; Note these two are disabled -- moved around rhe rule propagation and this is not currently used.
+;; Note these two are disabled -- moved around the rule propagation and this is not currently used.
 
 (rule
  (name fft-rule-opt-rule-names)

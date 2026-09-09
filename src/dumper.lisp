@@ -219,7 +219,7 @@
 						(when (memq 'rule (! (g hget-all) n 'type))
 						  (let ((name (! (g hget) n 'name)))
 							;; (print (list 'las57 n (! (g hget-all) n 'type) (! (g hget) n 'name)))
-							(set-gv-attr n 'label name)
+							(set-gv-attr n 'label (lab name))
 							(set-gv-attr n 'shape 'rectangle)
 							(set-gv-attr n 'color 'mistyrose)))
 
@@ -232,6 +232,15 @@
 						nil)))
 
 				  (defl clone-node-entry (n) ;; Returns new sym
+					(let ((r (gensym)))
+					  (create-node-entry r)
+					  (! (node-set insert) r nil)
+					  (let ((attrs (get-gv-attr-names n)))
+						(dolist (attr attrs)
+						  (set-gv-attr r attr (get-gv-attr n attr))))
+					  r))
+				  
+				  (defl old-clone-node-entry (n) ;; Returns new sym
 					(let ((r (gensym)))
 					  (! (node-set insert) r nil)
 					  (let ((old-ne (! (node-map lookup-one) n)))
@@ -256,6 +265,10 @@
 				  (defl get-gv-attr (n attr)
 					(let ((ne (! (node-map lookup-one) n)))
 					  (! ((node-entry-gv-attr-map ne) lookup-one) attr)))
+
+				  (defl get-gv-attr-names (n)
+					(let ((n (! (node-map lookup-one) n)))
+					  (! ((node-entry-gv-attr-map n) inputs))))
 
 				  (defl prepend-node-name (n l)
 					(let ((ne (create-node-entry n)))
@@ -389,19 +402,45 @@
 									  (create-node-entry n3)
 									  (create-node-entry n1)
 									  (format s "\"~a\" -> \"~a\" [arrowhead=none];~%" n3 n1))))))
-							 ((= l 3)
+							 ((and t
+								   (= l 4)
+								   (! (g edge-exists) `(,(third v) two-input-op)))
+							  (let ((i1 (first v))
+									(i2 (second v))
+									(fcn (third v))
+									(o (fourth v)))
+								(create-node-entry i1)
+								(create-node-entry i2)
+								(create-node-entry o)
+								(create-node-entry fcn :do-not-emit t)
+								(let ((fcn-color (! (g hget) o 'fcn-color)))
+								  (let ((fcn (clone-node-entry fcn)))
+									(let ((invis (if (! (g edge-exists) `(,(third v) style invis)) "style=invis" "")))
+									  (when fcn-color (set-gv-attr fcn 'color fcn-color))
+									  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",~a];~%" i1 fcn invis)
+									  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",~a];~%" i2 fcn invis)
+									  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\",~a];~%" fcn o invis))))))
+							 ((and (= l 4)
+								   (eq (second v) 'freq))
+							  (let ((p1 (first v))
+									(freq (third v))
+									(p2 (fourth v)))
+								(create-node-entry p1)
+								(create-node-entry p2)
+								(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"];~%" p1 p2 freq)))
+							 ((or (= l 3)
+								  (= l 4))		;; Default for 4 is to treat the two inner nodes as props
 							  (block b
 								(let ((in-node (first v)))
-								  (let ((out-node (third v)))
-									(let ((prop (second v)))
+								  (let ((out-node (if (= l 3) (third v) (fourth v))))
+									(let ((prop (if (= l 3) (second v) (symcat (second v) "--" (third v)))))
 									  (create-node-entry in-node)
 									  (create-node-entry out-node)
-									  (create-node-entry prop :as-prop t)
+									  (create-node-entry prop :as-prop t :do-not-emit t)
 									  (let ((out-node (if (or (and separate-number-nodes  (numberp out-node))
 															  (! (g hget) out-node 'separate-display-node))
 														  (clone-node-entry out-node)
 														  out-node)))
-										(create-node-entry prop :do-not-emit t)
 										(let ((prop-label (get-gv-attr prop 'label)))
 										  (let ((edge-color (! (g hget) prop 'edge-color)))
 											(let ((edge-attr-string ""))
@@ -421,29 +460,6 @@
 											  (setq edge-attr-string (get-format prop :as-prop t))
 											  (format s "\"~a\" -> \"~a\"              ~a~%" 
 													  in-node out-node edge-attr-string))))))))))
-							 ((and t
-								   (= l 4)
-								   (! (g edge-exists) `(,(third v) two-input-op)))
-							  (let ((i1 (first v))
-									(i2 (second v))
-									(fcn (third v))
-									(o (fourth v)))
-								(create-node-entry i1)
-								(create-node-entry i2)
-								(create-node-entry o)
-								(create-node-entry fcn :do-not-emit t)
-								(let ((fcn (clone-node-entry fcn)))
-								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i1 fcn)
-								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" i2 fcn)
-								  (format s "\"~a\" -> \"~a\"[style=\"setlinewidth(1)\"];~%" fcn o))))
-							 ((and (= l 4)
-								   (eq (second v) 'freq))
-							  (let ((p1 (first v))
-									(freq (third v))
-									(p2 (fourth v)))
-								(create-node-entry p1)
-								(create-node-entry p2)
-								(format s "\"~a\" -> \"~a\" [fontname=arial,label=\"~a\",style=\"setlinewidth(1)\"];~%" p1 p2 freq)))
 							 ((= l 2)
 							  (let ((n (first v))
 									(p (second v)))
@@ -758,7 +774,7 @@
 ;; The transcript/log from perf -- look for fftperf and rule30perf in test.lisp -- has three main sections of interest,
 ;; the perf-stats output, the rule-stats output, and the output of (room t). Perf indicators are marked with "||" and
 ;; rule stat indicators are marked with "|". These disambiguate the names such that we don't need heuristics based on
-;; spaces. Can't easily change the sytstem output. The entry for a given var specs a section type as well as a colno to
+;; spaces. Can't easily change the system output. The entry for a given var specs a section type as well as a colno to
 ;; grab.
 ;;
 ;; I considered adding this info within perf-stats, but that doesn't seem to buy anything, since that already specs a
@@ -774,85 +790,109 @@
 ;;
 
 (defc gnuplot nil nil
-  (let ((gp-prog "C:/Program Files/gnuplot/bin/gnuplot.exe"))
+  (let ((gp-prog (if (is-laptop)
+					 "C:/Program Files/gnuplot/bin/gnuplot.exe"
+					 "/usr/bin/gnuplot")))
 	  ;; Prints out the command line need to get the info out of the transcript file, and prints the needed gnuplot
 	  ;; commands to produce a window per graph
 	  (defm plot-log (info &key (do-grep t))
-		(defr
-		  (let ((log-file (! (info get-filename))))
-			(let ((l (! (info get-vars))))
-			  (let ((grep-cmd-file "gp-grep-log-cmd.sh"))
-				(let ((plot-cmd-file "gp-plot-cmd"))
-				  (let ((tmp-file-root "gp-tmp"))
-					(with-open-file (s grep-cmd-file :direction :output)
-					  (let ((i 1))
-						(dolist (e l)
-						  (let ((name (first e)))
-							(let ((token-no (second e)))
-							  (let ((section (third e)))
-								(format s "grep \"~a~a~a\" \"~a\" | gawk '{ print $~a; }' >~a~a ~%" 
-										(if (eq section :perf) "||"
-											(if (eq section :rules) "|"
-												""))
-										(symbol-name name)
-										(if (eq section :perf) "     "
-											(if (eq section :rules) " " 
-												""))
-										log-file token-no tmp-file-root i)
-								(setq i (+ i 1))))))))
-					(with-open-file (s plot-cmd-file :direction :output)
-					  (let ((i 0))
-						(let ((m 7))
-						  (mlet (((H V) (if (is-large-monitor) '(525 290) '(250 125)))) ;; (500 300)
-							(dolist (e l)
-							  (format s "set terminal win ~a size ~a,~a position ~a,~a~%" i
-									  H V
-									  (+ (* (mod i m) (+ H 15)) 20)
-									  (+ (* (+ V 54) (floor (/ i m))) 20)) ;; (+ V 50)
-							  (format s "plot \"~a~a\" with lines title \"~a\" ~%" tmp-file-root (+ i 1) (first e))
-							  (setq i (+ i 1))))))))
-				  (when do-grep
-					(shell-script-file grep-cmd-file))
-				  (shell-cmd (format nil "\"~a\" ~a -" gp-prog plot-cmd-file))))))))))
+		(let ((rule-stats (make-rule-stats nil))) ;; Just to get colnos and similar static info
+		  (let ((tmp-file-root "gp-tmp"))
+			(defr
+			  (defl get-token-no (e)
+				(let ((token-desc (second e))
+					  (section (third e)))
+				  (cond
+					((numberp token-desc)
+					 token-desc)
+					((eq section :rules)
+					 (+ (! (rule-stats col-info-name-to-pos) token-desc) 1))
+					((eq section :perf)
+					 (+ (perf-stats-colname-to-colno token-desc) 2))
+					(t nil))))
+			  (defl tmp-file-len (i)
+				(with-open-file (s (format nil "~a~a" tmp-file-root i))
+				  (file-length s)))
+			  (let ((log-file (! (info get-filename))))
+				(let ((l (! (info get-vars))))
+				  (let ((grep-cmd-file "gp-grep-log-cmd.sh"))
+					(let ((plot-cmd-file "gp-plot-cmd"))
+					  (with-open-file (s grep-cmd-file :direction :output)
+						(let ((i 1))
+						  (dolist (e l)
+							(let ((name (first e)))
+							  (let ((token-no (get-token-no e)))
+								(let ((section (third e)))
+								  (format s "grep \"~a~a~a\" \"~a\" | gawk '{ print $~a; }' >~a~a ~%" 
+										  (if (eq section :perf) "||"
+											  (if (eq section :rules) "|"
+												  ""))
+										  (symbol-name name)
+										  (if (eq section :perf) "     "
+											  (if (eq section :rules) " " 
+												  ""))
+										  log-file token-no tmp-file-root i)
+								  (setq i (+ i 1)))))))
+						(with-open-file (s plot-cmd-file :direction :output)
+						  (let ((i 0))
+							(let ((m 7))
+							  (mlet (((H V) (if (is-large-monitor) '(525 290) '(250 125)))) ;; (500 300)
+								(dolist (e l)
+								  (when (not (= (tmp-file-len (+ i 1)) 0))
+									(format s "set terminal ~a ~a linewidth 2 enhanced font \"courier,16\" size ~a,~a position ~a,~a~%"
+											(if (is-laptop) "win" "x11")
+											i
+											H V
+											(+ (* (mod i m) (+ H 15)) 20)
+											(+ (* (+ V 54) (floor (/ i m))) 20))
+									(format s "set format y \"%.1s*10^{%S}\"~%")
+									(format s "plot \"~a~a\" with lines title \"~a ~a\" ~%" tmp-file-root (+ i 1) (first e) (second e)))
+								  (setq i (+ i 1))))))))
+					  (when do-grep
+						(shell-script-file grep-cmd-file))
+					  (shell-cmd (format nil "\"~a\" ~a -" gp-prog plot-cmd-file))))))))))))
 
 (defc base-perf-stats-info nil ()
   (let ((filename ""))
 	(let ((vars
 		   '(
-			 (main								  2 :perf) ;; log entry to search for, token number to extract via gawk, section of log: one-of { :perf :rules :room }
-			 (me-tested							  5 :perf)
-			 (me-matched						  5 :perf)
-			 (me-failed							  5 :perf)
-			 (me-matched-new-edges				  5 :perf)
-			 (me-matched-not-new-edges			  5 :perf)
-			 (me-efficiency						  2 :perf)
-			 (me-redundancy						  2 :perf)
-			 (me-failure						  2 :perf)
-			 (all-matches						  2 :perf)
-			 (all-matches-aux2					  2 :perf)
-			 (possible-match-fcn				  2 :perf)
-			 (possible-match					  2 :perf)
-			 (expand-rule-obj-edges				  2 :perf)
-			 (var-match-filter-edges			  2 :perf)
-			 (env-no-conflict-dedup				  2 :perf)
-			 (add-consequent-edges				  2 :perf)
-			 (env-triggered-insert				  2 :perf)
-			 (already-env-triggered-rules		  5 :perf)
-			 (add-subqets						  2 :perf)
-			 (num-edges-from-subqet				  2 :perf)
-			 (get-edges-from-subqet				  2 :perf)
-			 (count-edges-from-subqet			  2 :perf)
-			 (count-edges-from-subqet			  5 :perf)
-			 (count-edges-from-subqet			  4 :perf)
-		 	 ;; (count-edges-from-subqet-cached	  4 :perf)
-			 (subst-match						  2 :perf)
-			 (subst-match						  5 :perf)
-			 (subst-match						  4 :perf)
-			 (cross-aux2						  2 :perf)
-			 (match-pat-obj-edge-lists			  2 :perf)
-			 (match-and-execute-rule-true		  2 :perf)
-			 (match-and-execute-rule-false		  2 :perf)
-			 (execute-obj						  2 :perf)
+			 (main								  avg   :perf) ;; log entry to search for, token number to extract via gawk, section of log: one-of {   :perf   :rules   :room }
+			 #|
+			 (me-tested							  sum   :perf)
+			 (me-matched						  sum   :perf)
+			 (me-failed							  sum   :perf)
+			 (me-matched-new-edges				  sum   :perf)
+			 (me-matched-not-new-edges			  sum   :perf)
+			 |#
+			 (me-efficiency						  avg   :perf)
+			 #|
+			 (me-redundancy						  avg   :perf)
+			 (me-failure						  avg   :perf)
+			 (all-matches						  avg   :perf)
+			 (all-matches-aux2					  avg   :perf)
+			 (possible-match-fcn				  avg   :perf)
+			 (possible-match					  avg   :perf)
+			 (expand-rule-obj-edges				  avg   :perf)
+			 (var-match-filter-edges			  avg   :perf)
+			 (env-no-conflict-dedup				  avg   :perf)
+			 (add-consequent-edges				  avg   :perf)
+			 (env-triggered-insert				  avg   :perf)
+			 (already-env-triggered-rules		  sum   :perf)
+			 (add-subqets						  avg   :perf)
+			 (num-edges-from-subqet				  avg   :perf)
+			 (get-edges-from-subqet				  avg   :perf)
+			 (count-edges-from-subqet			  avg   :perf)
+			 (count-edges-from-subqet			  sum   :perf)
+			 (count-edges-from-subqet			  count :perf)
+			 (subst-match						  avg   :perf)
+			 (subst-match						  sum   :perf)
+			 (subst-match						  count :perf)
+			 (cross-aux2						  avg   :perf)
+			 (match-pat-obj-edge-lists			  avg   :perf)
+			 (match-and-execute-rule-true		  avg   :perf)
+			 (match-and-execute-rule-false		  avg   :perf)
+			 (execute-obj						  avg   :perf)
+			 |#
 			 )))
 	  (defm get-vars ()	;; Must be overridden
 		vars)
@@ -864,10 +904,10 @@
 (defc rule-30-perf-stats-info base-perf-stats-info nil
   (let ((vars
 		 '(
-		   (rule-30-next-rule-0-0-1  3 :rules)		;; The desired col is "tested"
-		   (rule-30-max-rule-0-1     3 :rules)
-		   (rule-30-zero-rule-1-1    3 :rules)
-		   (rule-30-center           3 :rules)
+		   (rule-30-next-rule-0-0-1  tested :rules)
+		   (rule-30-max-rule-0-1     tested :rules)
+		   (rule-30-zero-rule-1-1    tested :rules)
+		   (rule-30-center           tested :rules)
 		   )))
 	(defm init ()
 	  (setq filename "rule30perf"))
@@ -877,7 +917,55 @@
 (defc fft-perf-stats-info base-perf-stats-info nil
   (let ((vars
 		 '(
-		   (fft-comb-rule-next   3 :rules)
+		   #|
+		   (fft-comb-rule-next   tested :rules) ;
+		   (fft-rule-delta2		 efficiency% :rules) ;
+		   (fft-rule-delta3		 efficiency% :rules) ;
+		   (fft-rule-delta4		 efficiency% :rules) ;
+		   |#
+		   
+		   (tree-leaf-rule                efficiency% :rules)
+		   (weave-next-rule               efficiency% :rules)
+		   (fft-rule-delta4               efficiency% :rules)
+		   (fft-rule-delta2               efficiency% :rules)
+		   (cas-zero                      efficiency% :rules)
+		   (cas-next                      efficiency% :rules)
+		   (fft-rule-delta3               efficiency% :rules)
+		   (cas-new                       efficiency% :rules)
+		   (od-next                       efficiency% :rules)
+		   (tree-zero-rule                efficiency% :rules)
+		   (tree-max-rule                 efficiency% :rules)
+		   (rule-30-max-prune             efficiency% :rules)
+		   (ev-od-opt                     efficiency% :rules)
+		   (ev-od-obj-rule                efficiency% :rules)
+		   (tree-top-order-rule           efficiency% :rules)
+		   (rule-30-zero-rule-1-1         efficiency% :rules)
+		   (tree-rule                     efficiency% :rules)
+		   (tree-next-level0-rule         efficiency% :rules)
+		   (tree-next-rule                efficiency% :rules)
+		   (even-new                      efficiency% :rules)
+		   (tree-span-rule                efficiency% :rules)
+		   (fft-top-rule                  efficiency% :rules)
+		   (rule-30-top                   efficiency% :rules)
+		   (odd-new                       efficiency% :rules)
+		   (tree-elem-zero-rule           efficiency% :rules)
+		   (fft-rule                      efficiency% :rules)
+		   (tree-loop-rule                efficiency% :rules)
+		   (ev-init                       efficiency% :rules)
+		   (tree-top-rule                 efficiency% :rules)
+		   (level-zero-rule               efficiency% :rules)
+		   (rule-30-max-rule-1-1          efficiency% :rules)
+		   (rule-30-max-rule-0-1          efficiency% :rules)
+		   (odd-next                      efficiency% :rules)
+		   (even-next                     efficiency% :rules)
+		   (rule-30-center                efficiency% :rules)
+		   (rule-30-center-loop           efficiency% :rules)
+		   (fft-comb-rule-next            efficiency% :rules)
+		   (odd-zero                      efficiency% :rules)
+		   (even-zero                     efficiency% :rules)
+		   (fft-comb-rule-zero            efficiency% :rules)
+
+		   
 		   )))
 	(defm init ()
 	  (setq filename "fftperf"))
@@ -887,8 +975,8 @@
 (defc fe-perf-stats-info base-perf-stats-info nil
   (let ((vars
 		 '(
-		   (fwd-fe-rule		3 :rules)
-		   (copy-rule-rule	3 :rules)
+		   (fwd-fe-rule		tested :rules)
+		   (copy-rule-rule	tested :rules)
 		   )))
 	(defm init ()
 	  (setq filename "feperf"))
