@@ -37,7 +37,43 @@
 
 	;; Given a file <x>.gv, produce <x>.svg or <x>.jpg. Current wd is used unless given absolute paths
 
+
+
 	(defm gv-to-image (gv-file &key
+							   (edit-svg t)			;; T to edit the svg to take out scale-down limits. But it also imposes scale-up limits.
+							   (n2 t)				;; T to do "leveled" layout; nil for circular as in Ladybug
+							   (neato-props "")		;; A string to pass to the root graph to be neato'ed. E.g. "graph [overlap=prism100, overlap_scaling=10.0, mode=hier, dim=3];"
+							   (file-type :svg))	;; one-of (:svg :jpg)
+	  (defr
+	    (defl cat (&rest x)
+	      (apply #'concatenate 'string x))
+		(defl file-root (gv-file)
+		  (subseq gv-file 0 (search ".gv" gv-file)))
+		(let ((gv-file-root (file-root gv-file)))
+	      (let ((cmd (format nil (cat "\"~a/dot~a\" ~a.gv | "
+									  "\"~a/gvpack~a\" -m0 | "
+									  "sed -e \"s/digraph root {/digraph root { ~a/\" | "
+									  "\"~a/neato~a\" -s ~a -T~a "
+									  "~a"
+									  " > ~a.~a")
+							 gv-dir
+							 gv-exec-ext
+							 gv-file-root
+							 gv-dir
+							 gv-exec-ext
+							 neato-props
+							 gv-dir
+							 gv-exec-ext						 	
+							 (if n2 "-n2" "")
+							 (case file-type (:svg "svg") (:jpg "jpg"))
+							 (if (and (eq file-type :svg) edit-svg) "| sed -e \"s/<svg.*$/\<svg/\"" "")
+							 gv-file-root
+							 (case file-type (:svg "svg") (:jpg "jpg")))))
+			(let ((cmd (format nil "~a" cmd)))
+			  (format t cmd)
+			  (shell-cmd cmd))))))
+
+	(defm old-gv-to-image (gv-file &key
 							   (edit-svg t)			;; T to edit the svg to take out scale-down limits. But it also imposes scale-up limits.
 							   (n2 t)				;; T to do "leveled" layout; nil for circular as in Ladybug
 							   (file-type :svg))	;; one-of (:svg :jpg)
@@ -182,7 +218,7 @@
 					  ;; (print (list v r))
 					  r))
 
-				  ;; create-node-entry should only be called when we define all the node enrties as the first pass.
+				  ;; create-node-entry should only be called when we define all the node entries as the first pass.
 
 				  (defl create-node-entry (n &key two-input-op as-prop rule-name do-not-emit is-new-node-var)
 					(let ()
@@ -271,11 +307,14 @@
 					  (! ((node-entry-gv-attr-map n) inputs))))
 
 				  (defl prepend-node-name (n l)
-					(let ((ne (create-node-entry n)))
+					(create-node-entry n)
+					(let ((ne (! (node-map lookup-one) n)))
 					  (setf (node-entry-name ne) (symcat l '- (node-entry-name ne)))
 					  nil))
+				  
 				  (defl get-node-name (n)
-					(let ((ne (create-node-entry n)))
+					(create-node-entry n)
+					(let ((ne (! (node-map lookup-one) n)))
 					  (node-entry-name ne)))
 
 				  (defl get-format (n &key as-prop)
@@ -494,9 +533,18 @@
 						(let ((edges (! (g hget-edge-all) (first v) rel)))
 						  (format s "subgraph \"cluster_~a_~a\" {~%" cluster-seqno (! (g hget) (first v) 'name))
 						  (setq cluster-seqno (+ cluster-seqno 1))
+						  ($comment (format s "rankdir=TB;~%")) ;; See comment below
 						  (format s "label=\"~a\"~%" (! (g hget) (first v) 'name))
 						  (dolist (edge edges)
 							(dump-gv-edges-data (rest (rest edge))))
+						  ($comment			;; Trying here to force the var nodes to be vertically stacked, but it looks
+											;; like the upper-graph LR rankdir prevails. Not clear it's of interest so
+											;; it's in a comment wrapper for easy switching
+						   (dolist (edge edges)
+							 (let ((node (third edge)))
+							   (if (equal node (first (last (first (last edges)))))
+								   (format s "\"~a\" [style=invis];" node)
+								   (format s "\"~a\" -> " node)))))
 						  (format s "}~%")))))
 				  (defl dump-gv-edges-rules (v)
 					(when (and (eq (second v) 'type)
@@ -532,6 +580,8 @@
 								(rule-nodes (! (rule-components all-nodes)))
 								(i 0))
 							(setq nest-prefix (+ nest-prefix 1))
+							;; Not elegant just bashing these tables but it's an easy way to reset the node space so we
+							;; get a graph per-rule.
 							(setq node-map (make-sur-map))
 							(setq node-set (make-sur-map))
 							(when (memq graph-type '(:digraph :subgraph))
@@ -661,7 +711,7 @@
 ;;
 ;; Writes an svg file of n cycles of the evolution of the 1-d binary cellular automaton given by rule-no. Rule numbering
 ;; follows Wolfram NKS. The CA is assumed to start from a single 1 or black cell, with all surrounding cells to the left
-;; and right 0 or white. The set of cells upon which the ca operates is assmed to be infinitely enumerated in both
+;; and right 0 or white. The set of cells upon which the ca operates is assumed to be infinitely enumerated in both
 ;; directions. This is how NKS works, but a formal description of the algorithm is not in the book and seems to be
 ;; implicit.  Thus the start cell is the "center". To get proper behavior in the infinite sequence of cells, we detect
 ;; when all-zeros (or all-ones) results in one (or zero), and flip the default for the remainder of the infinite

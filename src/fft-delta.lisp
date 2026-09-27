@@ -31,7 +31,7 @@
  ;; (root-var ?x)
  (pred
   (?x fft ?y)
-  (?x color ?c)
+  (?x pre-color ?c)
   (?c next-color ?s)
   (?s next-color ?t))
  (add
@@ -47,19 +47,40 @@
 (rule
  (name fft-rule-delta3)
  (attach-to color)
- ;; (attach-to fcn-color)
- ;; (attach-to rand)
- ;; (attach-to rule30val)
+ (attach-to fcn-color)
+ (attach-to rand)
+ (attach-to rule30val)
  (pred
-  (?x color ?c)
+  (?x pre-color ?c)
   (?y fcn-color ?c)
   (?x rand ?r)
-  (?r rule30val 0))
+  (?r rule30val 0)
+  (?c next-color ?c1)
+  )
  (add
-  (print fft-rule-delta3 ?this-obj ?x ?y ?c)
+  (print fft-rule-delta3 ?this-obj ?x ?y ?c ?c1)
   (?x delta3 ?y)
   (?x delta3-rand ?r)
   (?y inv-delta3 ?x)
+  (?x color ?c1)
+  )
+ (del
+  ;; (?this-obj rule ?this-rule)
+  ))
+
+(rule
+ (name fft-rule-delta3-a)
+ (attach-to pre-color)
+ (attach-to rand)
+ (attach-to rule30val)
+ (pred
+  (?x pre-color ?c)
+  (?x rand ?r)
+  (?r rule30val 1)
+  )
+ (add
+  (print fft-rule-delta3-a ?this-obj ?x ?y ?c)
+  (?x color lightskyblue)
   )
  (del
   ;; (?this-obj rule ?this-rule)
@@ -70,13 +91,13 @@
  (attach-to center-up)		;; Attaching here appears to help most with queuing
  (pred
   (?x weave-next ?y)
-  (?x color ?c)
+  (?x pre-color ?c)
   (?x rand ?r)
   (?r center-up ?u)
   (?c next-color ?s))
  (add
   (print fft-rule-delta4 ?this-obj ?x ?y ?c ?s)
-  (?y color ?s)
+  (?y pre-color ?s)
   (?y rand ?u)
   ;; (queue center-up)
   )

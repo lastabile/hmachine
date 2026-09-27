@@ -2230,7 +2230,7 @@ Subsequence: Any subset of a sequence which retains the transitive
 	of (a 1 b 2 c). CL and some other languages get this wrong, with
 	subseq operations only applying to contiguous subseqs.
 
-String: Tuples.
+String: Tuple.
 
 Substring: Contiguous subseq.
 
@@ -2249,7 +2249,7 @@ the classic abstract simplicial complex (ASC).
 The next level of specificity is to consider the sets ordered, but
 without necessarily allowing dups. We then take all subseqs (in the
 math sense above, like the original subqets), which is still 2^n such
-subseqs. But we don't realy have asn ASC. A further extension is to
+subseqs. But we don't realy have an ASC. A further extension is to
 allow dups.
 
 Next we can go to strings, i.e., to form the ASC-like structure we use
@@ -2258,7 +2258,7 @@ lot this way.  This is where the qet system is now and it appears to
 work well. So a qet will be a "string".
 
 Once we go beyond sets, set operations must give way to operations
-more appropriate to srtings (qets). Operations like intersection and
+more appropriate to strings (qets). Operations like intersection and
 union require more elaborate counterparts, and have limited
 use. Similarly, tuple operations like concat, splicing, etc. are not
 useful in the H context. The one property used is containment, i.e.,

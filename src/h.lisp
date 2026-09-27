@@ -106,6 +106,10 @@
 ;; del-on-rematch -- In ace, we do the dels even though we've matched before and not added new edges. The idea is that
 ;;					 for example we probably still want to delete rules at the end of a propagation of rules around a
 ;;					 chain. As of 9/4/23 looks like it's working ok.
+;;					 9/21/26 -- Turned off because now I'm doing control things and it doesn't fit. Didn't seem right
+;;			 				    anyway. Also fixed bug where edges were getting incorrectly deleted in ace. Added
+;;								existing-edges var to make sure they stay.
+;;
 ;;
 ;; elim-edge-to-trace -- Should we? It has not shown to be that useful and it seems that jpg snapshots offer a better
 ;;						 debugging tool. Note right now it's turned off, using the dummy-sur-map.
@@ -1235,7 +1239,7 @@
 	  ;; By default, executions both off the queue and in the full scan are local and global. See comment.
 	  ;;
 	  ;; Below, we run the different kinds of evaluators in order in a loop: global-node, queue, exec-all. We stop when
-	  ;; a sequence of any three has produced no new edges.
+	  ;; any sequence of the three has produced no new edges.
 
 	  (defm execute-global-all-objs-loop (&key (queue-rule-mode :local-global) 
 											   (scan-rule-mode :local-global)	;; Note this was local-only, but the
@@ -1797,10 +1801,6 @@
 									  ;;   (rem-edge `(,obj-node rule ,rule-node)))
 									  (return-from yyy nil))
 									(let ((te nil))
-									  #|
-									  (when (not (edge-exists `(,rule-node no-triggered))) ; ;
-									  (setq te (! (env-triggered-table insert) rule-node env matched-edges))) ; ;
-									  |#
 									  ;; (when (= (length envlist) 1)
 									  ;;    (rem-edge `(,obj-node rule ,rule-node)))
 									  (dolist (edge not-edges)
@@ -1810,7 +1810,8 @@
 													   edge)))
 										  (when (edge-exists not-edge)
 											(return-from yyy nil))))
-									  (let ((trig-insert-called nil))
+									  (let ((trig-insert-called nil)
+											(existing-edges nil))
 										(clrhash new-node-hash)
 									  
 										;; Check here if need to do a del if there are no adds. Do this here since will fall through the next loop if no adds are present.
@@ -1833,7 +1834,7 @@
 																		  nn)
 																		sn))))
 													($comment
-													 ;; LAS42
+													 ;; LAS
 													 (when (null (get-edges-from-subqet (list new-node 'added-by)))
 													   (let ((l (list new-node 'added-by rule-node node)))
  														 (add-edge l)))
@@ -1855,6 +1856,9 @@
 												(if edge-is-print ;; For debug -- if print is head node of an edge, print it
 													(setq print-list (append print-list (list (rest new-edge))))
 													(setq new-or-dup-edge-list (append new-or-dup-edge-list (list new-edge))))
+
+												(when (edge-exists new-edge)
+												  (setq existing-edges (cons new-edge existing-edges)))
 												
 												(when (and (not (edge-exists new-edge))
 														   (not (eq (first new-edge) 'print)))
@@ -1864,9 +1868,12 @@
 												  (when (null first-edge)
 													(setq first-edge new-edge)
 													;; Be sure we're adding edges before deleting anything, i.e., want to avoid extra deletes
-													(setq deleted-edges (append deleted-edges (del-consequent-edges del-edges not-edges envlist))))
+													(setq deleted-edges (append deleted-edges (del-consequent-edges del-edges not-edges envlist))))	;; LAS Really want to use envlist here?
 												  (when (not trig-insert-called)
-													(! (env-triggered-table insert) rule-node env)
+													(when (not (edge-exists `(,rule-node no-triggered)))	;; 9/13/26 Restored the no-triggered clause and looking at it in contol experiments
+													  (! (env-triggered-table insert) rule-node env)
+													  ;; (print (list 'las42 rule-node env))
+													  )
 													(setq trig-insert-called t))
 												  (dolist (new-node new-edge)
 													(setf (gethash new-node all-node-hash) new-node))
@@ -1878,6 +1885,11 @@
 													(print (list 'ace4 'add new-edge)))
 												  (! (env-new-edges insert) new-edge new-edge))))))
 										;; (print new-node-hash)
+
+										;; Assure any existing edges which got swept up in delete are
+										;; restored. Recording no stats here since it's just maintaining the status-quo.
+										(dolist (edge existing-edges)
+										  (add-edge edge))
 										)))))
 							(check-rule-trace rule-name `(add-consequent-edges edge-scan-done rule ,rule-node ,rule-name obj ,obj-node ,(hash-table-count all-node-hash)))
 							;;
@@ -1895,7 +1907,10 @@
 							;; is that we probably still want to delete rules at the end of a propagation of rules
 							;; around a chain.
 
-							($nocomment	;; Still problems with this?
+							($comment
+							 ;; Still problems with this. Eg petri.lisp relies on deletion for real-time control, and a
+							 ;; redundant match removes an edge just added. So for now it's out but we might try seeing if
+							 ;; we can just del the ones that were not added by the current rule.
 							 (when (= (hash-table-count all-node-hash) 0)
 							   (del-consequent-edges del-edges not-edges envlist)))
 
@@ -2829,7 +2844,7 @@
 							((eq clause-type 'root-var)
 							 (let ((root-var (second clause)))
 							   (pushe (add-edge (list rule 'root-var root-var)))))
-							((eq clause-type 'distinct-vars)	;; distinct-vars is either t or nil, with default nil
+							((eq clause-type 'distinct-vars)	;; syntax is (distinct-vars {t|:none}), with default :none
 							 (let ((v (second clause)))
 							   (pushe (add-edge (list rule 'distinct-vars v)))))
 							((eq clause-type 'no-triggered)
@@ -4228,8 +4243,8 @@
 		  (let ((doloop-cnt 0))
 			(defm subst-match (obj-node root-var &key (rule-name (name))) ;; rule-name arg for tracing purposes   LAS
 			  (macrolet ((xprint (tag &rest x)
-						   ;; nil
-						   `(ptag ,tag ,@x)
+						   nil
+						   ;; `(ptag ,tag ,@x)
 						   ))
 				(timer 'subst-match
 				  (lambda ()
@@ -5278,7 +5293,7 @@
 					  (x fft-top)
 					  (x fft xfft)
 					  (x level ,fft-n)
-					  (x color navajowhite)
+					  (x pre-color navajowhite)
 					  (x rand r)
 					  (x rule ,(! (g query) '((?x name fft-rule)) '?x))
 					  (x local-rule-pool local-rule-pool-node)

@@ -80,7 +80,7 @@
   (?r name std-notes))
  (add
   (print std-notes)
-  (note footer "Copyright (c) 2025 Lawrence Stabile"))
+  (note footer "Copyright (c) 2026 Lawrence Stabile"))
  (del
   (global-node rule ?this-rule)))
 
@@ -205,6 +205,7 @@
 
 ;; Original color circle, expanded 8/22/26 
 
+;; (comment
 (rule
  (name color-circle-data)
  (attach-to global-node)
@@ -272,7 +273,7 @@
   (RosyBrown2 next-color navajowhite))
  (del
   (global-node rule ?this-rule)))
-
+;; )
 
 (comment
 (rule

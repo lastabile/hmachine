@@ -506,7 +506,7 @@
   ;; (?eg0 rule ?this-rule)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ;; (?ey0 rule ?this-rule)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  (?ef1 rule ?this-rule)
+  ;;;; (?ef1 rule ?this-rule)
   (?eg1 rule ?this-rule)
   ;; (?ey1 rule ?this-rule)			;; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   (?ef1 ?eg1 fft-hb ?ey1)

@@ -32,6 +32,7 @@
   (with-redirected-stdout (or nil "fftout")
     (lambda (s)
       (setq g (make-fft-test))
+      ;; (mapcar (lambda (r) (! (g add-edge) `(,r disabled))) (first (! (g query) '((?r1 name fft-comb-rule-zero)(?r2 name fft-comb-rule-next)) '(?r1 ?r2))))
       (! ((! (g get-edge-to-trace)) init-trace) g)
       ;; (! (g trace-rule) 'cas-next)
       (let ((*print-tags* (and nil '(s0 s2)))) ;; use (get-tag-list) to see all compiled tags
@@ -499,6 +500,9 @@
   (! (d gv-to-image) "xxfft")
   )
 
+;;      Graphia needs
+;;          :emit-legend nil :graph-type :single-graph
+;;          .dot rather than .gv
 
 
 (let ()
@@ -1064,7 +1068,7 @@
    (let ((*print-tags* (and nil '(am2))))   ;; am2 produces too much output
      (with-redirected-stdout "fetest"
                              (lambda (s)
-                               (f 50)))))                               ;; 20 ;; The basic single run
+                               (time (f 200))))))                               ;; 20 ;; The basic single run
 
   ;; Perf runs
   ;; Nat to 100
@@ -2551,7 +2555,7 @@ Gerry S
       (clear-perf-stats)
       (setq g (make-rule-30-test))
       (! ((! (g get-edge-to-trace)) init-trace) g)
-      (let ((*print-tags* '(S17 S0 S10 S2 S4 S14 S1 S9 S16 S11 S18)))
+      (let ((*print-tags* (and nil '(S17 S0 S10 S2 S4 S14 S1 S9 S16 S11 S18))))
         (time (! (g run) 200))))))
 
 (let ((n 5))    ;; 3
@@ -2588,6 +2592,59 @@ Gerry S
         (let ((*print-tags* (and nil '(me4 ace4 pop-head queue-node))))
           (time (! (g run) n)))))))
 
+
+;;;;;;;;;;;
+;; Another animation, work-in-progress, of a token-propagation control (petri-like) model
+
+(let ((i 0))
+  (defun gv ()
+    (let ((d (make-dumper)))
+      (let ((filename (format nil "~a~4,'0d" "pic" i)))
+        (let ((filename-gv (format nil "~a.gv" filename)))
+          (setq i (+ i 1))
+          (! (d set-graph) g)
+          (! (d dump-gv-edges) filename-gv :gv-graph-props "zero [pos=\"100,100!\"];"
+             :emit-legend nil :rules nil :omit-unmatched-rules nil :separate-number-nodes t
+             #|
+             :attrs-fcn  (lambda (e) (and (! (g hget) (first e) 'num)
+                                          (or (eq (second e) 'rule)
+                                              (intersect e '(id-fcn value zero)))))
+             |#
+             :attrs '(xor-fcn id-fcn value zero out next-out)
+             )
+          (! (d gv-to-image) filename :n2 nil :file-type :jpg)))))
+  (let ((n 50)) ;; 3
+    (clear-counters)
+    (clear-perf-stats)
+    (setq g (make-foundation))
+    (! (g read-rule-file) "petri.lisp")
+    (! (g break-rule) 'output 'ace-new-edges (lambda (trace-info) (gv)))
+    (with-redirected-stdout "x"
+      (lambda (xstdout)
+        (! (g execute-global-all-objs-loop))))))
+
+(let ()
+  (clear-counters)
+  (clear-perf-stats)
+  (setq g (make-foundation :nat 55))
+  (! (g read-rule-file) "petri.lisp")
+  (with-redirected-stdout (or nil "x")
+    (lambda (s)
+      (! (g execute-global-all-objs-loop))))
+  ;; (! (g execute-all-objs))
+  )
+
+(let ((d (make-dumper)))
+      (! (d set-graph) g)
+      (! (d dump-gv-edges) "x.gv" :rules nil :separate-number-nodes t :gv-graph-props "rankdir=LR;"
+         :attrs '(xor-fcn id-fcn value zero out next-out))
+      (! (d gv-to-image) "x"))
+
+;;;;;;;;;;;;;;;;;;
+
+
+
+  
 (ca-to-svg "y.svg" 101 30 :colorized t)
 
 
